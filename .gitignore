@@ -1,0 +1,5 @@
+build-x86/
+rootfs/
+*.tar.xz
+*.qcow2
+seed.iso
