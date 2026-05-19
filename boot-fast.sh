@@ -14,7 +14,7 @@ exec qemu-system-x86_64 \
   -m 1024 \
   -smp 1 \
   -kernel "$KERNEL_IMAGE" \
-  -append "root=/dev/vda1 console=ttyS0 rootwait rw init=/bin/bash quiet loglevel=3 systemd.show_status=false rd.systemd.show_status=false printk.time=0" \
+  -append "root=/dev/vda1 console=ttyS0 rootwait rw init=/bin/bash quiet loglevel=7 systemd.show_status=false rd.systemd.show_status=false printk.time=0" \
   -drive file="$OVERLAY",if=virtio,format=qcow2 \
   -nographic \
   -no-reboot
