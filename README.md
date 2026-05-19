@@ -62,14 +62,20 @@ make O=../build-x86 oldconfig
 
 ## Build
 
-Build the kernel (uses `ccache` to speed up subsequent builds):
+Build the kernel with the repo helper. It keeps `build-x86/` intact for incremental builds and uses `ccache` automatically when available:
 
 ```bash
 sudo apt install -y ccache
 ccache --max-size=10G
 ccache --show-stats
 
-make O=../build-x86 CC="ccache gcc" -j"$(nproc)"
+./build.sh
+```
+
+You can pass any kernel make target through the script:
+
+```bash
+./build.sh arch/x86/boot/bzImage
 ```
 
 ## Rootfs
