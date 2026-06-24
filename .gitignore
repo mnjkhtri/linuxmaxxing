@@ -1,5 +1,14 @@
 build-x86/
 rootfs/
-*.tar.xz
-*.qcow2
-seed.iso
+downloads/*.tar.xz
+vm/*.qcow2
+vm/seed.iso
+*.ko
+*.mod
+*.mod.c
+*.o
+.*.cmd
+Module.symvers
+modules.order
+shared/_captures/
+shared/workloads/*/workload

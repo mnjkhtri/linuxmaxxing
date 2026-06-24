@@ -2,15 +2,15 @@
 
 set -euo pipefail
 
-SCRIPT_DIR=$(dirname "$(realpath "$0")")
-SOURCE_DIR="$SCRIPT_DIR/linux"
-BUILD_DIR="$SCRIPT_DIR/build-x86"
+ROOT_DIR=$(dirname "$(realpath "$0")")
+SOURCE_DIR="$ROOT_DIR/linux"
+BUILD_DIR="$ROOT_DIR/build-x86"
 JOBS=${JOBS:-$(nproc)}
 
 mkdir -p "$BUILD_DIR"
 
 if command -v ccache >/dev/null 2>&1; then
-  export CCACHE_BASEDIR="$SCRIPT_DIR"
+  export CCACHE_BASEDIR="$ROOT_DIR"
   export CCACHE_NOHASHDIR=true
   CC=${CC:-"ccache gcc"}
 else

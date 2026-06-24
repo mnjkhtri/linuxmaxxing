@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kernel Study App</title>
+  <link rel="stylesheet" href="theme.css">
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+    }
+
+    #app-shell {
+      width: 100vw;
+      height: 100vh;
+      display: grid;
+      grid-template-rows: 72px minmax(0, 1fr);
+      gap: 14px;
+      padding: 14px;
+    }
+
+    #app-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+      min-width: 0;
+    }
+
+    #brand {
+      min-width: 220px;
+    }
+
+    h1 {
+      font-family: var(--mono);
+      font-size: 15px;
+      white-space: nowrap;
+      letter-spacing: -0.02em;
+    }
+
+    h1 span {
+      color: var(--blue);
+    }
+
+    #brand p {
+      margin-top: 4px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    #view-tabs {
+      display: inline-flex;
+      gap: 6px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.72);
+    }
+
+    .view-tab {
+      height: 34px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .view-tab.active {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.95), rgba(167, 139, 250, 0.86));
+      color: #ffffff;
+      box-shadow: 0 10px 24px rgba(56, 189, 248, 0.18);
+    }
+
+    #view-description {
+      margin-left: auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      text-align: right;
+    }
+
+    #viewer-frame {
+      width: 100%;
+      height: 100%;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: rgba(2, 6, 23, 0.46);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    @media (max-width: 860px) {
+      #app-shell { grid-template-rows: auto minmax(0, 1fr); }
+      #app-header { flex-wrap: wrap; }
+      #brand { width: 100%; }
+      #view-tabs { overflow-x: auto; max-width: 100%; }
+      #view-description { width: 100%; text-align: left; }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app-shell">
+    <header id="app-header">
+      <div id="brand">
+        <h1><span>Kernel</span> Study App</h1>
+        <p>instrumented kernel object visualizations</p>
+      </div>
+      <nav id="view-tabs" aria-label="visualization sections">
+        <button class="view-tab active" data-view="core" data-src="views/core.html">Core</button>
+        <button class="view-tab" data-view="cfs_tree" data-src="views/cfs-tree.html">CFS Tree</button>
+        <button class="view-tab" data-view="module" data-src="views/module.html">Module</button>
+        <button class="view-tab" data-view="mm" data-src="views/mm.html">MM</button>
+        <button class="view-tab" data-view="block" data-src="views/block.html">Block</button>
+        <button class="view-tab" data-view="fs" data-src="views/fs.html">FS</button>
+      </nav>
+      <div id="view-description">Process lifecycle and scheduler activity</div>
+    </header>
+    <iframe id="viewer-frame" title="Kernel study visualization" src="views/core.html"></iframe>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      var descriptions = {
+        core: 'Process lifecycle and scheduler activity',
+        cfs_tree: 'Animated CFS red-black tree snapshots',
+        module: 'Out-of-tree module lifecycle, task table, and address map captures',
+        mm: 'Allocator, slab, and virtual address-space activity',
+        block: 'BIO and request flow through blk-mq',
+        fs: 'Superblock, inode, and dentry allocation'
+      };
+      var tabs = Array.prototype.slice.call(document.querySelectorAll('.view-tab'));
+      var frame = document.getElementById('viewer-frame');
+      var description = document.getElementById('view-description');
+
+      function selectView(tab) {
+        tabs.forEach(function (item) { item.classList.remove('active'); });
+        tab.classList.add('active');
+        frame.src = tab.getAttribute('data-src');
+        description.textContent = descriptions[tab.getAttribute('data-view')] || '';
+      }
+
+      tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () { selectView(tab); });
+      });
+    })();
+  </script>
+</body>
+
+</html>
