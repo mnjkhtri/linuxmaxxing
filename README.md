@@ -12,6 +12,7 @@ shared/workloads/  Guest programs and scripts that trigger study hooks.
   mm/            Memory-management workload.
   vfs/run.sh     Shared filesystem and block-I/O workload.
 shared/modules/     Out-of-tree study modules.
+shared/miscdriver/ Misc character driver.
 shared/pci/        QEMU EDU PCI driver.
 shared/_captures/  Flat generated capture files, prefixed by producer.
 vm/         QEMU disk images, overlays, and cloud-init seed files.
@@ -170,6 +171,28 @@ sh /mnt/host/modules/w.sh mm
 mkdir -p /mnt/host/_captures
 dmesg | grep KOOPS_CORE > /mnt/host/_captures/core-module-tasks.txt
 dmesg | grep KOOPS_MM > /mnt/host/_captures/mm-module-allocators.txt
+```
+
+## Misc Driver
+
+The simple misc character driver lives in `shared/miscdriver/` and creates `/dev/llkd_miscdrv`.
+
+Build it against the custom kernel:
+
+```bash
+make -C shared/miscdriver
+```
+
+Inside QEMU, load and smoke-test it with:
+
+```bash
+sh /mnt/host/miscdriver/w.sh
+```
+
+Unload it explicitly when needed:
+
+```bash
+rmmod llkd_miscdrv
 ```
 
 ## PCI
