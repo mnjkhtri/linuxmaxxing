@@ -27,6 +27,7 @@ Install the kernel build tools, QEMU, cloud-image utilities, and `ccache` for fa
 sudo apt update
 sudo apt install -y \
   build-essential bc bison flex libssl-dev libelf-dev dwarves \
+  clang llvm libbpf-dev \
   qemu-system-x86 qemu-utils cloud-image-utils ccache
 ```
 
@@ -39,7 +40,7 @@ git submodule update --init --depth 1 linux
 mkdir -p build shared vm
 ```
 
-Move the kernel forward by updating the submodule checkout, then rebuild and rerun the eBPF/tracepoint captures:
+Move the kernel forward by updating the submodule checkout:
 
 ```bash
 cd linux
@@ -51,12 +52,48 @@ git add linux
 
 ## Configure And Build
 
-Generate a default x86 config if needed, then build with the helper script. `build.sh` enables the tracing, eBPF, and BTF config needed by this project before running `olddefconfig`.
+```bash
+./build.sh
+```
+
+## eBPF CFS Setup
+
+The CFS RB-tree eBPF study uses dynamic kprobes and kretprobes with libbpf. After building the kernel, generate the BTF-derived kernel type header used by the CFS eBPF program:
 
 ```bash
-make -C linux O=../build defconfig
-make -C linux O=../build oldconfig
-./build.sh
+mkdir -p shared/ebpf/cfs_tree
+bpftool btf dump file build/vmlinux format c > shared/ebpf/cfs_tree/vmlinux.h
+```
+
+`vmlinux.h` is generated from the exact rebuilt kernel, so the BPF program can use BTF/CO-RE-aware struct field reads for types such as `struct cfs_rq`, `struct sched_entity`, `struct rb_node`, and `struct task_struct`. Regenerate it after rebuilding or changing the kernel.
+
+Build the CFS eBPF tool in this order: BPF object, skeleton, then userspace loader. The loader embeds `cfs_tree.skel.h`, so regenerate the skeleton before compiling the loader.
+
+```bash
+clang -g -O2 -target bpf -D__TARGET_ARCH_x86 \
+  -I shared/ebpf/cfs_tree \
+  -c shared/ebpf/cfs_tree/cfs_tree.bpf.c \
+  -o shared/ebpf/cfs_tree/cfs_tree.bpf.o
+
+bpftool gen skeleton shared/ebpf/cfs_tree/cfs_tree.bpf.o > shared/ebpf/cfs_tree/cfs_tree.skel.h
+
+cc -g -O2 -Wall -I shared/ebpf/cfs_tree \
+  -o shared/ebpf/cfs_tree/cfs_tree \
+  shared/ebpf/cfs_tree/cfs_tree.c \
+  $(pkg-config --libs libbpf) -lelf -lz
+```
+
+The BPF program filters changed entities by the configurable `workld` task-name prefix before writing line-buffered NDJSON records. It walks up to 31 CFS RB-tree nodes with `bpf_loop()` using per-CPU scratch-map storage, then copies one completed snapshot to the ring buffer. Inside QEMU, run it from the shared folder and write output to a capture file:
+
+```bash
+mkdir -p /mnt/host/_captures
+/mnt/host/ebpf/cfs_tree/cfs_tree > /mnt/host/_captures/cfs-ebpf.ndjson
+```
+
+Stop a running capture with `Ctrl-C`. If it was started in the background and is still printing, stop it with:
+
+```bash
+pkill -INT cfs_tree
 ```
 
 ## Rootfs
@@ -76,9 +113,6 @@ cloud-localds vm/seed.iso vm/user-data vm/meta-data
 ./boot.sh
 ```
 
-It skips normal init and drops directly into `/bin/bash` for quick kernel-debug loops.
-It keeps the console quiet with `quiet loglevel=4`, so the custom `pr_info()` study records stay in the kernel ring buffer instead of flooding the serial console. The boot script sets `log_buf_len=128M` because the custom hooks can generate enough printk traffic to wrap the default kernel log buffer quickly.
-
 ## Shared Folder
 
 The boot script exposes host `shared/` to the guest with the 9p mount tag `hostshare`.
@@ -92,7 +126,7 @@ mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host
 
 ## Kernel Hook Studies
 
-Hook points are either built-in tracepoints captured from tracefs or the remaining custom CFS RB-tree `pr_info()` snapshots.
+Hook points are built-in tracepoints captured from tracefs.
 
 ### Hook Reference
 
@@ -106,13 +140,6 @@ Process lifecycle tracepoints:
 | `sched:sched_process_exit` | Task exits. |
 | `sched:sched_process_wait` | Parent waits for a child. |
 | `sched:sched_process_free` | Task struct is freed. |
-
-Scheduler custom CFS hooks:
-
-| Prefix | File | Function | Purpose |
-|---|---|---|---|
-| `CFS` | `kernel/sched/fair.c` | `__enqueue_entity()` | CFS entity enters RB tree. |
-| `CFS` | `kernel/sched/fair.c` | `__dequeue_entity()` | CFS entity leaves RB tree. |
 
 Memory tracepoints:
 
@@ -143,21 +170,11 @@ VFS superblock tracepoints:
 | `syscalls:sys_enter_mount` | Mount request entered the kernel. |
 | `syscalls:sys_exit_mount` | Mount request returned to userspace. |
 
-Study modes are mutually exclusive kernel config choices. Select one before building.
-
-### None
-
-```bash
-./study-mode.sh none
-./build.sh
-```
-
 ### Core
 
 The process and scheduler workload lives in `shared/workloads/core/`; captures use the `shared/_captures/core-*.txt` prefix.
 
 ```bash
-./study-mode.sh core
 ./build.sh
 x86_64-linux-gnu-gcc -O2 -Wall -static -o shared/workloads/core/workload shared/workloads/core/workload.c
 ```
@@ -192,22 +209,11 @@ echo 0 > events/sched/sched_process_free/enable
 echo > trace
 ```
 
-### Scheduler
-
-The scheduler RB-tree capture uses the same core workload and core study mode.
-
-Inside QEMU, capture CFS scheduler RB-tree hooks:
-
-```bash
-dmesg | grep CFS > /mnt/host/_captures/core-hook-cfs-rbtree.txt
-```
-
 ### MM
 
 The memory workload lives in `shared/workloads/mm/`; captures use the `shared/_captures/mm-*.txt` prefix.
 
 ```bash
-./study-mode.sh mm
 ./build.sh
 x86_64-linux-gnu-gcc -O2 -Wall -static -pthread -o shared/workloads/mm/workload shared/workloads/mm/workload.c
 ```
@@ -269,7 +275,6 @@ echo > trace
 The shared workload at `shared/workloads/vfs/run.sh` exercises filesystem mount activity for the superblock study.
 
 ```bash
-./study-mode.sh vfs
 ./build.sh
 ```
 
@@ -300,7 +305,6 @@ echo > trace
 Module tools live in `shared/modules/`. Each module has its own source/build folder under `shared/modules/`; captures are stored as `shared/_captures/core-module-tasks.txt` and `shared/_captures/mm-module-allocators.txt`.
 
 ```bash
-./study-mode.sh none
 ./build.sh
 make -C shared/modules
 ```
@@ -380,7 +384,7 @@ app/
   index.html        Main shell with visualization tabs.
   theme.css         Shared theme tokens used by the shell.
   views/            Subsystem visualization pages.
-    core.html       Core subsystem viewer for lifecycle and CFS captures.
+    core.html       Core subsystem viewer for lifecycle.
     mm.html         Memory allocator and slab viewer.
     block.html      Block I/O BIO/request flow viewer.
     fs.html         Superblock, inode, and dentry viewer.
