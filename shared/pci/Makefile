@@ -1,4 +1,4 @@
-KDIR ?= ../../build-x86
+KDIR ?= ../../build
 
 obj-m += qedu.o
 

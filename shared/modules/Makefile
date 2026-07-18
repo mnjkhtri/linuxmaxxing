@@ -1,4 +1,4 @@
-KDIR ?= ../../build-x86
+KDIR ?= ../../build
 
 obj-m += core/core_koops.o
 obj-m += mm/mm_koops.o

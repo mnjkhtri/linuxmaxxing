@@ -1,6 +1,5 @@
-build-x86/
+build/
 rootfs/
-downloads/*.tar.xz
 vm/*.qcow2
 vm/seed.iso
 *.ko

@@ -4,7 +4,7 @@ set -euo pipefail
 
 mode=${1:-}
 ROOT_DIR=$(dirname "$(realpath "$0")")
-config_file=${CONFIG_FILE:-$ROOT_DIR/build-x86/.config}
+config_file=${CONFIG_FILE:-$ROOT_DIR/build/.config}
 
 if [ -z "$mode" ]; then
 	printf 'usage: %s {none|core|mm|vfs}\n' "$0" >&2
@@ -46,4 +46,4 @@ case "$mode" in
 		;;
 esac
 
-make -C "$ROOT_DIR/linux" O="$ROOT_DIR/build-x86" olddefconfig
+make -C "$ROOT_DIR/linux" O="$ROOT_DIR/build" olddefconfig
