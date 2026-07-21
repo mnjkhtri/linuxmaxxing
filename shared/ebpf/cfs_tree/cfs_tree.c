@@ -7,7 +7,8 @@
 #include "cfs_tree.skel.h"
 
 /* Must match the BPF event byte-for-byte. */
-struct tree_node {
+struct tree_node
+{
 	unsigned long long node;
 	unsigned long long left;
 	unsigned long long right;
@@ -15,7 +16,8 @@ struct tree_node {
 	char comm[16];
 };
 
-struct context_event {
+struct context_event
+{
 	unsigned int tid;
 	unsigned long long cfs_rq;
 	unsigned long long se;
@@ -41,14 +43,15 @@ static int handle_event(void *ctx, void *data, size_t len)
 	if (len < sizeof(*event))
 		return 0;
 	printf("{\"type\":\"event\",\"op\":\"enqueue\",\"tid\":%u,\"cfs_rq\":\"%016llx\",\"se\":\"%016llx\",\"leftmost\":\"%016llx\",\"valid_nodes\":%u,\"truncated\":%u,\"nodes\":[",
-	       event->tid, event->cfs_rq, event->se, event->leftmost,
-	       event->node_count, event->truncated);
-	for (unsigned int i = 0; i < event->node_count; i++) {
+		   event->tid, event->cfs_rq, event->se, event->leftmost,
+		   event->node_count, event->truncated);
+	for (unsigned int i = 0; i < event->node_count; i++)
+	{
 		if (i)
 			putchar(',');
 		printf("{\"node\":\"%016llx\",\"left\":\"%016llx\",\"right\":\"%016llx\",\"color\":%u,\"comm\":\"%s\"}",
-		       event->nodes[i].node, event->nodes[i].left,
-		       event->nodes[i].right, event->nodes[i].color, event->nodes[i].comm);
+			   event->nodes[i].node, event->nodes[i].left,
+			   event->nodes[i].right, event->nodes[i].color, event->nodes[i].comm);
 	}
 	puts("]}");
 	return 0;
@@ -62,24 +65,28 @@ int main(void)
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
 	skel = cfs_tree_bpf__open_and_load();
-	if (!skel) {
+	if (!skel)
+	{
 		fprintf(stderr, "failed to open/load BPF skeleton\n");
 		return 1;
 	}
 	err = cfs_tree_bpf__attach(skel);
-	if (err) {
+	if (err)
+	{
 		fprintf(stderr, "failed to attach BPF programs: %d\n", err);
 		cfs_tree_bpf__destroy(skel);
 		return 1;
 	}
 	ringbuf = ring_buffer__new(bpf_map__fd(skel->maps.events), handle_event, NULL, NULL);
-	if (!ringbuf) {
+	if (!ringbuf)
+	{
 		fprintf(stderr, "failed to create ring buffer: %d\n", -errno);
 		cfs_tree_bpf__destroy(skel);
 		return 1;
 	}
 	fprintf(stderr, "attached enqueue entry/return probes; press Ctrl-C to stop\n");
-	while (!exiting) {
+	while (!exiting)
+	{
 		err = ring_buffer__poll(ringbuf, 250);
 		if (err == -EINTR)
 			break;

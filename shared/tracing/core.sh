@@ -12,7 +12,7 @@ echo 1 > events/sched/sched_process_exit/enable
 echo 1 > events/sched/sched_process_wait/enable
 echo 1 > events/sched/sched_process_free/enable
 echo 1 > tracing_on
-/mnt/host/_work/fork_25_processes
+/mnt/host/_work/build/fork_25_processes
 mkdir -p /mnt/host/_captures
 cat trace > /mnt/host/_captures/tracing-core-lifecycle.txt
 echo 0 > tracing_on

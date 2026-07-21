@@ -2,6 +2,9 @@ build/
 rootfs/
 vm/*.qcow2
 vm/seed.iso
+!.vscode/
+!.vscode/c_cpp_properties.json
+!.vscode/settings.json
 *.ko
 *.mod
 *.mod.c
@@ -10,5 +13,3 @@ vm/seed.iso
 Module.symvers
 modules.order
 shared/_captures/
-shared/_work/fork_25_processes
-shared/_work/exercise_memory_management

@@ -9,39 +9,40 @@
  */
 #define pr_fmt(fmt) "%s:%s(): " fmt, KBUILD_MODNAME, __func__
 
-#include <linux/debugfs.h>    /* debugfs_create_dir(), debugfs_create_file() */
-#include <linux/device.h>     /* struct device, dev_info(), dev_warn() */
-#include <linux/fs.h>         /* struct file_operations */
-#include <linux/init.h>       /* __init, __exit */
-#include <linux/kernel.h>     /* min_t(), unlikely() */
-#include <linux/mm.h>         /* kvmalloc(), kvfree() */
+#include <linux/debugfs.h>	  /* debugfs_create_dir(), debugfs_create_file() */
+#include <linux/device.h>	  /* struct device, dev_info(), dev_warn() */
+#include <linux/fs.h>		  /* struct file_operations */
+#include <linux/init.h>		  /* __init, __exit */
+#include <linux/kernel.h>	  /* min_t(), unlikely() */
+#include <linux/mm.h>		  /* kvmalloc(), kvfree() */
 #include <linux/miscdevice.h> /* struct miscdevice, misc_register() */
-#include <linux/module.h>     /* module metadata, THIS_MODULE */
-#include <linux/mutex.h>      /* struct mutex */
-#include <linux/proc_fs.h>    /* proc_mkdir(), proc_create() */
-#include <linux/sched.h>      /* current, get_task_comm() */
-#include <linux/seq_file.h>   /* seq_file helpers for procfs output */
-#include <linux/slab.h>       /* devm_kzalloc(), GFP_KERNEL */
-#include <linux/string.h>     /* strlen(), strscpy(), memset() */
-#include <linux/uaccess.h>    /* copy_to_user(), copy_from_user() */
+#include <linux/module.h>	  /* module metadata, THIS_MODULE */
+#include <linux/mutex.h>	  /* struct mutex */
+#include <linux/proc_fs.h>	  /* proc_mkdir(), proc_create() */
+#include <linux/sched.h>	  /* current, get_task_comm() */
+#include <linux/seq_file.h>	  /* seq_file helpers for procfs output */
+#include <linux/slab.h>		  /* devm_kzalloc(), GFP_KERNEL */
+#include <linux/string.h>	  /* strlen(), strscpy(), memset() */
+#include <linux/uaccess.h>	  /* copy_to_user(), copy_from_user() */
 
 #define MAXBYTES 128 /* max stored string size; userspace should match it */
 
 /* ---------- shared driver state ---------- */
 
-struct drv_ctx {
-	struct device *dev;              /* misc device object used for dev_* logs */
-	int tx;                          /* total bytes read from driver */
-	int rx;                          /* total bytes written into driver */
-	int config;                      /* tunable exposed through procfs/sysfs */
-	struct mutex lock;               /* protects the fields below */
+struct drv_ctx
+{
+	struct device *dev;				 /* misc device object used for dev_* logs */
+	int tx;							 /* total bytes read from driver */
+	int rx;							 /* total bytes written into driver */
+	int config;						 /* tunable exposed through procfs/sysfs */
+	struct mutex lock;				 /* protects the fields below */
 	struct proc_dir_entry *proc_dir; /* /proc/llkd_miscdrv directory */
-	struct dentry *debugfs_dir;       /* /sys/kernel/debug/llkd_miscdrv */
-	char oursecret[MAXBYTES];        /* backing store for /dev reads/writes */
-	size_t secret_len;                /* valid bytes in oursecret */
+	struct dentry *debugfs_dir;		 /* /sys/kernel/debug/llkd_miscdrv */
+	char oursecret[MAXBYTES];		 /* backing store for /dev reads/writes */
+	size_t secret_len;				 /* valid bytes in oursecret */
 };
 
-static struct drv_ctx *ctx;        /* one global context: one teaching device */
+static struct drv_ctx *ctx;			   /* one global context: one teaching device */
 static struct miscdevice llkd_miscdev; /* forward declaration for sysfs/procfs */
 
 /* ---------- sysfs device attributes ---------- */
@@ -176,8 +177,8 @@ static int status_proc_open(struct inode *inode, struct file *file)
 
 static const struct proc_ops status_proc_ops = {
 	.proc_open = status_proc_open,
-	.proc_read = seq_read,          /* copies seq_printf() output to userspace */
-	.proc_lseek = seq_lseek,        /* seek support for seq_file */
+	.proc_read = seq_read,			/* copies seq_printf() output to userspace */
+	.proc_lseek = seq_lseek,		/* seek support for seq_file */
 	.proc_release = single_release, /* cleanup for single_open() */
 };
 
@@ -192,7 +193,7 @@ static ssize_t config_proc_read(struct file *file, char __user *ubuf, size_t cou
 	mutex_unlock(&ctx->lock);
 
 	dev_info(ctx->dev, "procfs config read: %d\n", config);
-	len = scnprintf(kbuf, sizeof(kbuf), "%d\n", config); /* format into kernel buffer */
+	len = scnprintf(kbuf, sizeof(kbuf), "%d\n", config);		 /* format into kernel buffer */
 	return simple_read_from_buffer(ubuf, count, off, kbuf, len); /* copy to userspace */
 }
 
@@ -214,10 +215,9 @@ static ssize_t config_proc_write(struct file *file, const char __user *ubuf, siz
 }
 
 static const struct proc_ops config_proc_ops = {
-	.proc_read = config_proc_read,   /* simple scalar read; no seq_file needed */
+	.proc_read = config_proc_read,	 /* simple scalar read; no seq_file needed */
 	.proc_write = config_proc_write, /* parse text into ctx->config */
 };
-
 
 /* ---------- debugfs rich diagnostics ---------- */
 
@@ -342,13 +342,15 @@ static ssize_t read_miscdrv(struct file *filp, char __user *ubuf, size_t count, 
 	dev_info(dev, "%s wants to read (upto) %zd bytes\n", get_task_comm(tasknm, current), count);
 
 	mutex_lock(&ctx->lock);
-	if (*off >= ctx->secret_len) { /* EOF after the stored string is consumed */
+	if (*off >= ctx->secret_len)
+	{ /* EOF after the stored string is consumed */
 		mutex_unlock(&ctx->lock);
 		return 0;
 	}
 
 	nbytes = min_t(size_t, count, ctx->secret_len - *off);
-	if (copy_to_user(ubuf, ctx->oursecret + *off, nbytes)) { /* never dereference __user */
+	if (copy_to_user(ubuf, ctx->oursecret + *off, nbytes))
+	{ /* never dereference __user */
 		mutex_unlock(&ctx->lock);
 		dev_warn(dev, "copy_to_user() failed\n");
 		return -EFAULT;
@@ -381,7 +383,8 @@ static ssize_t write_miscdrv(struct file *filp, const char __user *ubuf, size_t 
 	int rx;
 	int tx;
 
-	if (unlikely(count >= MAXBYTES)) { /* reserve one byte for trailing NUL */
+	if (unlikely(count >= MAXBYTES))
+	{ /* reserve one byte for trailing NUL */
 		dev_warn(dev, "count %zu exceeds max # of bytes allowed, aborting write\n", count);
 		return -EINVAL;
 	}
@@ -395,7 +398,8 @@ static ssize_t write_miscdrv(struct file *filp, const char __user *ubuf, size_t 
 	memset(kbuf, 0, count + 1); /* safe string termination for this sample */
 
 	ret = -EFAULT;
-	if (copy_from_user(kbuf, ubuf, count)) { /* never dereference __user */
+	if (copy_from_user(kbuf, ubuf, count))
+	{ /* never dereference __user */
 		dev_warn(dev, "copy_from_user() failed\n");
 		goto out_free;
 	}
@@ -434,11 +438,11 @@ static int close_miscdrv(struct inode *inode, struct file *filp)
  * these function pointers when userspace performs open/read/write/close.
  */
 static const struct file_operations llkd_misc_fops = {
-	.owner = THIS_MODULE,      /* pin module while file operations run */
-	.open = open_miscdrv,      /* open(2) */
-	.read = read_miscdrv,      /* read(2) */
-	.write = write_miscdrv,    /* write(2) */
-	.release = close_miscdrv,  /* close(2) */
+	.owner = THIS_MODULE,	  /* pin module while file operations run */
+	.open = open_miscdrv,	  /* open(2) */
+	.read = read_miscdrv,	  /* read(2) */
+	.write = write_miscdrv,	  /* write(2) */
+	.release = close_miscdrv, /* close(2) */
 };
 
 /*
@@ -448,9 +452,9 @@ static const struct file_operations llkd_misc_fops = {
  */
 static struct miscdevice llkd_miscdev = {
 	.minor = MISC_DYNAMIC_MINOR, /* ask misc core for a free minor */
-	.name = "llkd_miscdrv",     /* creates /dev/llkd_miscdrv */
-	.mode = 0666,               /* teaching only: world-readable/writable */
-	.fops = &llkd_misc_fops,    /* syscall dispatch table */
+	.name = "llkd_miscdrv",		 /* creates /dev/llkd_miscdrv */
+	.mode = 0666,				 /* teaching only: world-readable/writable */
+	.fops = &llkd_misc_fops,	 /* syscall dispatch table */
 };
 
 /* ---------- module lifetime ---------- */
@@ -478,7 +482,8 @@ static int __init llkd_misc_init(void)
 	dev = llkd_miscdev.this_device; /* valid only after misc_register() */
 
 	ctx = devm_kzalloc(dev, sizeof(*ctx), GFP_KERNEL); /* zeroed, device-managed */
-	if (unlikely(!ctx)) {
+	if (unlikely(!ctx))
+	{
 		misc_deregister(&llkd_miscdev);
 		return -ENOMEM;
 	}
@@ -496,32 +501,37 @@ static int __init llkd_misc_init(void)
 
 	dev_info(ctx->dev, "creating procfs directory /proc/llkd_miscdrv\n");
 	ctx->proc_dir = proc_mkdir("llkd_miscdrv", NULL);
-	if (!ctx->proc_dir) {
+	if (!ctx->proc_dir)
+	{
 		ret = -ENOMEM;
 		goto err_sysfs;
 	}
 
 	dev_info(ctx->dev, "creating procfs file /proc/llkd_miscdrv/status\n");
-	if (!proc_create("status", 0444, ctx->proc_dir, &status_proc_ops)) {
+	if (!proc_create("status", 0444, ctx->proc_dir, &status_proc_ops))
+	{
 		ret = -ENOMEM;
 		goto err_proc;
 	}
 
 	dev_info(ctx->dev, "creating procfs file /proc/llkd_miscdrv/config\n");
-	if (!proc_create("config", 0666, ctx->proc_dir, &config_proc_ops)) {
+	if (!proc_create("config", 0666, ctx->proc_dir, &config_proc_ops))
+	{
 		ret = -ENOMEM;
 		goto err_proc;
 	}
 
 	dev_info(ctx->dev, "creating debugfs file /sys/kernel/debug/llkd_miscdrv/status\n");
 	ctx->debugfs_dir = debugfs_create_dir("llkd_miscdrv", NULL);
-	if (IS_ERR(ctx->debugfs_dir)) {
+	if (IS_ERR(ctx->debugfs_dir))
+	{
 		ret = PTR_ERR(ctx->debugfs_dir);
 		ctx->debugfs_dir = NULL;
 		goto err_proc;
 	}
 
-	if (ctx->debugfs_dir && !debugfs_create_file("status", 0444, ctx->debugfs_dir, NULL, &debugfs_status_fops)) {
+	if (ctx->debugfs_dir && !debugfs_create_file("status", 0444, ctx->debugfs_dir, NULL, &debugfs_status_fops))
+	{
 		ret = -ENOMEM;
 		goto err_debugfs;
 	}

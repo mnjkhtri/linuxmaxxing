@@ -9,7 +9,8 @@ char LICENSE[] SEC("license") = "GPL";
 #define MAX_TREE_NODES 31
 
 /* This event proves that entry state reached the return probe. */
-struct tree_node {
+struct tree_node
+{
 	u64 node;
 	u64 left;
 	u64 right;
@@ -17,7 +18,8 @@ struct tree_node {
 	char comm[16];
 };
 
-struct context_event {
+struct context_event
+{
 	u32 tid;
 	u64 cfs_rq;
 	u64 se;
@@ -27,7 +29,8 @@ struct context_event {
 	struct tree_node nodes[MAX_TREE_NODES];
 };
 
-struct scratch_state {
+struct scratch_state
+{
 	struct context_event event;
 	struct rb_node *traversal_worklist[MAX_TREE_NODES];
 	u32 head;
@@ -54,22 +57,22 @@ static __always_inline void read_node_comm(struct rb_node *node, char *comm)
 	if (!node)
 		return;
 
-	struct sched_entity *se = (struct sched_entity *)((char *)node -
-		bpf_core_field_offset(struct sched_entity, run_node));
-	struct task_struct *task = (struct task_struct *)((char *)se -
-		bpf_core_field_offset(struct task_struct, se));
+	struct sched_entity *se = (struct sched_entity *)((char *)node - bpf_core_field_offset(struct sched_entity, run_node));
+	struct task_struct *task = (struct task_struct *)((char *)se - bpf_core_field_offset(struct task_struct, se));
 	long n = bpf_probe_read_kernel_str(comm, 16, task->comm);
 	if (n < 0)
 		comm[0] = 0;
 }
 
 /* Temporary state shared by the matching entry and return probes. */
-struct saved_args {
+struct saved_args
+{
 	struct cfs_rq *cfs_rq;
 	struct sched_entity *se;
 };
 
-struct {
+struct
+{
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, 4096);
 	__type(key, u64);
@@ -77,7 +80,8 @@ struct {
 } active_args SEC(".maps");
 
 /* Per-CPU temporary workspace: keeps large traversal state off the 512-byte BPF stack and prevents CPUs from sharing one mutable scratch value, so no scratch lock is needed. */
-struct {
+struct
+{
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
 	__type(key, u32);
@@ -92,23 +96,25 @@ static long walk_one_node(u64 index, void *ctx)
 	struct context_event *event;
 
 	if (!scratch_state_ptr || index >= MAX_TREE_NODES ||
-	    scratch_state_ptr->head >= MAX_TREE_NODES ||
-	    scratch_state_ptr->tail > MAX_TREE_NODES ||
-	    scratch_state_ptr->head >= scratch_state_ptr->tail ||
-	    !scratch_state_ptr->traversal_worklist[scratch_state_ptr->head])
+		scratch_state_ptr->head >= MAX_TREE_NODES ||
+		scratch_state_ptr->tail > MAX_TREE_NODES ||
+		scratch_state_ptr->head >= scratch_state_ptr->tail ||
+		!scratch_state_ptr->traversal_worklist[scratch_state_ptr->head])
 		return 1;
 
 	event = &scratch_state_ptr->event;
 	node = scratch_state_ptr->traversal_worklist[scratch_state_ptr->head++];
 	fill_node(&event->nodes[index], node);
-	if (event->nodes[index].left) {
+	if (event->nodes[index].left)
+	{
 		if (scratch_state_ptr->tail < MAX_TREE_NODES)
 			scratch_state_ptr->traversal_worklist[scratch_state_ptr->tail++] =
 				(struct rb_node *)event->nodes[index].left;
 		else
 			event->truncated = 1;
 	}
-	if (event->nodes[index].right) {
+	if (event->nodes[index].right)
+	{
 		if (scratch_state_ptr->tail < MAX_TREE_NODES)
 			scratch_state_ptr->traversal_worklist[scratch_state_ptr->tail++] =
 				(struct rb_node *)event->nodes[index].right;
@@ -118,7 +124,8 @@ static long walk_one_node(u64 index, void *ctx)
 	return 0;
 }
 
-struct {
+struct
+{
 	__uint(type, BPF_MAP_TYPE_RINGBUF);
 	__uint(max_entries, 1 << 12);
 } events SEC(".maps");

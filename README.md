@@ -24,21 +24,21 @@ build/  Out-of-tree kernel build output.
 Build the compiled workloads once from the repository root:
 
 ```bash
-./build-workloads.sh
+make -C shared/_work
 ```
 
 ## Dependencies
 
-Install the kernel build tools, QEMU, cloud-image utilities, and `ccache` for faster rebuilds.
+Install the kernel build tools, QEMU, cloud-image utilities, and `ccache` for
+faster rebuilds.
 
 ```bash
 sudo apt update
 sudo apt install -y \
-  build-essential bc bison flex libssl-dev libelf-dev dwarves clang llvm libbpf-dev bpftool \
-  qemu-system-x86 qemu-utils cloud-image-utils ccache
+  build-essential bc bison flex libssl-dev libelf-dev dwarves clang llvm \
+  libbpf-dev linux-tools-common qemu-system-x86 qemu-utils \
+  cloud-image-utils ccache
 ```
-
-## Kernel Source
 
 `linux/` is a Git submodule pointing at upstream Linux. Build output stays separate in `build/`.
 

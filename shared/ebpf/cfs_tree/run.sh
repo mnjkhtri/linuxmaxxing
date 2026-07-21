@@ -10,6 +10,6 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 sleep 1
-/mnt/host/_work/fork_25_processes
+/mnt/host/_work/build/fork_25_processes
 cleanup
 trap - EXIT INT TERM

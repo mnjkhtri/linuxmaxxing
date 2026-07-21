@@ -24,7 +24,7 @@ echo 1 > events/kmem/kmem_cache_free/enable
 echo 1 > events/kmem/kmalloc/enable
 echo 1 > events/kmem/kfree/enable
 echo 1 > tracing_on
-/mnt/host/_work/exercise_memory_management
+/mnt/host/_work/build/exercise_memory_management
 # Freeze the ring buffer before copying it so the capture cannot change mid-read.
 echo 0 > tracing_on
 mkdir -p /mnt/host/_captures

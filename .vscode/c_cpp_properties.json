@@ -1,0 +1,51 @@
+{
+  "configurations": [
+    {
+      "name": "Linux kernel modules",
+      "compilerPath": "/usr/bin/gcc",
+      "compilerArgs": [
+        "-nostdinc",
+        "-m64",
+        "-mcmodel=kernel",
+        "-mno-red-zone",
+        "-fno-PIE",
+        "-fno-strict-aliasing",
+        "-fshort-wchar",
+        "-funsigned-char",
+        "-fms-extensions"
+      ],
+      "cStandard": "gnu11",
+      "intelliSenseMode": "linux-gcc-x64",
+      "includePath": [
+        "${workspaceFolder}/linux/arch/x86/include",
+        "${workspaceFolder}/build/arch/x86/include/generated",
+        "${workspaceFolder}/linux/include",
+        "${workspaceFolder}/build/include",
+        "${workspaceFolder}/linux/arch/x86/include/uapi",
+        "${workspaceFolder}/build/arch/x86/include/generated/uapi",
+        "${workspaceFolder}/linux/include/uapi",
+        "${workspaceFolder}/build/include/generated/uapi"
+      ],
+      "forcedInclude": [
+        "${workspaceFolder}/linux/include/linux/compiler-version.h",
+        "${workspaceFolder}/linux/include/linux/kconfig.h",
+        "${workspaceFolder}/linux/include/linux/compiler_types.h"
+      ],
+      "defines": [
+        "__KERNEL__",
+        "MODULE",
+        "CC_USING_FENTRY",
+        "KBUILD_BASENAME=\"vscode\"",
+        "KBUILD_MODNAME=\"vscode\"",
+        "__KBUILD_MODNAME=vscode"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}/shared"
+        ],
+        "limitSymbolsToIncludedHeaders": true
+      }
+    }
+  ],
+  "version": 4
+}
