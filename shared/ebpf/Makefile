@@ -10,6 +10,7 @@ SKEL := $(DIR)cfs_tree.skel.h
 LOADER_SRC := $(DIR)cfs_tree.c
 LOADER := $(DIR)cfs_tree
 VMLINUX := $(DIR)vmlinux.h
+KERNEL_BUILD := $(abspath $(DIR)../../build)
 
 CFLAGS := -g -O2 -Wall -I$(DIR)
 
@@ -18,7 +19,7 @@ CFLAGS := -g -O2 -Wall -I$(DIR)
 all: $(LOADER)
 
 $(VMLINUX):
-	$(BPFTOOL) btf dump file build/vmlinux format c > $@
+	$(BPFTOOL) btf dump file $(KERNEL_BUILD)/vmlinux format c > $@
 
 $(BPF_OBJ): $(BPF_SRC) $(VMLINUX)
 	$(CLANG) -g -O2 -target bpf -D__TARGET_ARCH_x86 -I$(DIR) -c $< -o $@

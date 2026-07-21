@@ -14,7 +14,7 @@ static void show_idle_thread(void)
 
 	/* init_task is CPU0's idle task and is not visited by normal traversal. */
 	pr_info("KOOPS_CORE %8d %8d %pK %pK [%16s] %8s\n",
-		t->tgid, t->pid, t, t->stack, t->comm, "idle");
+			t->tgid, t->pid, t, t->stack, t->comm, "idle");
 }
 
 static int show_all_threads(void)
@@ -32,7 +32,8 @@ static int show_all_threads(void)
 
 	rcu_read_lock();
 
-	for_each_process_thread(p, t) {
+	for_each_process_thread(p, t)
+	{
 		const char *type;
 		int nr_threads;
 
@@ -48,12 +49,15 @@ static int show_all_threads(void)
 		else
 			type = "user-ST";
 
-		if (!t->mm) {
+		if (!t->mm)
+		{
 			pr_info("KOOPS_CORE %8d %8d %pK %pK [%16s] %8s\n",
-				t->tgid, t->pid, t, t->stack, t->comm, type);
-		} else {
+					t->tgid, t->pid, t, t->stack, t->comm, type);
+		}
+		else
+		{
 			pr_info("KOOPS_CORE %8d %8d %pK %pK  %16s  %8s\n",
-				t->tgid, t->pid, t, t->stack, t->comm, type);
+					t->tgid, t->pid, t, t->stack, t->comm, type);
 		}
 
 		task_unlock(t);
@@ -82,7 +86,6 @@ static void __exit core_koops_exit(void)
 {
 	pr_info("KOOPS_CORE %s removed\n", KBUILD_MODNAME);
 }
-
 
 // SPDX-License-Identifier: GPL-2.0
 /*
@@ -144,7 +147,8 @@ static struct page *page_desc;
 static void *page_desc_addr;
 
 /* Small typed object used to show kzalloc() and kfree_sensitive(). */
-struct slab_context {
+struct slab_context
+{
 	char name[32];
 	char secret[32];
 	unsigned long created_at;
@@ -154,7 +158,8 @@ struct slab_context {
 };
 
 /* Object type served by the custom slab cache. */
-struct custom_cache_object {
+struct custom_cache_object
+{
 	char name[32];
 	unsigned long created_at;
 	unsigned int id;
@@ -190,16 +195,17 @@ static void print_region(const char *name, unsigned long start, unsigned long en
 {
 	unsigned long size_kib;
 
-	if (end <= start) {
+	if (end <= start)
+	{
 		pr_info("KOOPS_MM %-24s 0x%016lx - 0x%016lx  invalid\n",
-			name, start, end);
+				name, start, end);
 		return;
 	}
 
 	size_kib = (end - start) >> 10;
 
 	pr_info("KOOPS_MM %-24s 0x%016lx - 0x%016lx  %lu KiB\n",
-		name, start, end, size_kib);
+			name, start, end, size_kib);
 }
 
 /* Print global memory constants and the kernel virtual address-space layout. */
@@ -212,7 +218,7 @@ static void print_global_constants(unsigned long ram_bytes)
 	pr_info("KOOPS_MM BITS_PER_LONG       : %u\n", (unsigned int)BITS_PER_LONG);
 	pr_info("KOOPS_MM approx RAM          : %lu MiB\n", ram_bytes >> 20);
 	pr_info("KOOPS_MM paging mode         : %s\n",
-		pgtable_l5_enabled() ? "5-level paging / LA57" : "4-level paging");
+			pgtable_l5_enabled() ? "5-level paging / LA57" : "4-level paging");
 
 	pr_info("KOOPS_MM ---- kernel VAS layout ----\n");
 	print_addr("CPU_ENTRY_AREA_BASE", (unsigned long)CPU_ENTRY_AREA_BASE);
@@ -220,16 +226,16 @@ static void print_global_constants(unsigned long ram_bytes)
 
 	print_region("user VAS", 0UL, (unsigned long)TASK_SIZE);
 	print_region("direct map approx",
-		     (unsigned long)PAGE_OFFSET,
-		     (unsigned long)PAGE_OFFSET + ram_bytes);
+				 (unsigned long)PAGE_OFFSET,
+				 (unsigned long)PAGE_OFFSET + ram_bytes);
 	print_region("vmalloc", (unsigned long)VMALLOC_START, (unsigned long)VMALLOC_END);
 	print_region("modules", (unsigned long)MODULES_VADDR, (unsigned long)MODULES_END);
 	print_region("fixmap", (unsigned long)FIXADDR_START, (unsigned long)FIXADDR_TOP);
 
 #ifdef KERNEL_IMAGE_SIZE
 	print_region("kernel image max",
-		     (unsigned long)__START_KERNEL_map,
-		     (unsigned long)__START_KERNEL_map + KERNEL_IMAGE_SIZE);
+				 (unsigned long)__START_KERNEL_map,
+				 (unsigned long)__START_KERNEL_map + KERNEL_IMAGE_SIZE);
 #endif
 #if defined(VMEMMAP_START) && defined(VMEMMAP_END)
 	print_region("vmemmap", (unsigned long)VMEMMAP_START, (unsigned long)VMEMMAP_END);
@@ -251,7 +257,7 @@ static size_t order_size_bytes(unsigned int page_order)
 static void dump_memory(const char *prefix, const void *addr, size_t len)
 {
 	print_hex_dump(KERN_INFO, prefix, DUMP_PREFIX_OFFSET, 16, 1,
-		       addr, min_t(size_t, len, 64), false);
+				   addr, min_t(size_t, len, 64), false);
 }
 
 /* Show the virtual, physical, and PFN mapping for each page in an allocation. */
@@ -270,17 +276,19 @@ static void show_pages(const char *name, const void *addr, size_t len)
 
 	pr_info("KOOPS_MM %s: kva=%px len=%zu pages=%u\n", name, addr, len, pages);
 
-	for (i = 0; i < pages; i++) {
+	for (i = 0; i < pages; i++)
+	{
 		void *this_kva = (void *)(kva + i * PAGE_SIZE);
 		phys_addr_t pa = virt_to_phys(this_kva);
 		unsigned long pfn = PHYS_PFN(pa);
 
 		pr_info("KOOPS_MM %s[%u]: kva=%px pa=%pa pfn=%lu\n",
-			name, i, this_kva, &pa, pfn);
+				name, i, this_kva, &pa, pfn);
 
-		if (i > 0 && pfn != previous_pfn + 1) {
+		if (i > 0 && pfn != previous_pfn + 1)
+		{
 			pr_warn("KOOPS_MM %s: PFNs are not contiguous at page %u\n",
-				name, i);
+					name, i);
 		}
 
 		previous_pfn = pfn;
@@ -290,28 +298,33 @@ static void show_pages(const char *name, const void *addr, size_t len)
 /* Free every page allocation made by allocate_page_memory(). */
 static void free_page_memory(void)
 {
-	if (exact_pages) {
+	if (exact_pages)
+	{
 		free_pages_exact(exact_pages, EXACT_PAGE_ALLOC_SIZE);
 		exact_pages = NULL;
 	}
 
-	if (page_desc) {
+	if (page_desc)
+	{
 		__free_pages(page_desc, BUDDY_PAGE_ORDER);
 		page_desc = NULL;
 		page_desc_addr = NULL;
 	}
 
-	if (order_pages) {
+	if (order_pages)
+	{
 		free_pages(order_pages, BUDDY_PAGE_ORDER);
 		order_pages = 0;
 	}
 
-	if (zero_page) {
+	if (zero_page)
+	{
 		free_page(zero_page);
 		zero_page = 0;
 	}
 
-	if (one_page) {
+	if (one_page)
+	{
 		free_page(one_page);
 		one_page = 0;
 	}
@@ -322,9 +335,10 @@ static int allocate_page_memory(void)
 {
 	size_t order_len = order_size_bytes(BUDDY_PAGE_ORDER);
 
-	if (BUDDY_PAGE_ORDER > MAX_PAGE_ORDER - 1) {
+	if (BUDDY_PAGE_ORDER > MAX_PAGE_ORDER - 1)
+	{
 		pr_err("KOOPS_MM order=%u is too large; max usable order is %u\n",
-		       BUDDY_PAGE_ORDER, MAX_PAGE_ORDER - 1);
+			   BUDDY_PAGE_ORDER, MAX_PAGE_ORDER - 1);
 		return -EINVAL;
 	}
 
@@ -336,7 +350,7 @@ static int allocate_page_memory(void)
 
 	memset((void *)one_page, 0x11, PAGE_SIZE);
 	pr_info("KOOPS_MM __get_free_page(): addr=%px size=%lu\n",
-		(void *)one_page, PAGE_SIZE);
+			(void *)one_page, PAGE_SIZE);
 	show_pages("__get_free_page", (void *)one_page, PAGE_SIZE);
 	dump_memory("KOOPS_MM __get_free_page dump: ", (void *)one_page, PAGE_SIZE);
 
@@ -345,7 +359,7 @@ static int allocate_page_memory(void)
 		goto err_nomem;
 
 	pr_info("KOOPS_MM get_zeroed_page(): addr=%px size=%lu\n",
-		(void *)zero_page, PAGE_SIZE);
+			(void *)zero_page, PAGE_SIZE);
 	show_pages("get_zeroed_page", (void *)zero_page, PAGE_SIZE);
 	dump_memory("KOOPS_MM get_zeroed_page dump: ", (void *)zero_page, PAGE_SIZE);
 
@@ -355,7 +369,7 @@ static int allocate_page_memory(void)
 
 	memset((void *)order_pages, 0x22, order_len);
 	pr_info("KOOPS_MM __get_free_pages(): order=%u pages=%u addr=%px size=%zu\n",
-		BUDDY_PAGE_ORDER, 1U << BUDDY_PAGE_ORDER, (void *)order_pages, order_len);
+			BUDDY_PAGE_ORDER, 1U << BUDDY_PAGE_ORDER, (void *)order_pages, order_len);
 	show_pages("__get_free_pages", (void *)order_pages, order_len);
 	dump_memory("KOOPS_MM __get_free_pages dump: ", (void *)order_pages, order_len);
 
@@ -364,7 +378,8 @@ static int allocate_page_memory(void)
 		goto err_nomem;
 
 	page_desc_addr = page_address(page_desc);
-	if (!page_desc_addr) {
+	if (!page_desc_addr)
+	{
 		pr_err("KOOPS_MM alloc_pages(): page has no direct kernel mapping\n");
 		free_page_memory();
 		return -ENOMEM;
@@ -372,7 +387,7 @@ static int allocate_page_memory(void)
 
 	memset(page_desc_addr, 0x33, order_len);
 	pr_info("KOOPS_MM alloc_pages(): order=%u struct_page=%px addr=%px size=%zu\n",
-		BUDDY_PAGE_ORDER, page_desc, page_desc_addr, order_len);
+			BUDDY_PAGE_ORDER, page_desc, page_desc_addr, order_len);
 	show_pages("alloc_pages", page_desc_addr, order_len);
 	dump_memory("KOOPS_MM alloc_pages dump: ", page_desc_addr, order_len);
 
@@ -382,7 +397,7 @@ static int allocate_page_memory(void)
 
 	memset(exact_pages, 0x44, EXACT_PAGE_ALLOC_SIZE);
 	pr_info("KOOPS_MM alloc_pages_exact(): requested=%lu addr=%px\n",
-		(unsigned long)EXACT_PAGE_ALLOC_SIZE, exact_pages);
+			(unsigned long)EXACT_PAGE_ALLOC_SIZE, exact_pages);
 	show_pages("alloc_pages_exact", exact_pages, EXACT_PAGE_ALLOC_SIZE);
 	dump_memory("KOOPS_MM alloc_pages_exact dump: ", exact_pages, EXACT_PAGE_ALLOC_SIZE);
 
@@ -401,12 +416,14 @@ err_nomem:
 /* Free every slab allocation made by allocate_slab_memory(). */
 static void free_slab_memory(void)
 {
-	if (ctx) {
+	if (ctx)
+	{
 		kfree_sensitive(ctx);
 		ctx = NULL;
 	}
 
-	if (slab_buf) {
+	if (slab_buf)
+	{
 		kfree(slab_buf);
 		slab_buf = NULL;
 	}
@@ -427,10 +444,10 @@ static int allocate_slab_memory(void)
 	actual = ksize(slab_buf);
 
 	pr_info("KOOPS_MM kmalloc(): requested=%u actual=%zu waste=%zu addr=%px\n",
-		SLAB_BUFFER_SIZE,
-		actual,
-		actual >= SLAB_BUFFER_SIZE ? actual - SLAB_BUFFER_SIZE : 0,
-		slab_buf);
+			SLAB_BUFFER_SIZE,
+			actual,
+			actual >= SLAB_BUFFER_SIZE ? actual - SLAB_BUFFER_SIZE : 0,
+			slab_buf);
 	show_pages("kmalloc", slab_buf, actual);
 	dump_memory("KOOPS_MM kmalloc dump: ", slab_buf, SLAB_BUFFER_SIZE);
 
@@ -448,10 +465,10 @@ static int allocate_slab_memory(void)
 	actual = ksize(ctx);
 
 	pr_info("KOOPS_MM kzalloc(ctx): requested=%zu actual=%zu waste=%zu addr=%px\n",
-		sizeof(*ctx),
-		actual,
-		actual >= sizeof(*ctx) ? actual - sizeof(*ctx) : 0,
-		ctx);
+			sizeof(*ctx),
+			actual,
+			actual >= sizeof(*ctx) ? actual - sizeof(*ctx) : 0,
+			ctx);
 	show_pages("kzalloc_ctx", ctx, actual);
 	dump_memory("KOOPS_MM kzalloc ctx dump: ", ctx, sizeof(*ctx));
 
@@ -482,14 +499,17 @@ static void free_custom_slab_cache(void)
 {
 	unsigned int i;
 
-	for (i = 0; i < CUSTOM_CACHE_OBJECTS; i++) {
-		if (custom_objects[i]) {
+	for (i = 0; i < CUSTOM_CACHE_OBJECTS; i++)
+	{
+		if (custom_objects[i])
+		{
 			kmem_cache_free(custom_cache, custom_objects[i]);
 			custom_objects[i] = NULL;
 		}
 	}
 
-	if (custom_cache) {
+	if (custom_cache)
+	{
 		kmem_cache_destroy(custom_cache);
 		custom_cache = NULL;
 	}
@@ -503,21 +523,24 @@ static int create_custom_slab_cache(void)
 	pr_info("KOOPS_MM ---- custom slab allocator ----\n");
 
 	custom_cache = kmem_cache_create(CUSTOM_CACHE_NAME,
-					       sizeof(struct custom_cache_object),
-					       0,
-					       SLAB_HWCACHE_ALIGN,
-					       custom_cache_ctor);
-	if (!custom_cache) {
+									 sizeof(struct custom_cache_object),
+									 0,
+									 SLAB_HWCACHE_ALIGN,
+									 custom_cache_ctor);
+	if (!custom_cache)
+	{
 		pr_warn("KOOPS_MM kmem_cache_create() failed\n");
 		return -ENOMEM;
 	}
 
 	pr_info("KOOPS_MM kmem_cache_create(): name=%s object_size=%zu\n",
-		CUSTOM_CACHE_NAME, sizeof(struct custom_cache_object));
+			CUSTOM_CACHE_NAME, sizeof(struct custom_cache_object));
 
-	for (i = 0; i < CUSTOM_CACHE_OBJECTS; i++) {
+	for (i = 0; i < CUSTOM_CACHE_OBJECTS; i++)
+	{
 		custom_objects[i] = kmem_cache_alloc(custom_cache, GFP_KERNEL);
-		if (!custom_objects[i]) {
+		if (!custom_objects[i])
+		{
 			pr_warn("KOOPS_MM kmem_cache_alloc() failed at object %u\n", i);
 			free_custom_slab_cache();
 			return -ENOMEM;
@@ -526,26 +549,25 @@ static int create_custom_slab_cache(void)
 		custom_objects[i]->id = i;
 		custom_objects[i]->created_at = jiffies;
 		strscpy(custom_objects[i]->name, "active-object",
-			sizeof(custom_objects[i]->name));
+				sizeof(custom_objects[i]->name));
 		memset(custom_objects[i]->payload, 0xa0 + i,
-		       sizeof(custom_objects[i]->payload));
+			   sizeof(custom_objects[i]->payload));
 
 		pr_info("KOOPS_MM kmem_cache_alloc(): object[%u]=%px id=%u flags=0x%x name=%s\n",
-			i,
-			custom_objects[i],
-			custom_objects[i]->id,
-			custom_objects[i]->flags,
-			custom_objects[i]->name);
+				i,
+				custom_objects[i],
+				custom_objects[i]->id,
+				custom_objects[i]->flags,
+				custom_objects[i]->name);
 	}
 
 	show_pages("custom_slab_object", custom_objects[0], sizeof(*custom_objects[0]));
 	dump_memory("KOOPS_MM custom slab object[0] dump: ",
-		    custom_objects[0],
-		    sizeof(*custom_objects[0]));
+				custom_objects[0],
+				sizeof(*custom_objects[0]));
 
 	return 0;
 }
-
 
 /*
  * vmalloc allocator helpers
@@ -567,17 +589,19 @@ static void show_vmalloc_mapping(const char *name, const void *addr, size_t len)
 	kva = (unsigned long)addr;
 
 	pr_info("KOOPS_MM %s: kva=%px len=%zu pages=%u vmalloc=%s\n",
-		name, addr, len, pages, is_vmalloc_addr(addr) ? "yes" : "no");
+			name, addr, len, pages, is_vmalloc_addr(addr) ? "yes" : "no");
 
-	for (i = 0; i < pages; i++) {
+	for (i = 0; i < pages; i++)
+	{
 		void *this_kva = (void *)(kva + i * PAGE_SIZE);
 		struct page *page = vmalloc_to_page(this_kva);
 		phys_addr_t pa;
 		unsigned long pfn;
 
-		if (!page) {
+		if (!page)
+		{
 			pr_warn("KOOPS_MM %s[%u]: kva=%px has no backing page\n",
-				name, i, this_kva);
+					name, i, this_kva);
 			continue;
 		}
 
@@ -585,11 +609,12 @@ static void show_vmalloc_mapping(const char *name, const void *addr, size_t len)
 		pa = page_to_phys(page) + offset_in_page(this_kva);
 
 		pr_info("KOOPS_MM %s[%u]: kva=%px page=%px pa=%pa pfn=%lu\n",
-			name, i, this_kva, page, &pa, pfn);
+				name, i, this_kva, page, &pa, pfn);
 
-		if (i > 0 && pfn != previous_pfn + 1) {
+		if (i > 0 && pfn != previous_pfn + 1)
+		{
 			pr_warn("KOOPS_MM %s: PFNs are not contiguous at page %u\n",
-				name, i);
+					name, i);
 		}
 
 		previous_pfn = pfn;
@@ -599,12 +624,14 @@ static void show_vmalloc_mapping(const char *name, const void *addr, size_t len)
 /* Free every vmalloc allocation made by allocate_vmalloc_memory(). */
 static void free_vmalloc_memory(void)
 {
-	if (vzbuf) {
+	if (vzbuf)
+	{
 		vfree(vzbuf);
 		vzbuf = NULL;
 	}
 
-	if (vbuf) {
+	if (vbuf)
+	{
 		vfree(vbuf);
 		vbuf = NULL;
 	}
@@ -616,26 +643,28 @@ static int allocate_vmalloc_memory(void)
 	pr_info("KOOPS_MM ---- vmalloc allocator ----\n");
 
 	vbuf = vmalloc(VMALLOC_BUFFER_SIZE);
-	if (!vbuf) {
+	if (!vbuf)
+	{
 		pr_warn("KOOPS_MM vmalloc(%lu) failed\n", (unsigned long)VMALLOC_BUFFER_SIZE);
 		return -ENOMEM;
 	}
 
 	memset(vbuf, 0x5a, VMALLOC_BUFFER_SIZE);
 	pr_info("KOOPS_MM vmalloc(): requested=%lu returned=%px\n",
-		(unsigned long)VMALLOC_BUFFER_SIZE, vbuf);
+			(unsigned long)VMALLOC_BUFFER_SIZE, vbuf);
 	dump_memory("KOOPS_MM vmalloc buffer: ", vbuf, VMALLOC_BUFFER_SIZE);
 	show_vmalloc_mapping("vmalloc", vbuf, VMALLOC_BUFFER_SIZE);
 
 	vzbuf = vzalloc(VMALLOC_BUFFER_SIZE);
-	if (!vzbuf) {
+	if (!vzbuf)
+	{
 		pr_warn("KOOPS_MM vzalloc(%lu) failed\n", (unsigned long)VMALLOC_BUFFER_SIZE);
 		free_vmalloc_memory();
 		return -ENOMEM;
 	}
 
 	pr_info("KOOPS_MM vzalloc(): requested=%lu returned=%px\n",
-		(unsigned long)VMALLOC_BUFFER_SIZE, vzbuf);
+			(unsigned long)VMALLOC_BUFFER_SIZE, vzbuf);
 	dump_memory("KOOPS_MM vzalloc buffer: ", vzbuf, VMALLOC_BUFFER_SIZE);
 	show_vmalloc_mapping("vzalloc", vzbuf, VMALLOC_BUFFER_SIZE);
 
@@ -663,20 +692,23 @@ static int __init mm_koops_init(void)
 		return ret;
 
 	ret = allocate_slab_memory();
-	if (ret) {
+	if (ret)
+	{
 		free_page_memory();
 		return ret;
 	}
 
 	ret = create_custom_slab_cache();
-	if (ret) {
+	if (ret)
+	{
 		free_slab_memory();
 		free_page_memory();
 		return ret;
 	}
 
 	ret = allocate_vmalloc_memory();
-	if (ret) {
+	if (ret)
+	{
 		free_custom_slab_cache();
 		free_slab_memory();
 		free_page_memory();
@@ -698,25 +730,25 @@ static void __exit mm_koops_exit(void)
 	pr_info("KOOPS_MM unloaded\n");
 }
 
-
 static int __init koops_init(void)
 {
-  int ret;
-  ret = core_koops_init();
-  if (ret)
-    return ret;
-  ret = mm_koops_init();
-  if (ret) {
-    core_koops_exit();
-    return ret;
-  }
-  return 0;
+	int ret;
+	ret = core_koops_init();
+	if (ret)
+		return ret;
+	ret = mm_koops_init();
+	if (ret)
+	{
+		core_koops_exit();
+		return ret;
+	}
+	return 0;
 }
 
 static void __exit koops_exit(void)
 {
-  mm_koops_exit();
-  core_koops_exit();
+	mm_koops_exit();
+	core_koops_exit();
 }
 
 module_init(koops_init);

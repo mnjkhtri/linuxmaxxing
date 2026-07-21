@@ -11,8 +11,8 @@ The rebuilt kernel must provide BTF and BPF kprobe/kretprobe support. Install th
 Generate type declarations from the exact kernel image being tested:
 
 ```bash
-mkdir -p shared/ebpf/cfs_tree
-bpftool btf dump file build/vmlinux format c > shared/ebpf/cfs_tree/vmlinux.h
+mkdir -p shared/ebpf
+bpftool btf dump file build/vmlinux format c > shared/ebpf/vmlinux.h
 ```
 
 `vmlinux.h` is generated from kernel BTF. It lets the BPF program name kernel types such as `struct cfs_rq`, `struct rb_node`, and `struct task_struct`. CO-RE relocations let libbpf adapt field accesses when loading the program.
@@ -20,14 +20,14 @@ bpftool btf dump file build/vmlinux format c > shared/ebpf/cfs_tree/vmlinux.h
 ## Build and Run
 
 ```bash
-make -C shared/ebpf/cfs_tree clean
-make -C shared/ebpf/cfs_tree
+make -C shared/ebpf clean
+make -C shared/ebpf
 ```
 
 Inside QEMU:
 
 ```bash
-/mnt/host/ebpf/cfs_tree/run.sh
+/mnt/host/ebpf/run.sh
 ```
 
 The attachment message is written to stderr. Event records are written to stdout.

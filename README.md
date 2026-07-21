@@ -94,7 +94,7 @@ mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host
 ## Subsystem Studies
 
 - [Tracing studies](shared/tracing/README.md)
-- [CFS eBPF tree visualizer](shared/ebpf/cfs_tree/README.md)
+- [CFS eBPF tree visualizer](shared/ebpf/README.md)
 - [External kernel modules](shared/modules/README.md)
 - [Misc character driver](shared/miscdriver/README.md)
 - [QEMU EDU PCI driver](shared/pci/README.md)
