@@ -1,5 +1,18 @@
 # LLKD Misc Driver
 
+Build and load the driver against the custom kernel:
+
+```bash
+make -C shared/miscdriver
+sh /mnt/host/miscdriver/w.sh
+```
+
+Unload it explicitly when finished:
+
+```bash
+rmmod llkd_miscdrv
+```
+
 `llkd_miscdrv.c` is a beginner-friendly Linux misc character driver. It does
 not drive real hardware. Instead, it uses a small in-kernel string as the
 backing device and exposes that state through several common kernel/userspace

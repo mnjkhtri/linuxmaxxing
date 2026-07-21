@@ -2,48 +2,30 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <unistd.h>
-#include <string.h>
-#include <linux/types.h>
-
 #include <bpf/libbpf.h>
-
 #include "cfs_tree.skel.h"
 
-#define MAX_TREE_NODES 31
-
-static volatile sig_atomic_t exiting;
-
-struct cfs_node_event {
+/* Must match the BPF event byte-for-byte. */
+struct tree_node {
 	unsigned long long node;
 	unsigned long long left;
 	unsigned long long right;
-	unsigned long long se;
 	unsigned int color;
-	unsigned int _pad;
+	char comm[16];
 };
 
-struct cfs_event {
-	unsigned long long ts_ns;
-	unsigned int cpu;
-	unsigned int op;
-	unsigned int node_count;
-	unsigned int _pad;
+struct context_event {
+	unsigned int tid;
 	unsigned long long cfs_rq;
-	unsigned long long root;
+	unsigned long long se;
 	unsigned long long leftmost;
-	unsigned long long changed_node;
-	unsigned int changed_pid;
+	unsigned int node_count;
 	unsigned int truncated;
-	char changed_comm[16];
-	struct cfs_node_event nodes[MAX_TREE_NODES];
+	struct tree_node nodes[31];
 };
 
-enum {
-	OP_ENQUEUE = 1,
-	OP_DEQUEUE = 2,
-};
+static volatile sig_atomic_t exiting;
 
 static void on_signal(int signo)
 {
@@ -51,94 +33,60 @@ static void on_signal(int signo)
 	exiting = 1;
 }
 
+/* libbpf invokes this after the kretprobe emits one event. */
 static int handle_event(void *ctx, void *data, size_t len)
 {
-	const struct cfs_event *e = data;
-	const char *op;
-	unsigned int count;
-
+	const struct context_event *event = data;
 	(void)ctx;
-
-	if (len < sizeof(*e))
+	if (len < sizeof(*event))
 		return 0;
-
-	op = e->op == OP_ENQUEUE ? "enqueue" :
-	     e->op == OP_DEQUEUE ? "dequeue" : "unknown";
-	count = e->node_count > MAX_TREE_NODES ? MAX_TREE_NODES : e->node_count;
-
-	printf("{\"type\":\"event\",\"seq\":%llu,\"op\":\"%s\",\"cpu\":%u,\"cfs_rq\":\"%016llx\",\"root\":\"%016llx\",\"leftmost\":\"%016llx\",\"changed_node\":\"%016llx\",\"changed_pid\":%u,\"changed_comm\":\"%s\",\"truncated\":%s,\"nodes\":[",
-	       e->ts_ns, op, e->cpu, e->cfs_rq, e->root, e->leftmost,
-	       e->changed_node, e->changed_pid, e->changed_comm,
-	       e->truncated ? "true" : "false");
-	for (unsigned int i = 0; i < count; i++) {
-		const struct cfs_node_event *n = &e->nodes[i];
-
-		printf("%s{\"node\":\"%016llx\",\"left\":\"%016llx\",\"right\":\"%016llx\",\"se\":\"%016llx\",\"color\":\"%s\",\"changed\":%s,\"leftmost\":%s}",
-		       i ? "," : "", n->node, n->left, n->right, n->se,
-		       n->color ? "B" : "R",
-		       n->node == e->changed_node ? "true" : "false",
-		       n->node == e->leftmost ? "true" : "false");
+	printf("{\"type\":\"event\",\"op\":\"enqueue\",\"tid\":%u,\"cfs_rq\":\"%016llx\",\"se\":\"%016llx\",\"leftmost\":\"%016llx\",\"valid_nodes\":%u,\"truncated\":%u,\"nodes\":[",
+	       event->tid, event->cfs_rq, event->se, event->leftmost,
+	       event->node_count, event->truncated);
+	for (unsigned int i = 0; i < event->node_count; i++) {
+		if (i)
+			putchar(',');
+		printf("{\"node\":\"%016llx\",\"left\":\"%016llx\",\"right\":\"%016llx\",\"color\":%u,\"comm\":\"%s\"}",
+		       event->nodes[i].node, event->nodes[i].left,
+		       event->nodes[i].right, event->nodes[i].color, event->nodes[i].comm);
 	}
-	printf("]}\n");
+	puts("]}");
 	return 0;
 }
 
 int main(void)
 {
-	struct cfs_tree_bpf *skel = NULL;
-	struct ring_buffer *rb = NULL;
+	struct cfs_tree_bpf *skel;
+	struct ring_buffer *ringbuf;
 	int err;
-
-	setvbuf(stdout, NULL, _IOLBF, 0);
-	libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
-
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
-
-	skel = cfs_tree_bpf__open();
+	skel = cfs_tree_bpf__open_and_load();
 	if (!skel) {
-		fprintf(stderr, "failed to open BPF skeleton\n");
+		fprintf(stderr, "failed to open/load BPF skeleton\n");
 		return 1;
 	}
-
-if (skel->rodata)
-		memcpy(skel->rodata->target_comm, "workld", 7);
-
-	err = cfs_tree_bpf__load(skel);
-	if (err) {
-		fprintf(stderr, "failed to load BPF skeleton: %d\n", err);
-		goto cleanup;
-	}
-
 	err = cfs_tree_bpf__attach(skel);
 	if (err) {
 		fprintf(stderr, "failed to attach BPF programs: %d\n", err);
-		goto cleanup;
+		cfs_tree_bpf__destroy(skel);
+		return 1;
 	}
-
-	rb = ring_buffer__new(bpf_map__fd(skel->maps.events), handle_event,
-	                      NULL, NULL);
-	if (!rb) {
-		err = -errno;
-		fprintf(stderr, "failed to create ring buffer: %d\n", err);
-		goto cleanup;
+	ringbuf = ring_buffer__new(bpf_map__fd(skel->maps.events), handle_event, NULL, NULL);
+	if (!ringbuf) {
+		fprintf(stderr, "failed to create ring buffer: %d\n", -errno);
+		cfs_tree_bpf__destroy(skel);
+		return 1;
 	}
-
-	fprintf(stderr, "attached to __enqueue_entity/__dequeue_entity; press Ctrl-C to stop\n");
+	fprintf(stderr, "attached enqueue entry/return probes; press Ctrl-C to stop\n");
 	while (!exiting) {
-		err = ring_buffer__poll(rb, 250);
-		if (err == -EINTR) {
-			err = 0;
+		err = ring_buffer__poll(ringbuf, 250);
+		if (err == -EINTR)
 			break;
-		}
-		if (err < 0) {
-			fprintf(stderr, "ring buffer poll failed: %d\n", err);
+		if (err < 0)
 			break;
-		}
 	}
-
-cleanup:
-	ring_buffer__free(rb);
+	ring_buffer__free(ringbuf);
 	cfs_tree_bpf__destroy(skel);
-	return err < 0 ? 1 : 0;
+	return 0;
 }

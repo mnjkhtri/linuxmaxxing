@@ -36,7 +36,7 @@ int main(int argc, char **argv)
 	}
 
 	printf("starting workload with %d children for %d seconds\n", CHILDREN, seconds);
-    printf("children are pinned to CPU0 and named workldNNN for scheduler hooks\n");
+    printf("children are pinned to CPU0 and named schedNNN for scheduler hooks\n");
 	fflush(stdout);
 
 	for (i = 0; i < CHILDREN; i++) {
@@ -64,7 +64,7 @@ int main(int argc, char **argv)
 			signal(SIGTERM, on_signal);
 			signal(SIGINT, on_signal);
 
-			snprintf(name, sizeof(name), "workld%03d", i);
+			snprintf(name, sizeof(name), "sched%03d", i);
 			if (prctl(PR_SET_NAME, name, 0, 0, 0) != 0) {
 				perror("prctl(PR_SET_NAME)");
 				_exit(1);

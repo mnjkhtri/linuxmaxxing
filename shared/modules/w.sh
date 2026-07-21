@@ -3,35 +3,20 @@ set -eu
 
 cd "$(dirname "$0")"
 
-MODE=${1:-core}
+MODE=combined
 
 mountpoint -q /proc || mount -t proc proc /proc
 mountpoint -q /sys || mount -t sysfs sysfs /sys
 
-case "$MODE" in
-	core)
-		MODULE_DIR=core
-		MODULE=core_koops
-		ARGS=
-		PREFIX=KOOPS_CORE
-		;;
-	mm)
-		MODULE_DIR=mm
-		MODULE=mm_koops
-		ARGS=
-		PREFIX=KOOPS_MM
-		;;
-	*)
-		printf 'usage: %s {core|mm}\n' "$0" >&2
-		exit 2
-		;;
-esac
+MODULE_DIR=.
+MODULE=koops
+PREFIXES="KOOPS_CORE|KOOPS_MM"
 
 printf '== modinfo ==\n'
-modinfo "./$MODULE_DIR/$MODULE.ko"
+modinfo "./$MODULE.ko"
 
 printf '\n== load %s ==\n' "$MODULE"
-insmod "./$MODULE_DIR/$MODULE.ko" $ARGS
+insmod "./$MODULE_DIR/$MODULE.ko"
 sleep 2
 
 printf '\n== loaded modules ==\n'
@@ -41,4 +26,4 @@ printf '\n== unload ==\n'
 rmmod "$MODULE"
 
 printf '\n== dmesg ==\n'
-dmesg | grep "$PREFIX" | tail -n 120
+dmesg | grep -E "$PREFIXES" | tail -n 160

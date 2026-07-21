@@ -1,5 +1,18 @@
 # QEMU EDU PCI Driver
 
+Build and load the driver against the custom kernel:
+
+```bash
+make -C shared/pci
+sh /mnt/host/pci/w.sh
+```
+
+The runner leaves `qedu` loaded while testing BARs, interrupts, and DMA. Unload it explicitly when finished:
+
+```bash
+rmmod qedu
+```
+
 `qedu.c` is an educational Linux PCI driver for QEMU's EDU device (`1234:11e8`).
 It demonstrates the major pieces of a real device driver in a small environment:
 

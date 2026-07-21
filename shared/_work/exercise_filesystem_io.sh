@@ -2,9 +2,6 @@
 
 set -eu
 
-mountpoint -q /proc || mount -t proc proc /proc
-mountpoint -q /sys || mount -t sysfs sysfs /sys
-
 # Exercise procfs, sysfs, and tmpfs.
 cat /proc/mounts >/dev/null
 cat /sys/devices/system/cpu/online >/dev/null

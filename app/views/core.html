@@ -1,255 +1,51 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Core Subsystem Viewer</title>
-  <link rel="stylesheet" href="../theme.css">
-  <style>
-    html, body { width: 100%; height: 100%; overflow: hidden; font-size: 12px; }
-
-    #kernel-app {
-      width: 100vw;
-      height: 100vh;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      gap: 12px;
-      padding: 12px;
-    }
-
-    #toolbar, #summary, .card, #details {
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      background: rgba(15, 23, 42, 0.78);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(18px);
-    }
-
-    #toolbar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px;
-      min-width: 0;
-    }
-
-    h1 { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
-    h1 span { color: var(--blue); }
-
-    button, input, select {
-      height: 30px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: var(--soft);
-      color: var(--text);
-      font-family: var(--mono);
-      font-size: 10px;
-    }
-
-    button { padding: 0 10px; cursor: pointer; }
-    input { width: min(280px, 28vw); padding: 0 9px; }
-
-    #status {
-      margin-left: auto;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: var(--muted);
-      font-family: var(--mono);
-      font-size: 10px;
-    }
-
-    #main {
-      min-height: 0;
-      display: grid;
-      grid-template-columns: 280px minmax(0, 1fr) 390px;
-      gap: 10px;
-    }
-
-    #summary, #content, #details { min-height: 0; overflow: auto; }
-    #summary, #details { padding: 12px; }
-    #content { display: grid; grid-template-rows: 1fr 1fr; gap: 10px; }
-
-    .section-title {
-      margin-bottom: 8px;
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
-    .stat { border: 1px solid var(--line); border-radius: 13px; background: var(--panel-2); padding: 10px; }
-    .stat b { display: block; font-family: var(--mono); font-size: 18px; line-height: 1.15; }
-    .stat span { color: var(--muted); font-size: 11px; }
-
-    .card { min-width: 0; padding: 14px; overflow: auto; }
-    .card-header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-    .card h2 { font-size: 13px; }
-    .card small { color: var(--muted); font-family: var(--mono); }
-
-    .event {
-      display: grid;
-      grid-template-columns: 72px 82px minmax(0, 1fr);
-      gap: 8px;
-      padding: 8px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: rgba(2, 6, 23, 0.38);
-      font-family: var(--mono);
-      font-size: 10px;
-      cursor: pointer;
-    }
-
-    .event + .event { margin-top: 6px; }
-    .event:hover, .event.active { border-color: var(--blue); background: rgba(56, 189, 248, 0.09); }
-    .event span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .event-type { color: var(--green); }
-    .event.cfs .event-type { color: var(--orange); }
-    .muted { color: var(--muted); }
-    pre { white-space: pre-wrap; word-break: break-word; color: var(--text); font-family: var(--mono); font-size: 10px; }
-
-    @media (max-width: 980px) {
-      #kernel-app { height: auto; min-height: 100vh; overflow: auto; }
-      body { overflow: auto; }
-      #main { grid-template-columns: 1fr; }
-      #content { grid-template-rows: none; }
-      input { width: min(100%, 260px); }
-    }
-  </style>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Process lifecycle</title><link rel="stylesheet" href="../theme.css?v=3">
+<style>
+html,body{height:100%;overflow:hidden}main{height:100%;display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;gap:8px;padding:10px}.top{display:flex;align-items:end;gap:14px}.top h1{margin:0;font-size:17px}.top p{margin:3px 0 0;color:var(--muted);font:10px var(--mono)}#status{margin-left:auto;color:var(--muted);font:10px var(--mono)}.summary{display:grid;grid-template-columns:repeat(4,minmax(110px,1fr));gap:7px}.stat{padding:8px 10px}.stat b{display:block;font:650 17px var(--mono)}.stat span{color:var(--muted);font-size:10px}.visual{min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden}.visual-head{display:flex;align-items:center;gap:14px;padding:8px 10px;border-bottom:1px solid var(--line);font:10px var(--mono)}.legend{display:flex;gap:13px;margin-left:auto;color:var(--muted)}.key{display:inline-flex;align-items:center;gap:5px}.swatch{width:15px;height:6px;border-radius:2px}.fork{background:var(--orange)}.wake{background:var(--green)}.run{background:var(--blue)}.exit{background:var(--red)}#timeline-wrap{min-height:0;overflow:auto;background:#fff}#timeline{display:block;min-width:920px;width:100%}.lane-label{fill:var(--text);font:10px var(--mono)}.lane-pid{fill:var(--muted);font:9px var(--mono)}.axis{fill:var(--muted);font:9px var(--mono)}.grid{stroke:#e7eaec;stroke-width:1}.base{stroke:#cbd1d5;stroke-width:1}.running{fill:var(--blue);opacity:.82;cursor:pointer}.event-dot{stroke:#fff;stroke-width:1.5;cursor:pointer}.inspection{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center;padding:8px 10px;min-height:45px}.inspection strong{font:11px var(--mono)}#detail{overflow:hidden;color:var(--muted);font:10px var(--mono);text-overflow:ellipsis;white-space:nowrap}@media(max-width:700px){.summary{grid-template-columns:repeat(2,1fr)}.legend{display:none}}
+</style>
 </head>
-
 <body>
-  <div id="kernel-app">
-    <header id="toolbar">
-      <h1><span>Core</span> Subsystem</h1>
-      <button id="reload">Reload</button>
-      <input id="filter" type="search" placeholder="filter events">
-      <div id="status">loading shared/core captures...</div>
-    </header>
-
-    <main id="main">
-      <aside id="summary">
-        <div class="section-title">Summary</div>
-        <div class="stat-grid">
-          <div class="stat"><b id="life-count">0</b><span>lifecycle events</span></div>
-          <div class="stat"><b id="cfs-count">0</b><span>CFS events</span></div>
-          <div class="stat"><b id="pid-count">0</b><span>PIDs</span></div>
-          <div class="stat"><b id="event-count">0</b><span>total events</span></div>
-        </div>
-        <div class="section-title">Event Types</div>
-        <div id="types"></div>
-      </aside>
-
-      <section id="content">
-        <div class="card">
-          <div class="card-header"><h2>Process Lifecycle</h2><small>shared/_captures/core-hook-lifecycle.txt</small></div>
-          <div id="lifecycle-events"></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><h2>CFS Scheduler</h2><small>shared/_captures/core-hook-cfs-rbtree.txt</small></div>
-          <div id="cfs-events"></div>
-        </div>
-      </section>
-
-      <aside id="details">
-        <div class="section-title">Details</div>
-        <pre id="detail-text">Select an event.</pre>
-      </aside>
-    </main>
-  </div>
-
-  <script>
-    (function () {
-      'use strict';
-
-      var MAX_CFS_EVENTS = 3000;
-      var state = { lifecycle: [], cfs: [], selected: null };
-
-      function el(id) { return document.getElementById(id); }
-
-      function parseLine(line, subsystem) {
-        var pid = (line.match(/\bpid=([0-9]+)/) || line.match(/\bPID=([0-9]+)/) || [])[1] || '-';
-        var comm = (line.match(/\bcomm=([^\s]+)/) || line.match(/\btask=([^\s]+)/) || [])[1] || '-';
-        var type = (line.match(/\b(LIFE|CFS)[:_ -]?([A-Z0-9_]+)/) || [])[2] || subsystem.toUpperCase();
-        var time = (line.match(/^\[\s*([^\]]+)\]/) || [])[1] || '';
-        return { subsystem: subsystem, type: type, pid: pid, comm: comm, time: time, raw: line };
-      }
-
-      function renderEvent(event) {
-        var row = document.createElement('div');
-        row.className = 'event ' + event.subsystem;
-        row.innerHTML = '<span class="event-type">' + event.type + '</span><span>pid ' + event.pid + '</span><span>' + event.comm + '</span>';
-        row.addEventListener('click', function () {
-          state.selected = event;
-          Array.prototype.forEach.call(document.querySelectorAll('.event'), function (item) { item.classList.remove('active'); });
-          row.classList.add('active');
-          el('detail-text').textContent = event.raw;
-        });
-        return row;
-      }
-
-      function renderList(id, events, query) {
-        var list = el(id);
-        list.textContent = '';
-        events.filter(function (event) {
-          return !query || event.raw.toLowerCase().indexOf(query) !== -1;
-        }).slice(0, 400).forEach(function (event) {
-          list.appendChild(renderEvent(event));
-        });
-      }
-
-      function renderTypes(events) {
-        var counts = {};
-        events.forEach(function (event) { counts[event.type] = (counts[event.type] || 0) + 1; });
-        el('types').innerHTML = Object.keys(counts).sort().map(function (type) {
-          return '<div class="event"><span class="event-type">' + type + '</span><span>' + counts[type] + '</span><span class="muted">events</span></div>';
-        }).join('') || '<div class="muted">No events loaded.</div>';
-      }
-
-      function render() {
-        var query = el('filter').value.trim().toLowerCase();
-        var all = state.lifecycle.concat(state.cfs);
-        var pids = {};
-        all.forEach(function (event) { if (event.pid !== '-') pids[event.pid] = true; });
-
-        el('life-count').textContent = state.lifecycle.length;
-        el('cfs-count').textContent = state.cfs.length;
-        el('pid-count').textContent = Object.keys(pids).length;
-        el('event-count').textContent = all.length;
-        renderTypes(all);
-        renderList('lifecycle-events', state.lifecycle, query);
-        renderList('cfs-events', state.cfs, query);
-      }
-
-      function loadText(path) {
-        return fetch(path).then(function (response) {
-          if (!response.ok) throw new Error(path + ' not found');
-          return response.text();
-        });
-      }
-
-      function load() {
-        el('status').textContent = 'loading shared/core captures...';
-        Promise.allSettled([
-          loadText('../../shared/_captures/core-hook-lifecycle.txt'),
-          loadText('../../shared/_captures/core-hook-cfs-rbtree.txt')
-        ]).then(function (results) {
-          state.lifecycle = results[0].status === 'fulfilled' ? results[0].value.split('\n').filter(Boolean).map(function (line) { return parseLine(line, 'lifecycle'); }) : [];
-          state.cfs = results[1].status === 'fulfilled' ? results[1].value.split('\n').filter(function (line) { return line.indexOf('CFS ') >= 0 && line.indexOf('rec=frame') >= 0; }).slice(0, MAX_CFS_EVENTS).map(function (line) { return parseLine(line, 'cfs'); }) : [];
-          el('status').textContent = 'loaded ' + (state.lifecycle.length + state.cfs.length) + ' kernel events' + (state.cfs.length === MAX_CFS_EVENTS ? ' (CFS list capped)' : '');
-          render();
-        });
-      }
-
-      el('reload').addEventListener('click', load);
-      el('filter').addEventListener('input', render);
-      load();
-    })();
-  </script>
+<main>
+<header class="top"><div><h1>Process lifecycle</h1><p>sched tracepoints on CPU 0</p></div><div id="status">loading capture</div></header>
+<section class="summary">
+<div class="panel stat"><b id="processes">0</b><span>forked processes</span></div>
+<div class="panel stat"><b id="switches">0</b><span>context switches</span></div>
+<div class="panel stat"><b id="runtime">0 ms</b><span>captured runtime</span></div>
+<div class="panel stat"><b id="completed">0</b><span>process exits</span></div>
+</section>
+<section class="panel visual">
+<div class="visual-head"><strong>Lifecycle lanes</strong><span>time flows left to right</span><div class="legend"><span class="key"><i class="swatch fork"></i>fork</span><span class="key"><i class="swatch wake"></i>wakeup</span><span class="key"><i class="swatch run"></i>running</span><span class="key"><i class="swatch exit"></i>exit</span></div></div>
+<div id="timeline-wrap"><svg id="timeline" role="img" aria-label="Process lifecycle timeline"></svg></div>
+</section>
+<section class="panel inspection"><strong id="selection">Select an event</strong><span id="detail">Click a marker or running interval to inspect its tracepoint.</span></section>
+</main>
+<script>
+(function(){
+'use strict';
+var PATH='../../shared/_captures/tracing-core-lifecycle.txt',NS='http://www.w3.org/2000/svg';
+function el(id){return document.getElementById(id)}
+function svg(name,attrs){var node=document.createElementNS(NS,name);Object.keys(attrs||{}).forEach(function(k){node.setAttribute(k,attrs[k])});return node}
+function parse(text){return text.split(/\n/).map(function(raw){var m=raw.match(/^\s*(.+?)-(\d+)\s+\[(\d+)\]\s+\S+\s+([0-9.]+):\s+([A-Za-z0-9_]+):\s*(.*)$/);return m?{task:m[1].trim(),pid:+m[2],cpu:+m[3],time:+m[4],event:m[5],details:m[6],raw:raw.trim()}:null}).filter(Boolean)}
+function fields(details){var out={};details.replace(/([A-Za-z_]+)=([^\s]+)/g,function(_,k,v){out[k]=v});return out}
+function add(parent,name,attrs,text){var node=svg(name,attrs);if(text!=null)node.textContent=text;parent.appendChild(node);return node}
+function inspect(label,event){el('selection').textContent=label;el('detail').textContent=event.raw}
+function render(events){
+ var forks=events.filter(function(e){return e.event==='sched_process_fork'}),pids={},names={},intervals={},marks={},running={},exits=0,switches=0;
+ forks.forEach(function(e){var f=fields(e.details),pid=+f.child_pid;pids[pid]=true;names[pid]=f.child_comm||('pid '+pid);marks[pid]=[{time:e.time,type:'fork',event:e}]});
+ events.forEach(function(e){var f=fields(e.details),pid;if(e.event==='sched_wakeup_new'){pid=+f.pid;if(pids[pid]){names[pid]=f.comm||names[pid];marks[pid].push({time:e.time,type:'wake',event:e})}}else if(e.event==='sched_switch'){switches++;var prev=+f.prev_pid,next=+f.next_pid;if(pids[prev]&&f.prev_comm)names[prev]=f.prev_comm;if(pids[next]&&f.next_comm)names[next]=f.next_comm;if(pids[prev]&&running[prev]!=null){(intervals[prev]||(intervals[prev]=[])).push({from:running[prev],to:e.time,event:e});delete running[prev]}if(pids[next]&&running[next]==null)running[next]=e.time}else if(e.event==='sched_process_exit'){pid=+f.pid;if(pids[pid]){marks[pid].push({time:e.time,type:'exit',event:e});exits++}}});
+ var list=Object.keys(pids).map(Number).sort(function(a,b){return a-b}),start=events[0].time,end=events[events.length-1].time,span=Math.max(.000001,end-start),labelW=150,right=24,rowH=25,top=34,width=Math.max(920,el('timeline-wrap').clientWidth),plotW=width-labelW-right,height=top+list.length*rowH+18,root=el('timeline');
+ root.innerHTML='';root.setAttribute('viewBox','0 0 '+width+' '+height);root.setAttribute('height',height);
+ for(var tick=0;tick<=5;tick++){var x=labelW+plotW*tick/5;add(root,'line',{x1:x,y1:top-12,x2:x,y2:height-10,class:'grid'});add(root,'text',{x:x,y:14,class:'axis','text-anchor':'middle'},((span*1000*tick/5).toFixed(0))+' ms')}
+ list.forEach(function(pid,index){var y=top+index*rowH;add(root,'text',{x:8,y:y+3,class:'lane-label'},(names[pid]||'process').slice(0,18));add(root,'text',{x:labelW-9,y:y+3,class:'lane-pid','text-anchor':'end'},String(pid));add(root,'line',{x1:labelW,y1:y,x2:width-right,y2:y,class:'base'});
+ (intervals[pid]||[]).forEach(function(it){var x=labelW+(it.from-start)/span*plotW,w=Math.max(2,(it.to-it.from)/span*plotW),r=add(root,'rect',{x:x,y:y-4,width:w,height:8,rx:2,class:'running'});r.addEventListener('click',function(){inspect((names[pid]||pid)+' running '+((it.to-it.from)*1000).toFixed(3)+' ms',it.event)})});
+ (marks[pid]||[]).forEach(function(mark){var x=labelW+(mark.time-start)/span*plotW,color=mark.type==='fork'?'var(--orange)':mark.type==='wake'?'var(--green)':'var(--red)',shape;if(mark.type==='wake'){shape=add(root,'rect',{x:x-4,y:y-4,width:8,height:8,fill:color,transform:'rotate(45 '+x+' '+y+')',class:'event-dot'})}else{shape=add(root,'circle',{cx:x,cy:y,r:4.5,fill:color,class:'event-dot'})}shape.addEventListener('click',function(){inspect((names[pid]||pid)+' '+mark.type,mark.event)})})});
+ el('processes').textContent=list.length;el('switches').textContent=switches.toLocaleString();el('runtime').textContent=(span*1000).toFixed(0)+' ms';el('completed').textContent=exits;el('status').textContent=events.length.toLocaleString()+' trace events';
+}
+fetch(PATH).then(function(r){if(!r.ok)throw Error(r.status);return r.text()}).then(function(text){var events=parse(text);if(!events.length)throw Error('no events parsed');render(events)}).catch(function(err){el('status').textContent='capture unavailable: '+err.message});
+})();
+</script>
 </body>
-
 </html>

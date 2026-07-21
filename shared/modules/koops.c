@@ -1,4 +1,90 @@
 // SPDX-License-Identifier: GPL-2.0
+// Linux 6.6+ module: show every thread/task on the system.
+
+#include <linux/init.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/rcupdate.h>
+#include <linux/sched.h>
+#include <linux/sched/signal.h>
+
+static void show_idle_thread(void)
+{
+	struct task_struct *t = &init_task;
+
+	/* init_task is CPU0's idle task and is not visited by normal traversal. */
+	pr_info("KOOPS_CORE %8d %8d %pK %pK [%16s] %8s\n",
+		t->tgid, t->pid, t, t->stack, t->comm, "idle");
+}
+
+static int show_all_threads(void)
+{
+	struct task_struct *p;
+	struct task_struct *t;
+	int total = 0;
+
+	pr_info("KOOPS_CORE --------------------------------------------------------------------------------\n");
+	pr_info("KOOPS_CORE     TGID      PID        task_struct        kernel_stack       Thread Name       Type\n");
+	pr_info("KOOPS_CORE --------------------------------------------------------------------------------\n");
+
+	show_idle_thread();
+	total++;
+
+	rcu_read_lock();
+
+	for_each_process_thread(p, t) {
+		const char *type;
+		int nr_threads;
+
+		get_task_struct(t);
+		task_lock(t);
+
+		nr_threads = get_nr_threads(t);
+
+		if (!t->mm)
+			type = "kthread";
+		else if (nr_threads > 1)
+			type = "user-MT";
+		else
+			type = "user-ST";
+
+		if (!t->mm) {
+			pr_info("KOOPS_CORE %8d %8d %pK %pK [%16s] %8s\n",
+				t->tgid, t->pid, t, t->stack, t->comm, type);
+		} else {
+			pr_info("KOOPS_CORE %8d %8d %pK %pK  %16s  %8s\n",
+				t->tgid, t->pid, t, t->stack, t->comm, type);
+		}
+
+		task_unlock(t);
+		put_task_struct(t);
+
+		total++;
+	}
+
+	rcu_read_unlock();
+
+	return total;
+}
+
+static int __init core_koops_init(void)
+{
+	int total;
+
+	pr_info("KOOPS_CORE %s inserted\n", KBUILD_MODNAME);
+	total = show_all_threads();
+	pr_info("KOOPS_CORE %s total threads/tasks shown: %d\n", KBUILD_MODNAME, total);
+
+	return 0;
+}
+
+static void __exit core_koops_exit(void)
+{
+	pr_info("KOOPS_CORE %s removed\n", KBUILD_MODNAME);
+}
+
+
+// SPDX-License-Identifier: GPL-2.0
 /*
  * mm_koops.c
  *
@@ -11,6 +97,7 @@
 #include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
+#include <linux/mmzone.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
@@ -235,9 +322,9 @@ static int allocate_page_memory(void)
 {
 	size_t order_len = order_size_bytes(BUDDY_PAGE_ORDER);
 
-	if (BUDDY_PAGE_ORDER > MAX_ORDER - 1) {
+	if (BUDDY_PAGE_ORDER > MAX_PAGE_ORDER - 1) {
 		pr_err("KOOPS_MM order=%u is too large; max usable order is %u\n",
-		       BUDDY_PAGE_ORDER, MAX_ORDER - 1);
+		       BUDDY_PAGE_ORDER, MAX_PAGE_ORDER - 1);
 		return -EINVAL;
 	}
 
@@ -611,9 +698,29 @@ static void __exit mm_koops_exit(void)
 	pr_info("KOOPS_MM unloaded\n");
 }
 
-module_init(mm_koops_init);
-module_exit(mm_koops_exit);
 
+static int __init koops_init(void)
+{
+  int ret;
+  ret = core_koops_init();
+  if (ret)
+    return ret;
+  ret = mm_koops_init();
+  if (ret) {
+    core_koops_exit();
+    return ret;
+  }
+  return 0;
+}
+
+static void __exit koops_exit(void)
+{
+  mm_koops_exit();
+  core_koops_exit();
+}
+
+module_init(koops_init);
+module_exit(koops_exit);
+MODULE_AUTHOR("Manoj Khatri");
+MODULE_DESCRIPTION("Combined task and memory-management study module");
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Manoj study module");
-MODULE_DESCRIPTION("Simple x86-64 kernel VAS and allocator study module");

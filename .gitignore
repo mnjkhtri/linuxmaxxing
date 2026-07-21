@@ -10,4 +10,5 @@ vm/seed.iso
 Module.symvers
 modules.order
 shared/_captures/
-shared/workloads/*/workload
+shared/_work/fork_25_processes
+shared/_work/exercise_memory_management
