@@ -22,13 +22,12 @@ enable_event()
 	fi
 }
 
-# L4: virtual address selection, faults, address-space teardown, and per-mm RSS.
+# Virtual address selection, faults, and address-space teardown.
 enable_event mmap/vm_unmapped_area
 enable_event mmap/exit_mmap
 enable_event exceptions/page_fault_user
-enable_event kmem/rss_stat
 
-# L3: file-backed fault, lookup, residency, dirtying, writeback, and eviction.
+# File-backed faults, page-cache lookup, residency, writeback, and eviction.
 enable_event filemap/mm_filemap_fault
 enable_event filemap/mm_filemap_get_pages
 enable_event filemap/mm_filemap_map_pages
@@ -41,13 +40,14 @@ enable_event writeback/writeback_pages_written
 enable_event writeback/writeback_single_inode_start
 enable_event writeback/writeback_single_inode
 
-# L2: SLUB and kmalloc object lifetimes.
+# kmem accounting plus SLUB and kmalloc object lifetimes.
+enable_event kmem/rss_stat
 enable_event kmem/kmem_cache_alloc
 enable_event kmem/kmem_cache_free
 enable_event kmem/kmalloc
 enable_event kmem/kfree
 
-# L1: page allocation, PCP movement, buddy fallback, and fragmentation.
+# Page allocation, PCP movement, buddy fallback, and fragmentation.
 enable_event kmem/mm_page_alloc
 enable_event kmem/mm_page_alloc_zone_locked
 enable_event kmem/mm_page_alloc_extfrag

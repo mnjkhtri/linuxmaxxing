@@ -43,9 +43,9 @@
 
   function category(type) {
     if (type === 'tracing_mark_write') return 'phase';
-    if (/fault|mmap|unmapped|rss_stat|collapse_huge|khugepaged/.test(type)) return 'virtual';
-    if (/kmalloc|kfree|kmem_cache/.test(type)) return 'objects';
     if (/filemap|writeback/.test(type)) return 'cache';
+    if (/rss_stat|kmalloc|kfree|kmem_cache/.test(type)) return 'objects';
+    if (/fault|mmap|unmapped|collapse_huge|khugepaged/.test(type)) return 'virtual';
     if (/vmscan|reclaim|kswapd|lru|compact|migrate/.test(type)) return 'reclaim';
     if (/page_alloc|page_free|pcpu|extfrag/.test(type)) return 'physical';
     return 'other';
