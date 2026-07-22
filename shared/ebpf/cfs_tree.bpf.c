@@ -21,6 +21,7 @@ struct tree_node
 struct context_event
 {
 	u32 tid;
+	u32 cpu;
 	u64 cfs_rq;
 	u64 se;
 	u64 leftmost;
@@ -164,6 +165,7 @@ int BPF_KRETPROBE(kretprobe_enqueue_entity)
 
 	struct context_event *event = &scratch_state_ptr->event;
 	event->tid = (u32)id;
+	event->cpu = BPF_CORE_READ(cfs_rq, rq, cpu);
 	event->cfs_rq = (u64)cfs_rq;
 	event->se = (u64)args->se;
 	event->leftmost = (u64)BPF_CORE_READ(cfs_rq, tasks_timeline.rb_leftmost);

@@ -5,7 +5,10 @@ set -euo pipefail
 ROOT_DIR=$(dirname "$(realpath "$0")")
 SOURCE_DIR="$ROOT_DIR/linux"
 BUILD_DIR="$ROOT_DIR/build"
-JOBS=${JOBS:-$(nproc)}
+if [[ -z ${JOBS:-} ]]; then
+  AVAILABLE_JOBS=$(nproc)
+  JOBS=$((AVAILABLE_JOBS > 1 ? AVAILABLE_JOBS / 2 : 1))
+fi
 
 mkdir -p "$BUILD_DIR"
 
@@ -38,6 +41,10 @@ fi
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable DEBUG_INFO_DWARF4
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable DEBUG_INFO_BTF
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable FPROBE
+"$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable TRANSPARENT_HUGEPAGE
+"$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --disable TRANSPARENT_HUGEPAGE_ALWAYS
+"$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable TRANSPARENT_HUGEPAGE_MADVISE
+"$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --disable TRANSPARENT_HUGEPAGE_NEVER
 
 make -C "$SOURCE_DIR" O="$BUILD_DIR" olddefconfig
 make -C "$SOURCE_DIR" O="$BUILD_DIR" CC="$CC" -j"$JOBS" "$@"

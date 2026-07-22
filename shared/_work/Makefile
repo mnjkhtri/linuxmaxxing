@@ -1,5 +1,5 @@
 CC := x86_64-linux-gnu-gcc
-CFLAGS ?= -O2 -Wall
+CFLAGS ?= -O2 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -Wall -Wextra
 LDFLAGS ?= -static
 LDLIBS ?= -pthread
 

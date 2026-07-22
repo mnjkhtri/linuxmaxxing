@@ -98,14 +98,14 @@ The name is limited to 15 visible characters and a terminating byte. Group sched
 Userspace emits one object per line:
 
 ```json
-{"type":"event","op":"enqueue","tid":123,"cfs_rq":"ffff...","se":"ffff...","leftmost":"ffff...","valid_nodes":2,"truncated":0,"nodes":[{"node":"ffff...","left":"0","right":"ffff...","color":1,"comm":"sched000"}]}
+{"type":"event","op":"enqueue","tid":123,"cpu":1,"cfs_rq":"ffff...","se":"ffff...","leftmost":"ffff...","valid_nodes":2,"truncated":0,"nodes":[{"node":"ffff...","left":"0","right":"ffff...","color":1,"comm":"sched000"}]}
 ```
 
 Pointers are strings because they are kernel addresses. The BPF and userspace `context_event` definitions must have identical field order, types, and array sizes.
 
 ## Workload Used By This Collector
 
-The scheduler workload used for CFS snapshots is `fork_25_processes`. It forks 25 children, pins them to CPU 0, names them `schedNNN`, and releases them together. The collector itself does not filter by those names; they simply create repeatable scheduler activity.
+The scheduler workload used for CFS snapshots is `fork_25_processes`. It forks 25 children, lets the scheduler balance them across the available CPUs, names them `schedNNN`, and releases them together. Each event records the CPU that owns the affected `cfs_rq`. The collector does not filter by the workload names; they simply create repeatable scheduler activity.
 
 Run it inside QEMU with the command in the Build and Run section.
 

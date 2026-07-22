@@ -9,7 +9,6 @@ app/        Static visualization frontend.
 shared/_work/  Guest programs and scripts that trigger study hooks.
   fork_25_processes     Process and scheduler workload.
   exercise_memory_management        Memory-management workload.
-  exercise_filesystem_io.sh  Shared filesystem and block-I/O workload.
 shared/modules/     Out-of-tree study modules.
 shared/miscdriver/ Misc character driver.
 shared/pci/        QEMU EDU PCI driver.

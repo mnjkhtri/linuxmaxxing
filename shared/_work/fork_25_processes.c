@@ -36,7 +36,7 @@ int main(int argc, char **argv)
 	}
 
 	printf("starting workload with %d children for %d seconds\n", CHILDREN, seconds);
-    printf("children are pinned to CPU0 and named schedNNN for scheduler hooks\n");
+	printf("children are scheduler-balanced and named schedNNN for scheduler hooks\n");
 	fflush(stdout);
 
 	for (i = 0; i < CHILDREN; i++) {
@@ -54,7 +54,6 @@ int main(int argc, char **argv)
 		if (pids[i] == 0) {
 			char byte;
 			char name[16];
-			cpu_set_t set;
 			struct timespec ts;
 			long long end;
 			unsigned int loops = 120000U + (unsigned int)(i % 17) * 35000U;
@@ -69,11 +68,6 @@ int main(int argc, char **argv)
 				perror("prctl(PR_SET_NAME)");
 				_exit(1);
 			}
-
-			CPU_ZERO(&set);
-			CPU_SET(0, &set);
-			if (sched_setaffinity(0, sizeof(set), &set) != 0)
-				perror("sched_setaffinity(cpu0)");
 
 			/* Positive nice values need no privileges and create varied CFS weights. */
 			if (setpriority(PRIO_PROCESS, 0, i % 20) != 0)

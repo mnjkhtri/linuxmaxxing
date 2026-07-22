@@ -1,32 +1,16 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Kernel Study App</title>
-  <link rel="stylesheet" href="theme.css?v=3">
-</head>
-<body>
-  <div id="app-shell">
-    <header id="app-header">
-      <div id="brand"><h1><span>Kernel</span> Study</h1><p>captured kernel behavior</p></div>
-      <nav id="view-tabs" aria-label="Visualizations">
-        <button class="view-tab active" data-view="core" data-src="views/core.html">Core</button>
-        <button class="view-tab" data-view="mm" data-src="views/mm.html">MM</button>
-        <button class="view-tab" data-view="cfs" data-src="views/cfs-tree.html">CFS Tree</button>
-      </nav>
-      <div id="view-description">Process creation, scheduling, and exit</div>
-    </header>
-    <iframe id="viewer-frame" title="Kernel capture visualization" src="views/core.html"></iframe>
-  </div>
-  <script>
-  (function(){
-    'use strict';
-    var descriptions={core:'Process creation, scheduling, and exit',mm:'Page, slab, cache, and writeback activity',cfs:'CFS red-black tree after enqueue operations'};
-    var tabs=Array.prototype.slice.call(document.querySelectorAll('.view-tab'));
-    var frame=document.getElementById('viewer-frame'),description=document.getElementById('view-description');
-    tabs.forEach(function(tab){tab.addEventListener('click',function(){tabs.forEach(function(item){item.classList.remove('active')});tab.classList.add('active');frame.src=tab.dataset.src;description.textContent=descriptions[tab.dataset.view]})});
-  })();
-  </script>
-</body>
-</html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#070b10"><title>Kernel Study Lab</title><link rel="stylesheet" href="theme.css?v=6"></head>
+<body><div id="app-shell">
+<header id="app-header">
+<div id="brand"><span id="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><div><h1><span>kernel</span>::lab</h1><p>trace-driven internals</p></div></div>
+<nav id="view-tabs" role="tablist" aria-label="Kernel subsystems">
+<button id="tab-core" class="view-tab" role="tab" aria-selected="false" tabindex="-1" data-view="core" data-src="views/core.html?v=27">SCHED</button>
+<button id="tab-cfs" class="view-tab" role="tab" aria-selected="false" tabindex="-1" data-view="cfs" data-src="views/cfs-tree.html?v=20">CFS</button>
+<button id="tab-mm" class="view-tab" role="tab" aria-selected="false" tabindex="-1" data-view="mm" data-src="views/mm.html?v=38">MM</button>
+</nav><div id="view-context"><span class="trace-dot" aria-hidden="true"></span><span id="view-state">CAPTURE READY</span><span id="view-description"></span></div>
+</header><main id="viewer-wrap"><iframe id="viewer-frame" title="Kernel subsystem visualization"></iframe><div id="frame-loader" role="status"><span><i class="trace-dot"></i>parsing trace capture…</span></div></main>
+</div><script>
+(function(){'use strict';var views={core:{description:'task lifecycle · per-CPU execution'},cfs:{description:'enqueue snapshots · RB invariants'},mm:{description:'address space · folios · allocators'}};var tabs=Array.prototype.slice.call(document.querySelectorAll('.view-tab')),frame=document.getElementById('viewer-frame'),description=document.getElementById('view-description'),loader=document.getElementById('frame-loader');
+function activate(name,focus){var tab=tabs.filter(function(t){return t.dataset.view===name})[0]||tabs[0];tabs.forEach(function(item){var on=item===tab;item.classList.toggle('active',on);item.setAttribute('aria-selected',String(on));item.tabIndex=on?0:-1});description.textContent=views[tab.dataset.view].description;loader.classList.remove('hidden');if(frame.getAttribute('src')!==tab.dataset.src)frame.src=tab.dataset.src;if(location.hash!=='#'+tab.dataset.view)history.replaceState(null,'','#'+tab.dataset.view);if(focus)tab.focus()}
+tabs.forEach(function(tab,index){tab.addEventListener('click',function(){activate(tab.dataset.view)});tab.addEventListener('keydown',function(e){var next;if(e.key==='ArrowRight')next=(index+1)%tabs.length;if(e.key==='ArrowLeft')next=(index-1+tabs.length)%tabs.length;if(next!=null){e.preventDefault();activate(tabs[next].dataset.view,true)}})});frame.addEventListener('load',function(){loader.classList.add('hidden')});window.addEventListener('hashchange',function(){activate(location.hash.slice(1))});activate(location.hash.slice(1)||'core');})();
+</script></body></html>

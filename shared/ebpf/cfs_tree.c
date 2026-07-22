@@ -19,6 +19,7 @@ struct tree_node
 struct context_event
 {
 	unsigned int tid;
+	unsigned int cpu;
 	unsigned long long cfs_rq;
 	unsigned long long se;
 	unsigned long long leftmost;
@@ -42,8 +43,8 @@ static int handle_event(void *ctx, void *data, size_t len)
 	(void)ctx;
 	if (len < sizeof(*event))
 		return 0;
-	printf("{\"type\":\"event\",\"op\":\"enqueue\",\"tid\":%u,\"cfs_rq\":\"%016llx\",\"se\":\"%016llx\",\"leftmost\":\"%016llx\",\"valid_nodes\":%u,\"truncated\":%u,\"nodes\":[",
-		   event->tid, event->cfs_rq, event->se, event->leftmost,
+	printf("{\"type\":\"event\",\"op\":\"enqueue\",\"tid\":%u,\"cpu\":%u,\"cfs_rq\":\"%016llx\",\"se\":\"%016llx\",\"leftmost\":\"%016llx\",\"valid_nodes\":%u,\"truncated\":%u,\"nodes\":[",
+		   event->tid, event->cpu, event->cfs_rq, event->se, event->leftmost,
 		   event->node_count, event->truncated);
 	for (unsigned int i = 0; i < event->node_count; i++)
 	{

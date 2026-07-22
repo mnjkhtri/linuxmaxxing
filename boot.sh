@@ -12,7 +12,7 @@ qemu-img create -f qcow2 -F qcow2 -b "$BASE_IMAGE" "$OVERLAY"
 
 exec qemu-system-x86_64 \
   -m 1024 \
-  -smp 1 \
+  -smp 2 \
   -kernel "$KERNEL_IMAGE" \
   -append "root=/dev/vda1 console=ttyS0 rootwait rw loglevel=4 printk.time=0 selinux=0 systemd.unit=rescue.target" \
   -drive file="$OVERLAY",if=virtio,format=qcow2 \
