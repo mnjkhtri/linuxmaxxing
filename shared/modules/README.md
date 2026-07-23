@@ -9,10 +9,10 @@ Build the modules against the configured custom kernel:
 make -C shared/modules
 ```
 
-Inside QEMU, load the combined study module and collect both outputs:
+Inside QEMU, load the combined study module and collect its structured `KOOPS_EVT` records:
 
 ```bash
-sh /mnt/host/modules/w.sh
-mkdir -p /mnt/host/_captures
-dmesg | grep -E "KOOPS_CORE|KOOPS_MM" > /mnt/host/_captures/modules-koops.txt
+sh /mnt/host/modules/run.sh
 ```
+
+The runner writes the latest complete module run to `shared/_captures/modules-koops.txt`.
