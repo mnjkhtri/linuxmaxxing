@@ -41,9 +41,11 @@ fi
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable DEBUG_INFO_DWARF4
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable DEBUG_INFO_BTF
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable FPROBE
+"$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable SWAP
+"$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable VIRTIO_BLK
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable TRANSPARENT_HUGEPAGE
-"$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --disable TRANSPARENT_HUGEPAGE_ALWAYS
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable TRANSPARENT_HUGEPAGE_MADVISE
+"$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --disable TRANSPARENT_HUGEPAGE_ALWAYS
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --disable TRANSPARENT_HUGEPAGE_NEVER
 
 make -C "$SOURCE_DIR" O="$BUILD_DIR" olddefconfig

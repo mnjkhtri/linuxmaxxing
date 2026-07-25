@@ -44,7 +44,8 @@
   function category(type) {
     if (type === 'tracing_mark_write') return 'phase';
     if (/filemap|writeback/.test(type)) return 'cache';
-    if (/rss_stat|kmalloc|kfree|kmem_cache/.test(type)) return 'objects';
+    if (type === 'rss_stat') return 'physical';
+    if (/kmalloc|kfree|kmem_cache/.test(type)) return 'objects';
     if (/fault|mmap|unmapped|collapse_huge|khugepaged/.test(type)) return 'virtual';
     if (/vmscan|reclaim|kswapd|lru|compact|migrate/.test(type)) return 'reclaim';
     if (/page_alloc|page_free|pcpu|extfrag/.test(type)) return 'physical';
@@ -57,8 +58,8 @@
       return response.text();
     }).then(function (text) {
       var lines = text.split(/\n/), events = [], counts = {}, sites = {}, caches = {};
-      var tasks = {}, taskStats = {}, orders = {}, gfps = {}, samples = {}, cpuCounts = {}, phases = [], steps = [];
-      var bytesReq = 0, bytesAlloc = 0, rssState = {}, rssOwners = {};
+      var tasks = {}, taskStats = {}, orders = {}, gfps = {}, samples = {}, cpuCounts = {}, phases = [], mappings = [], faults = [];
+      var bytesReq = 0, bytesAlloc = 0, rssState = {}, rssOwners = {}, workloadPid = null;
 
       lines.forEach(function (raw) {
         var match = raw.match(/^\s*(.+?)-(\d+)\s+\[(\d+)\]\s+(\S+)\s+([0-9.]+):\s+([A-Za-z0-9_]+):\s*(.*)$/);
@@ -84,18 +85,15 @@
         if (samples[event.type].length < 4) samples[event.type].push(event);
 
         if (event.type === 'tracing_mark_write' && fields.phase) {
+          if (workloadPid == null) workloadPid = event.pid;
           phases.push({ name: fields.phase, time: event.time, index: events.length - 1 });
         }
-        if (event.type === 'tracing_mark_write' && fields.mm_step) {
-          steps.push({
-            name: fields.mm_step, operation: fields.op || fields.mm_step,
-            file: fields.file || 'exercise_memory_management.c', line: +(fields.line || 0),
-            func: fields.func || 'main', current: +(fields.current || 0),
-            total: +(fields.total || 0), time: event.time, index: events.length - 1,
-            task: event.task, pid: event.pid
-          });
+        if (event.type === 'tracing_mark_write' && fields.mm_mapping) {
+          mappings.push({ name: fields.mm_mapping, fields: Object.assign({}, fields), time: event.time, index: events.length - 1 });
         }
-
+        if (event.type === 'tracing_mark_write' && fields.mm_faults) {
+          faults.push({ name: fields.mm_faults, minor: +(fields.minor || 0), major: +(fields.major || 0), fields: Object.assign({}, fields), time: event.time, index: events.length - 1 });
+        }
         if (event.type === 'rss_stat' && fields.mm_id) {
           var mm = fields.mm_id;
           var member = fields.member || fields.type || 'unknown';
@@ -132,21 +130,59 @@
 
       if (!events.length) throw Error('no trace events parsed');
       var start = events[0].time, end = events[events.length - 1].time;
+      if (phases.length) {
+        start = phases[0].time;
+        end = phases[phases.length - 1].time;
+      }
       var span = Math.max(0.000001, end - start), binCount = 160, bins = {};
       Object.keys(counts).forEach(function (type) { bins[type] = Array(binCount).fill(0); });
       events.forEach(function (event) {
+        if (event.time < start || event.time > end) return;
         var index = Math.min(binCount - 1, Math.floor((event.time - start) / span * binCount));
         bins[event.type][index]++;
       });
 
+      /* Identify the workload file from its dominant cache insertions during seeding. */
+      var seed = phases.find(function (phase) { return /^file backed: seed/.test(phase.name); });
+      var seedIndex = seed ? phases.indexOf(seed) : -1;
+      var seedEnd = seedIndex >= 0 && phases[seedIndex + 1] ? phases[seedIndex + 1].time : end;
+      var identities = {};
+      events.forEach(function (event) {
+        if (!seed || event.time < seed.time || event.time >= seedEnd || event.type !== 'mm_filemap_add_to_page_cache' || event.pid !== workloadPid) return;
+        var key = (event.fields.dev || '?') + '/' + (event.fields.ino || '?');
+        identities[key] = (identities[key] || 0) + 1;
+      });
+      var identity = Object.keys(identities).sort(function (a, b) { return identities[b] - identities[a]; })[0] || '';
+      var identityParts = identity.split('/'), targetInode = identityParts[1] ? parseInt(identityParts[1], 16) : -1;
+      var cacheEvents = [], cacheLength = 0;
+      var cacheTypes = /^(mm_filemap_add_to_page_cache|mm_filemap_delete_from_page_cache|mm_filemap_fault|mm_filemap_get_pages|mm_filemap_map_pages|writeback_dirty_folio)$/;
+      events.forEach(function (event) {
+        if (!cacheTypes.test(event.type) || !event.fields.ino) return;
+        var inode = event.type === 'writeback_dirty_folio' ? parseInt(event.fields.ino, 10) : parseInt(event.fields.ino, 16);
+        if (inode !== targetInode) return;
+        var action = { mm_filemap_add_to_page_cache: 'cache', mm_filemap_delete_from_page_cache: 'evict', mm_filemap_fault: 'fault', mm_filemap_get_pages: 'read', mm_filemap_map_pages: 'map', writeback_dirty_folio: 'dirty' }[event.type];
+        var first, last;
+        if (event.type === 'writeback_dirty_folio') {
+          first = +(event.fields.index || 0) * 4096;
+          last = first + 4096;
+        } else {
+          var range = String(event.fields.ofs || '0').split('-');
+          first = +range[0] || 0;
+          last = range.length > 1 ? (+range[1] || first) + 1 : first + 4096 * Math.pow(2, +(event.fields.order || 0));
+        }
+        cacheLength = Math.max(cacheLength, last);
+        cacheEvents.push({ time: event.time, action: action, start: first, end: last, pfn: event.fields.pfn || '', type: event.type });
+      });
+      var fileCache = { dev: identityParts[0] || '?', inode: targetInode, inodeHex: targetInode >= 0 ? targetInode.toString(16) : '?', length: cacheLength, events: cacheEvents };
+
       self.postMessage({
         total: events.length, start: start, end: end, events: events, counts: counts,
-        types: Object.keys(counts).sort(), bins: bins, samples: samples, phases: phases, steps: steps,
+        types: Object.keys(counts).sort(), bins: bins, samples: samples, phases: phases, mappings: mappings, faults: faults,
         sites: top(sites, 12), caches: top(caches, 16), tasks: top(tasks, 12),
         orders: top(orders, 8), gfps: top(gfps, 8), bytesReq: bytesReq,
         bytesAlloc: bytesAlloc, cpuCounts: cpuCounts, rss: rssState, rssOwners: rssOwners,
         cacheStats: caches,
-        taskStats: taskStats
+        taskStats: taskStats, workloadPid: workloadPid, fileCache: fileCache
       });
     }).catch(function (error) {
       self.postMessage({ error: error.message });

@@ -1,5 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+# boot.sh attaches a dedicated swap disk as /dev/vdb. Activate it here as a
+# fallback in case the guest's systemd version ignores systemd.swap-extra=.
+if ! awk 'NR > 1 { found = 1 } END { exit !found }' /proc/swaps; then
+	if [[ ! -b /dev/vdb ]]; then
+		echo "mm trace: /dev/vdb swap disk is missing; boot the guest with boot.sh" >&2
+		exit 1
+	fi
+	swapon /dev/vdb
+fi
+
+if ! awk 'NR > 1 { found = 1 } END { exit !found }' /proc/swaps; then
+	echo "mm trace: swap activation failed" >&2
+	exit 1
+fi
+
+echo "mm trace: active swap"
+cat /proc/swaps
+
 cd /sys/kernel/tracing
 echo 0 > tracing_on
 # tracefs allocates this much ring-buffer space per CPU.
@@ -55,35 +74,13 @@ enable_event kmem/mm_page_pcpu_drain
 enable_event kmem/mm_page_free
 enable_event kmem/mm_page_free_batched
 
-# Pressure response: reclaim, compaction, migration, and THP collapse. These
-# remain quiet during ordinary phases and become valuable under pressure.
-enable_event vmscan/mm_vmscan_direct_reclaim_begin
-enable_event vmscan/mm_vmscan_direct_reclaim_end
-enable_event vmscan/mm_vmscan_kswapd_wake
-enable_event vmscan/mm_vmscan_kswapd_sleep
-enable_event vmscan/mm_vmscan_balance_pgdat_begin
-enable_event vmscan/mm_vmscan_balance_pgdat_end
-enable_event vmscan/mm_vmscan_lru_isolate
-enable_event vmscan/mm_vmscan_lru_shrink_active
-enable_event vmscan/mm_vmscan_lru_shrink_inactive
-enable_event vmscan/mm_vmscan_write_folio
-enable_event vmscan/mm_vmscan_reclaim_pages
-enable_event compaction/mm_compaction_begin
-enable_event compaction/mm_compaction_isolate_migratepages
-enable_event compaction/mm_compaction_isolate_freepages
-enable_event compaction/mm_compaction_migratepages
-enable_event compaction/mm_compaction_end
-enable_event migrate/mm_migrate_pages_start
-enable_event migrate/mm_migrate_pages
-enable_event huge_memory/mm_khugepaged_scan_pmd
-enable_event huge_memory/mm_collapse_huge_page
-enable_event huge_memory/mm_collapse_huge_page_isolate
-enable_event huge_memory/mm_collapse_huge_page_swapin
 echo 1 > tracing_on
-/mnt/host/_work/build/exercise_memory_management
+workload_status=0
+/mnt/host/_work/build/exercise_memory_management || workload_status=$?
 # Freeze the ring buffer before copying it so the capture cannot change mid-read.
 echo 0 > tracing_on
 mkdir -p /mnt/host/_captures
 cat trace > /mnt/host/_captures/tracing-mm-memory.txt
 echo 0 > events/enable
 echo > trace
+exit "$workload_status"
