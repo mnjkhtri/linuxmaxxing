@@ -13,3 +13,7 @@ vm/seed.iso
 Module.symvers
 modules.order
 shared/_captures/
+shared/mm/vmlinux.h
+shared/mm/*.skel.h
+shared/mm/vma_snapshot
+vm/*.raw

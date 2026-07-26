@@ -6,6 +6,8 @@
 #include <bpf/libbpf.h>
 #include "cfs_tree.skel.h"
 
+#define MAX_TREE_NODES 31
+
 /* Must match the BPF event byte-for-byte. */
 struct tree_node
 {
@@ -25,7 +27,7 @@ struct context_event
 	unsigned long long leftmost;
 	unsigned int node_count;
 	unsigned int truncated;
-	struct tree_node nodes[31];
+	struct tree_node nodes[MAX_TREE_NODES];
 };
 
 static volatile sig_atomic_t exiting;
@@ -36,23 +38,92 @@ static void on_signal(int signo)
 	exiting = 1;
 }
 
+static void json_comma(int *first)
+{
+	if (*first)
+	{
+		*first = 0;
+		return;
+	}
+	putchar(',');
+}
+
+static void json_string_value(const char *value)
+{
+	putchar('"');
+	for (size_t i = 0; i < 16 && value[i]; i++)
+	{
+		unsigned char c = value[i];
+
+		if (c == '"' || c == '\\')
+			printf("\\%c", c);
+		else if (c < 0x20)
+			printf("\\u%04x", c);
+		else
+			putchar(c);
+	}
+	putchar('"');
+}
+
+static void json_string(int *first, const char *name, const char *value)
+{
+	json_comma(first);
+	printf("\"%s\":", name);
+	json_string_value(value);
+}
+
+static void json_u32(int *first, const char *name, unsigned int value)
+{
+	json_comma(first);
+	printf("\"%s\":%u", name, value);
+}
+
+static void json_hex(int *first, const char *name, unsigned long long value)
+{
+	json_comma(first);
+	printf("\"%s\":\"%016llx\"", name, value);
+}
+
+static void print_node(const struct tree_node *node)
+{
+	int first = 1;
+
+	putchar('{');
+	json_hex(&first, "node", node->node);
+	json_hex(&first, "left", node->left);
+	json_hex(&first, "right", node->right);
+	json_u32(&first, "color", node->color);
+	json_string(&first, "comm", node->comm);
+	putchar('}');
+}
+
 /* libbpf invokes this after the kretprobe emits one event. */
 static int handle_event(void *ctx, void *data, size_t len)
 {
 	const struct context_event *event = data;
 	(void)ctx;
+
 	if (len < sizeof(*event))
 		return 0;
-	printf("{\"type\":\"event\",\"op\":\"enqueue\",\"tid\":%u,\"cpu\":%u,\"cfs_rq\":\"%016llx\",\"se\":\"%016llx\",\"leftmost\":\"%016llx\",\"valid_nodes\":%u,\"truncated\":%u,\"nodes\":[",
-		   event->tid, event->cpu, event->cfs_rq, event->se, event->leftmost,
-		   event->node_count, event->truncated);
+	int first = 1;
+
+	putchar('{');
+	json_string(&first, "type", "event");
+	json_string(&first, "op", "enqueue");
+	json_u32(&first, "tid", event->tid);
+	json_u32(&first, "cpu", event->cpu);
+	json_hex(&first, "cfs_rq", event->cfs_rq);
+	json_hex(&first, "se", event->se);
+	json_hex(&first, "leftmost", event->leftmost);
+	json_u32(&first, "valid_nodes", event->node_count);
+	json_u32(&first, "truncated", event->truncated);
+	json_comma(&first);
+	printf("\"nodes\":[");
 	for (unsigned int i = 0; i < event->node_count; i++)
 	{
 		if (i)
 			putchar(',');
-		printf("{\"node\":\"%016llx\",\"left\":\"%016llx\",\"right\":\"%016llx\",\"color\":%u,\"comm\":\"%s\"}",
-			   event->nodes[i].node, event->nodes[i].left,
-			   event->nodes[i].right, event->nodes[i].color, event->nodes[i].comm);
+		print_node(&event->nodes[i]);
 	}
 	puts("]}");
 	return 0;
@@ -60,31 +131,30 @@ static int handle_event(void *ctx, void *data, size_t len)
 
 int main(void)
 {
-	struct cfs_tree_bpf *skel;
-	struct ring_buffer *ringbuf;
-	int err;
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
-	skel = cfs_tree_bpf__open_and_load();
+
+	struct cfs_tree_bpf *skel = cfs_tree_bpf__open_and_load();
 	if (!skel)
 	{
 		fprintf(stderr, "failed to open/load BPF skeleton\n");
 		return 1;
 	}
-	err = cfs_tree_bpf__attach(skel);
+	int err = cfs_tree_bpf__attach(skel);
 	if (err)
 	{
 		fprintf(stderr, "failed to attach BPF programs: %d\n", err);
 		cfs_tree_bpf__destroy(skel);
 		return 1;
 	}
-	ringbuf = ring_buffer__new(bpf_map__fd(skel->maps.events), handle_event, NULL, NULL);
+	struct ring_buffer *ringbuf = ring_buffer__new(bpf_map__fd(skel->maps.events), handle_event, NULL, NULL);
 	if (!ringbuf)
 	{
 		fprintf(stderr, "failed to create ring buffer: %d\n", -errno);
 		cfs_tree_bpf__destroy(skel);
 		return 1;
 	}
+
 	fprintf(stderr, "attached enqueue entry/return probes; press Ctrl-C to stop\n");
 	while (!exiting)
 	{

@@ -8609,7 +8609,7 @@ enum {
 	PT_MAX_TOP_LEVEL___2 = 4ULL,
 	PT_GRANULE_LG2SZ___2 = 12ULL,
 	PT_TABLEMEM_LG2SZ___2 = 12ULL,
-	PT_TOP_PHYS_MASK___2 = 4503599627366400ULL,
+	PT_TOP_PHYS_MASK___2 = 18446744073709547520ULL,
 };
 
 enum {
@@ -8619,7 +8619,7 @@ enum {
 	PT_MAX_TOP_LEVEL___3 = 4ULL,
 	PT_GRANULE_LG2SZ___3 = 12ULL,
 	PT_TABLEMEM_LG2SZ___3 = 12ULL,
-	PT_TOP_PHYS_MASK___3 = 18446744073709547520ULL,
+	PT_TOP_PHYS_MASK___3 = 4503599627366400ULL,
 };
 
 enum {
@@ -13334,6 +13334,13 @@ enum amd_pstate_mode {
 	AMD_PSTATE_MAX = 5,
 };
 
+enum anon_enabled_mode {
+	ANON_ENABLED_ALWAYS = 0,
+	ANON_ENABLED_INHERIT = 1,
+	ANON_ENABLED_MADVISE = 2,
+	ANON_ENABLED_NEVER = 3,
+};
+
 enum aper_size_type {
 	U8_APER_SIZE = 0,
 	U16_APER_SIZE = 1,
@@ -16090,6 +16097,14 @@ enum dd_prio {
 	DD_PRIO_MAX = 2,
 };
 
+enum defrag_mode {
+	DEFRAG_ALWAYS = 0,
+	DEFRAG_DEFER = 1,
+	DEFRAG_DEFER_MADVISE = 2,
+	DEFRAG_MADVISE = 3,
+	DEFRAG_NEVER = 4,
+};
+
 enum dentry_d_lock_class {
 	DENTRY_D_LOCK_NORMAL = 0,
 	DENTRY_D_LOCK_NESTED = 1,
@@ -18832,6 +18847,12 @@ enum genl_validate_flags {
 	GENL_DONT_VALIDATE_DUMP_STRICT = 4,
 };
 
+enum global_enabled_mode {
+	GLOBAL_ENABLED_ALWAYS = 0,
+	GLOBAL_ENABLED_MADVISE = 1,
+	GLOBAL_ENABLED_NEVER = 2,
+};
+
 enum gmbus_gpio {
 	GPIOA = 0,
 	GPIOB = 1,
@@ -19431,6 +19452,14 @@ enum hub_quiescing_type {
 	HUB_DISCONNECT = 0,
 	HUB_PRE_RESET = 1,
 	HUB_SUSPEND = 2,
+};
+
+enum huge_mode {
+	HUGE_SHMEM_ENABLED_ALWAYS = 0,
+	HUGE_SHMEM_ENABLED_INHERIT = 1,
+	HUGE_SHMEM_ENABLED_WITHIN_SIZE = 2,
+	HUGE_SHMEM_ENABLED_ADVISE = 3,
+	HUGE_SHMEM_ENABLED_NEVER = 4,
 };
 
 enum hugetlb_memory_event {
@@ -31380,6 +31409,41 @@ enum scan_balance {
 	SCAN_FILE = 3,
 };
 
+enum scan_result {
+	SCAN_FAIL = 0,
+	SCAN_SUCCEED = 1,
+	SCAN_NO_PTE_TABLE = 2,
+	SCAN_PMD_MAPPED = 3,
+	SCAN_EXCEED_NONE_PTE = 4,
+	SCAN_EXCEED_SWAP_PTE = 5,
+	SCAN_EXCEED_SHARED_PTE = 6,
+	SCAN_PTE_NON_PRESENT = 7,
+	SCAN_PTE_UFFD_WP = 8,
+	SCAN_PTE_MAPPED_HUGEPAGE = 9,
+	SCAN_LACK_REFERENCED_PAGE = 10,
+	SCAN_PAGE_NULL = 11,
+	SCAN_SCAN_ABORT = 12,
+	SCAN_PAGE_COUNT = 13,
+	SCAN_PAGE_LRU = 14,
+	SCAN_PAGE_LOCK = 15,
+	SCAN_PAGE_ANON = 16,
+	SCAN_PAGE_LAZYFREE = 17,
+	SCAN_PAGE_COMPOUND = 18,
+	SCAN_ANY_PROCESS = 19,
+	SCAN_VMA_NULL = 20,
+	SCAN_VMA_CHECK = 21,
+	SCAN_ADDRESS_RANGE = 22,
+	SCAN_DEL_PAGE_LRU = 23,
+	SCAN_ALLOC_HUGE_PAGE_FAIL = 24,
+	SCAN_CGROUP_CHARGE_FAIL = 25,
+	SCAN_TRUNCATED = 26,
+	SCAN_PAGE_HAS_PRIVATE = 27,
+	SCAN_STORE_FAILED = 28,
+	SCAN_COPY_MC = 29,
+	SCAN_PAGE_FILLED = 30,
+	SCAN_PAGE_DIRTY_OR_WRITEBACK = 31,
+};
+
 enum scb_cmd_hi {
 	irq_mask_none = 0,
 	irq_mask_all = 1,
@@ -32538,6 +32602,11 @@ enum split_lock_detect_state {
 	sld_ratelimit = 3,
 };
 
+enum split_type {
+	SPLIT_TYPE_UNIFORM = 0,
+	SPLIT_TYPE_NON_UNIFORM = 1,
+};
+
 enum sr_retry_flags {
 	IORING_RECV_RETRY = 32768,
 	IORING_RECV_PARTIAL_MAP = 16384,
@@ -33523,6 +33592,18 @@ enum translation_map {
 	LAST_MAP = 3,
 };
 
+enum transparent_hugepage_flag {
+	TRANSPARENT_HUGEPAGE_UNSUPPORTED = 0,
+	TRANSPARENT_HUGEPAGE_FLAG = 1,
+	TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG = 2,
+	TRANSPARENT_HUGEPAGE_DEFRAG_DIRECT_FLAG = 3,
+	TRANSPARENT_HUGEPAGE_DEFRAG_KSWAPD_FLAG = 4,
+	TRANSPARENT_HUGEPAGE_DEFRAG_KSWAPD_OR_MADV_FLAG = 5,
+	TRANSPARENT_HUGEPAGE_DEFRAG_REQ_MADV_FLAG = 6,
+	TRANSPARENT_HUGEPAGE_DEFRAG_KHUGEPAGED_FLAG = 7,
+	TRANSPARENT_HUGEPAGE_USE_ZERO_PAGE_FLAG = 8,
+};
+
 enum tsa_mitigations {
 	TSA_MITIGATION_NONE = 0,
 	TSA_MITIGATION_AUTO = 1,
@@ -34271,20 +34352,42 @@ enum vm_event_item {
 	UNEVICTABLE_PGMUNLOCKED = 57,
 	UNEVICTABLE_PGCLEARED = 58,
 	UNEVICTABLE_PGSTRANDED = 59,
-	SWAP_RA = 60,
-	SWAP_RA_HIT = 61,
-	SWPIN_ZERO = 62,
-	SWPOUT_ZERO = 63,
-	DIRECT_MAP_LEVEL2_SPLIT = 64,
-	DIRECT_MAP_LEVEL3_SPLIT = 65,
-	DIRECT_MAP_LEVEL2_COLLAPSE = 66,
-	DIRECT_MAP_LEVEL3_COLLAPSE = 67,
-	KSTACK_1K = 68,
-	KSTACK_2K = 69,
-	KSTACK_4K = 70,
-	KSTACK_8K = 71,
-	KSTACK_16K = 72,
-	NR_VM_EVENT_ITEMS = 73,
+	THP_FAULT_ALLOC = 60,
+	THP_FAULT_FALLBACK = 61,
+	THP_FAULT_FALLBACK_CHARGE = 62,
+	THP_COLLAPSE_ALLOC = 63,
+	THP_COLLAPSE_ALLOC_FAILED = 64,
+	THP_FILE_ALLOC = 65,
+	THP_FILE_FALLBACK = 66,
+	THP_FILE_FALLBACK_CHARGE = 67,
+	THP_FILE_MAPPED = 68,
+	THP_SPLIT_PAGE = 69,
+	THP_SPLIT_PAGE_FAILED = 70,
+	THP_DEFERRED_SPLIT_PAGE = 71,
+	THP_UNDERUSED_SPLIT_PAGE = 72,
+	THP_SPLIT_PMD = 73,
+	THP_SCAN_EXCEED_NONE_PTE = 74,
+	THP_SCAN_EXCEED_SWAP_PTE = 75,
+	THP_SCAN_EXCEED_SHARED_PTE = 76,
+	THP_SPLIT_PUD = 77,
+	THP_ZERO_PAGE_ALLOC = 78,
+	THP_ZERO_PAGE_ALLOC_FAILED = 79,
+	THP_SWPOUT = 80,
+	THP_SWPOUT_FALLBACK = 81,
+	SWAP_RA = 82,
+	SWAP_RA_HIT = 83,
+	SWPIN_ZERO = 84,
+	SWPOUT_ZERO = 85,
+	DIRECT_MAP_LEVEL2_SPLIT = 86,
+	DIRECT_MAP_LEVEL3_SPLIT = 87,
+	DIRECT_MAP_LEVEL2_COLLAPSE = 88,
+	DIRECT_MAP_LEVEL3_COLLAPSE = 89,
+	KSTACK_1K = 90,
+	KSTACK_2K = 91,
+	KSTACK_4K = 92,
+	KSTACK_8K = 93,
+	KSTACK_16K = 94,
+	NR_VM_EVENT_ITEMS = 95,
 };
 
 enum vm_fault_reason {
@@ -38649,6 +38752,8 @@ struct drm_minor;
 
 struct drm_master;
 
+struct vfsmount;
+
 struct inode;
 
 struct drm_vblank_crtc;
@@ -38672,6 +38777,7 @@ struct drm_device {
 	struct drm_minor *accel;
 	bool registered;
 	struct drm_master *master;
+	struct vfsmount *huge_mnt;
 	u32 driver_features;
 	bool unplugged;
 	struct inode *anon_inode;
@@ -47079,8 +47185,6 @@ struct audit_names {
 	unsigned char type;
 	bool should_free;
 };
-
-struct vfsmount;
 
 struct path {
 	struct vfsmount *mnt;
@@ -63192,6 +63296,14 @@ struct codel_vars {
 	codel_time_t ldelay;
 };
 
+struct collapse_control {
+	bool is_khugepaged;
+	u32 node_load[64];
+	unsigned int progress;
+	nodemask_t alloc_nmask;
+	long unsigned int mthp_present_ptes[8];
+};
+
 struct element;
 
 struct colocated_ap_data {
@@ -75773,7 +75885,7 @@ struct e1000_option {
 		} r;
 		struct {
 			int nr;
-			struct e1000_opt_list *p;
+			const struct e1000_opt_list *p;
 		} l;
 	} arg;
 };
@@ -75794,7 +75906,7 @@ struct e1000_option___2 {
 		} r;
 		struct {
 			int nr;
-			const struct e1000_opt_list *p;
+			struct e1000_opt_list *p;
 		} l;
 	} arg;
 };
@@ -82478,6 +82590,14 @@ struct folio_iter {
 	struct folio *_next;
 	size_t _seg_count;
 	int _i;
+};
+
+struct folio_or_pfn {
+	union {
+		struct folio *folio;
+		long unsigned int pfn;
+	};
+	bool is_folio;
 };
 
 struct folio_queue {
@@ -104755,6 +104875,14 @@ struct kho_data {
 	__u64 scratch_size;
 };
 
+struct mm_slot;
+
+struct khugepaged_scan {
+	struct list_head mm_head;
+	struct mm_slot *mm_slot;
+	long unsigned int address;
+};
+
 struct kimage_arch {
 	pgd_t *pgd;
 	p4d_t *p4d;
@@ -110262,6 +110390,12 @@ struct mm_reply_data {
 	struct ethtool_mm_stats stats;
 };
 
+struct mm_slot {
+	struct hlist_node hash;
+	struct list_head mm_node;
+	struct mm_struct *mm;
+};
+
 typedef struct mm_struct *class_mmap_read_lock_t;
 
 struct sched_cache_time;
@@ -110364,6 +110498,14 @@ struct mm_struct {
 		atomic_long_t hugetlb_usage;
 		struct work_struct async_put_work;
 		struct iommu_mm_data *iommu_mm;
+		mm_id_t mm_id;
+		long: 64;
+		long: 64;
+		long: 64;
+		long: 64;
+		long: 64;
+		long: 64;
+		long: 64;
 	};
 	char flexible_array[0];
 };
@@ -111911,6 +112053,10 @@ struct msr_info_completion {
 struct msr_regs_info {
 	u32 *regs;
 	int err;
+};
+
+struct mthp_stat {
+	long unsigned int stats[220];
 };
 
 struct mtl_gsc_ver_msg_in {
@@ -122153,11 +122299,7 @@ struct per_cpu_pages {
 	u8 alloc_factor;
 	u8 expire;
 	short int free_count;
-	struct list_head lists[12];
-	long: 64;
-	long: 64;
-	long: 64;
-	long: 64;
+	struct list_head lists[14];
 };
 
 struct per_cpu_zonestat {
@@ -122194,8 +122336,8 @@ typedef struct percpu_rw_semaphore *class_percpu_read_t;
 typedef struct percpu_rw_semaphore *class_percpu_write_t;
 
 struct percpu_swap_cluster {
-	struct swap_info_struct *si[1];
-	long unsigned int offset[1];
+	struct swap_info_struct *si[10];
+	long unsigned int offset[10];
 	local_lock_t lock;
 };
 
@@ -138632,8 +138774,8 @@ struct swap_info_struct {
 	struct swap_cluster_info *cluster_info;
 	struct list_head free_clusters;
 	struct list_head full_clusters;
-	struct list_head nonfull_clusters[1];
-	struct list_head frag_clusters[1];
+	struct list_head nonfull_clusters[10];
+	struct list_head frag_clusters[10];
 	unsigned int pages;
 	atomic_long_t inuse_pages;
 	struct swap_sequential_cluster *global_cluster;
@@ -138681,11 +138823,11 @@ struct swap_map_page_list {
 };
 
 struct swap_sequential_cluster {
-	unsigned int next[1];
+	unsigned int next[10];
 };
 
 struct swap_table {
-	atomic_long_t entries[256];
+	atomic_long_t entries[512];
 };
 
 struct swevent_hlist {
@@ -142030,6 +142172,12 @@ struct thermal_zone_params {
 	int offset;
 };
 
+struct thpsize {
+	struct kobject kobj;
+	struct list_head node;
+	int order;
+};
+
 struct thread_deferred_req {
 	struct cache_deferred_req handle;
 	struct completion completion;
@@ -144701,9 +144849,17 @@ struct trace_event_data_offsets_mgd_prepare_complete_tx_evt {
 	const void *vif_name_ptr_;
 };
 
+struct trace_event_data_offsets_migration_pmd {};
+
 struct trace_event_data_offsets_migration_pte {};
 
 struct trace_event_data_offsets_mm_calculate_totalreserve_pages {};
+
+struct trace_event_data_offsets_mm_collapse_huge_page {};
+
+struct trace_event_data_offsets_mm_collapse_huge_page_isolate {};
+
+struct trace_event_data_offsets_mm_collapse_huge_page_swapin {};
 
 struct trace_event_data_offsets_mm_compaction_begin {};
 
@@ -144726,6 +144882,20 @@ struct trace_event_data_offsets_mm_filemap_fault {};
 struct trace_event_data_offsets_mm_filemap_op_page_cache {};
 
 struct trace_event_data_offsets_mm_filemap_op_page_cache_range {};
+
+struct trace_event_data_offsets_mm_khugepaged_collapse_file {
+	u32 filename;
+	const void *filename_ptr_;
+};
+
+struct trace_event_data_offsets_mm_khugepaged_scan {};
+
+struct trace_event_data_offsets_mm_khugepaged_scan_file {
+	u32 filename;
+	const void *filename_ptr_;
+};
+
+struct trace_event_data_offsets_mm_khugepaged_scan_pmd {};
 
 struct trace_event_data_offsets_mm_lru_activate {};
 
@@ -151930,6 +152100,13 @@ struct trace_event_raw_mgd_prepare_complete_tx_evt {
 	char __data[0];
 };
 
+struct trace_event_raw_migration_pmd {
+	struct trace_entry ent;
+	long unsigned int addr;
+	long unsigned int pmd;
+	char __data[0];
+};
+
 struct trace_event_raw_migration_pte {
 	struct trace_entry ent;
 	long unsigned int addr;
@@ -151941,6 +152118,35 @@ struct trace_event_raw_migration_pte {
 struct trace_event_raw_mm_calculate_totalreserve_pages {
 	struct trace_entry ent;
 	long unsigned int totalreserve_pages;
+	char __data[0];
+};
+
+struct trace_event_raw_mm_collapse_huge_page {
+	struct trace_entry ent;
+	struct mm_struct *mm;
+	int isolated;
+	int status;
+	unsigned int order;
+	char __data[0];
+};
+
+struct trace_event_raw_mm_collapse_huge_page_isolate {
+	struct trace_entry ent;
+	long unsigned int pfn;
+	int none_or_zero;
+	int referenced;
+	int status;
+	unsigned int order;
+	char __data[0];
+};
+
+struct trace_event_raw_mm_collapse_huge_page_swapin {
+	struct trace_entry ent;
+	struct mm_struct *mm;
+	int swapped_in;
+	int referenced;
+	int ret;
+	unsigned int order;
 	char __data[0];
 };
 
@@ -152039,6 +152245,49 @@ struct trace_event_raw_mm_filemap_op_page_cache_range {
 	dev_t s_dev;
 	long unsigned int index;
 	long unsigned int last_index;
+	char __data[0];
+};
+
+struct trace_event_raw_mm_khugepaged_collapse_file {
+	struct trace_entry ent;
+	struct mm_struct *mm;
+	long unsigned int hpfn;
+	long unsigned int index;
+	long unsigned int addr;
+	bool is_shmem;
+	u32 __data_loc_filename;
+	int nr;
+	int result;
+	char __data[0];
+};
+
+struct trace_event_raw_mm_khugepaged_scan {
+	struct trace_entry ent;
+	struct mm_struct *mm;
+	unsigned int progress;
+	bool full_scan_finished;
+	char __data[0];
+};
+
+struct trace_event_raw_mm_khugepaged_scan_file {
+	struct trace_entry ent;
+	struct mm_struct *mm;
+	long unsigned int pfn;
+	u32 __data_loc_filename;
+	int present;
+	int swap;
+	int result;
+	char __data[0];
+};
+
+struct trace_event_raw_mm_khugepaged_scan_pmd {
+	struct trace_entry ent;
+	struct mm_struct *mm;
+	long unsigned int pfn;
+	int referenced;
+	int none_or_zero;
+	int status;
+	int unmapped;
 	char __data[0];
 };
 
@@ -162926,7 +163175,7 @@ struct vm_area_struct__safe_trusted_or_null {
 };
 
 struct vm_event_state {
-	long unsigned int event[73];
+	long unsigned int event[95];
 };
 
 struct vm_fault {
@@ -168770,6 +169019,12 @@ typedef void (*btf_trace_mem_disconnect)(void *, const struct xdp_mem_allocator 
 
 typedef void (*btf_trace_mm_calculate_totalreserve_pages)(void *, long unsigned int);
 
+typedef void (*btf_trace_mm_collapse_huge_page)(void *, struct mm_struct *, int, int, unsigned int);
+
+typedef void (*btf_trace_mm_collapse_huge_page_isolate)(void *, struct folio *, int, int, int, unsigned int);
+
+typedef void (*btf_trace_mm_collapse_huge_page_swapin)(void *, struct mm_struct *, int, int, int, unsigned int);
+
 typedef void (*btf_trace_mm_compaction_begin)(void *, struct compact_control *, long unsigned int, long unsigned int, bool);
 
 typedef void (*btf_trace_mm_compaction_defer_compaction)(void *, struct zone *, int);
@@ -168809,6 +169064,14 @@ typedef void (*btf_trace_mm_filemap_fault)(void *, struct address_space *, long 
 typedef void (*btf_trace_mm_filemap_get_pages)(void *, struct address_space *, long unsigned int, long unsigned int);
 
 typedef void (*btf_trace_mm_filemap_map_pages)(void *, struct address_space *, long unsigned int, long unsigned int);
+
+typedef void (*btf_trace_mm_khugepaged_collapse_file)(void *, struct mm_struct *, struct folio *, long unsigned int, long unsigned int, bool, struct file *, int, int);
+
+typedef void (*btf_trace_mm_khugepaged_scan)(void *, struct mm_struct *, unsigned int, bool);
+
+typedef void (*btf_trace_mm_khugepaged_scan_file)(void *, struct mm_struct *, struct folio *, struct file *, int, int, int);
+
+typedef void (*btf_trace_mm_khugepaged_scan_pmd)(void *, struct mm_struct *, struct folio *, int, int, int, int);
 
 typedef void (*btf_trace_mm_lru_activate)(void *, struct folio *);
 
@@ -169846,6 +170109,8 @@ typedef void (*btf_trace_regmap_reg_write)(void *, struct regmap *, unsigned int
 
 typedef void (*btf_trace_remove_device_from_group)(void *, int, struct device *);
 
+typedef void (*btf_trace_remove_migration_pmd)(void *, long unsigned int, long unsigned int);
+
 typedef void (*btf_trace_remove_migration_pte)(void *, long unsigned int, long unsigned int, int);
 
 typedef void (*btf_trace_reschedule_entry)(void *, int);
@@ -170169,6 +170434,8 @@ typedef void (*btf_trace_scsi_dispatch_cmd_timeout)(void *, struct scsi_cmnd *);
 typedef void (*btf_trace_scsi_eh_wakeup)(void *, struct Scsi_Host *);
 
 typedef void (*btf_trace_selinux_audited)(void *, struct selinux_audit_data *, char *, char *, const char *);
+
+typedef void (*btf_trace_set_migration_pmd)(void *, long unsigned int, long unsigned int);
 
 typedef void (*btf_trace_set_migration_pte)(void *, long unsigned int, long unsigned int, int);
 

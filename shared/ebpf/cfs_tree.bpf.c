@@ -93,8 +93,6 @@ static long walk_one_node(u64 index, void *ctx)
 {
 	u32 *key = ctx;
 	struct scratch_state *scratch_state_ptr = bpf_map_lookup_elem(&scratch, key);
-	struct rb_node *node;
-	struct context_event *event;
 
 	if (!scratch_state_ptr || index >= MAX_TREE_NODES ||
 		scratch_state_ptr->head >= MAX_TREE_NODES ||
@@ -103,8 +101,8 @@ static long walk_one_node(u64 index, void *ctx)
 		!scratch_state_ptr->traversal_worklist[scratch_state_ptr->head])
 		return 1;
 
-	event = &scratch_state_ptr->event;
-	node = scratch_state_ptr->traversal_worklist[scratch_state_ptr->head++];
+	struct context_event *event = &scratch_state_ptr->event;
+	struct rb_node *node = scratch_state_ptr->traversal_worklist[scratch_state_ptr->head++];
 	fill_node(&event->nodes[index], node);
 	if (event->nodes[index].left)
 	{
@@ -135,12 +133,12 @@ struct
 SEC("kprobe/__enqueue_entity")
 int BPF_KPROBE(kprobe_enqueue_entity)
 {
-	u64 id = bpf_get_current_pid_tgid();
 	struct saved_args args = {
 		.cfs_rq = (struct cfs_rq *)PT_REGS_PARM1(ctx),
 		.se = (struct sched_entity *)PT_REGS_PARM2(ctx),
 	};
 
+	u64 id = bpf_get_current_pid_tgid();
 	bpf_map_update_elem(&active_args, &id, &args, BPF_ANY);
 	return 0;
 }
@@ -156,8 +154,6 @@ int BPF_KRETPROBE(kretprobe_enqueue_entity)
 
 	/* Copy the map value pointer first so CO-RE sees the kernel type directly. */
 	struct cfs_rq *cfs_rq = args->cfs_rq;
-	struct rb_node *root_node =
-		BPF_CORE_READ(cfs_rq, tasks_timeline.rb_root.rb_node);
 	u32 zero = 0;
 	struct scratch_state *scratch_state_ptr = bpf_map_lookup_elem(&scratch, &zero);
 	if (!scratch_state_ptr)
@@ -173,7 +169,7 @@ int BPF_KRETPROBE(kretprobe_enqueue_entity)
 	event->truncated = 0;
 	scratch_state_ptr->head = 0;
 	scratch_state_ptr->tail = 1;
-	scratch_state_ptr->traversal_worklist[0] = root_node;
+	scratch_state_ptr->traversal_worklist[0] = BPF_CORE_READ(cfs_rq, tasks_timeline.rb_root.rb_node);
 	u32 traversal_key = 0;
 
 	/* The helper provides a verifier-visible bound for the BFS. */

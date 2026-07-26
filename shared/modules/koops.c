@@ -20,7 +20,9 @@
 #include <asm/page.h>
 #include <asm/page_64_types.h>
 #include <asm/pgtable.h>
+#include <asm/pgtable_areas.h>
 #include <asm/pgtable_64_types.h>
+#include <asm/vsyscall.h>
 
 #ifdef CONFIG_X86_64
 #include <asm/cpu_entry_area.h>
@@ -66,8 +68,15 @@ static int show_all_threads(void)
 			type = "user-ST";
 
 		pr_info("KOOPS_EVT domain=core phase=tasks action=task tgid=%d pid=%d ppid=%d cpu=%d task=%px stack=%px mm=%px type=%s comm=\"%s\"\n",
-				t->tgid, t->pid, task_ppid_nr(t), task_cpu(t), t, t->stack,
-				t->mm, type, t->comm);
+				t->tgid,
+				t->pid,
+				task_ppid_nr(t),
+				task_cpu(t),
+				t,
+				t->stack,
+				t->mm,
+				type,
+				t->comm);
 
 		task_unlock(t);
 		put_task_struct(t);
@@ -169,21 +178,55 @@ static void print_addr(const char *name, unsigned long addr)
 			name, addr);
 }
 
-static void print_region(const char *name, unsigned long start, unsigned long end)
+static void print_region(const char *name, unsigned long start, unsigned long end,
+			 const char *kind, const char *source)
 {
 	if (end <= start)
 	{
-		pr_warn("KOOPS_EVT domain=mm phase=layout action=region id=%s start=0x%016lx end=0x%016lx valid=no\n",
-				name, start, end);
+		pr_warn("KOOPS_EVT domain=mm phase=layout action=region id=%s start=0x%016lx end=0x%016lx kind=%s source=%s valid=no\n",
+				name, start, end, kind, source);
 		return;
 	}
 
-	pr_info("KOOPS_EVT domain=mm phase=layout action=region id=%s start=0x%016lx end=0x%016lx bytes=%lu valid=yes\n",
-			name, start, end, end - start);
+	pr_info("KOOPS_EVT domain=mm phase=layout action=region id=%s start=0x%016lx end=0x%016lx bytes=%lu kind=%s source=%s valid=yes\n",
+			name, start, end, end - start, kind, source);
 }
 
-static void print_global_constants(unsigned long ram_bytes)
+static void __init print_global_constants(unsigned long ram_bytes)
 {
+	unsigned long canonical_end = (unsigned long)TASK_SIZE_MAX + PAGE_SIZE;
+	unsigned long kernel_start = 0UL - canonical_end;
+	unsigned long direct_map_end = (unsigned long)PAGE_OFFSET + ram_bytes;
+	unsigned long vmemmap_bytes = (ram_bytes >> PAGE_SHIFT) * sizeof(struct page);
+	unsigned long vmemmap_end = (unsigned long)VMEMMAP_START + vmemmap_bytes;
+	unsigned long cpu_entry_area_end = (unsigned long)CPU_ENTRY_AREA_BASE +
+					      CPU_ENTRY_AREA_MAP_SIZE;
+	unsigned long espfix_end = (unsigned long)ESPFIX_BASE_ADDR + P4D_SIZE;
+	unsigned int gap = 0;
+	unsigned long cursor = 0;
+
+#define PRINT_GAP_TO(next) \
+	do { \
+		unsigned long __next = (unsigned long)(next); \
+		if (__next > cursor) { \
+			char __name[32]; \
+			snprintf(__name, sizeof(__name), "reserved_gap_%u", gap++); \
+			print_region(__name, cursor, __next, "reserved", \
+				     "adjacent_macro_boundaries"); \
+		} \
+		cursor = __next; \
+	} while (0)
+
+#define PRINT_ORDERED(name, start, end, kind, source) \
+	do { \
+		unsigned long __start = (unsigned long)(start); \
+		unsigned long __end = (unsigned long)(end); \
+		PRINT_GAP_TO(__start); \
+		print_region((name), __start, __end, (kind), (source)); \
+		if (__end > cursor) \
+			cursor = __end; \
+	} while (0)
+
 	pr_info("KOOPS_EVT domain=mm phase=layout action=begin\n");
 	pr_info("KOOPS_EVT domain=mm phase=layout action=constants page_size=%lu page_shift=%u page_mask=0x%016lx bits_per_long=%u ram_bytes=%lu paging_levels=%u\n",
 			PAGE_SIZE, (unsigned int)PAGE_SHIFT, (unsigned long)PAGE_MASK,
@@ -192,20 +235,47 @@ static void print_global_constants(unsigned long ram_bytes)
 
 	print_addr("cpu_entry_area_base", (unsigned long)CPU_ENTRY_AREA_BASE);
 	print_addr("mm_koops_init", (unsigned long)mm_koops_init);
-	print_region("user_vas", 0UL, (unsigned long)TASK_SIZE);
-	print_region("direct_map", (unsigned long)PAGE_OFFSET,
-				 (unsigned long)PAGE_OFFSET + ram_bytes);
-	print_region("vmalloc", (unsigned long)VMALLOC_START, (unsigned long)VMALLOC_END);
-	print_region("modules", (unsigned long)MODULES_VADDR, (unsigned long)MODULES_END);
-	print_region("fixmap", (unsigned long)FIXADDR_START, (unsigned long)FIXADDR_TOP);
-#ifdef KERNEL_IMAGE_SIZE
-	print_region("kernel_image", (unsigned long)__START_KERNEL_map,
-				 (unsigned long)__START_KERNEL_map + KERNEL_IMAGE_SIZE);
-#endif
-#if defined(VMEMMAP_START) && defined(VMEMMAP_END)
-	print_region("vmemmap", (unsigned long)VMEMMAP_START, (unsigned long)VMEMMAP_END);
-#endif
+	print_addr("vsyscall", (unsigned long)VSYSCALL_ADDR);
+
+	PRINT_ORDERED("user_vas", 0UL, TASK_SIZE_MAX, "process_specific",
+		      "TASK_SIZE_MAX");
+	PRINT_ORDERED("user_guard", TASK_SIZE_MAX, canonical_end, "guard",
+		      "TASK_SIZE_MAX+PAGE_SIZE");
+	PRINT_ORDERED("noncanonical", canonical_end, kernel_start, "invalid",
+		      "TASK_SIZE_MAX");
+	PRINT_ORDERED("kernel_guard_hole", GUARD_HOLE_BASE_ADDR,
+		      GUARD_HOLE_END_ADDR, "guard",
+		      "GUARD_HOLE_BASE_ADDR+GUARD_HOLE_END_ADDR");
+	PRINT_ORDERED("ldt_remap", LDT_BASE_ADDR, LDT_END_ADDR, "conditional",
+		      "LDT_BASE_ADDR+LDT_END_ADDR");
+	PRINT_ORDERED("direct_map_observed_ram", PAGE_OFFSET, direct_map_end,
+		      "physical_direct_map", "PAGE_OFFSET+totalram_pages");
+	PRINT_ORDERED("vmalloc", VMALLOC_START, VMALLOC_END, "vmalloc_ioremap",
+		      "VMALLOC_START+VMALLOC_END");
+	PRINT_ORDERED("vmemmap_observed_descriptors", VMEMMAP_START, vmemmap_end,
+		      "struct_page_array",
+		      "VMEMMAP_START+totalram_pages+sizeof_struct_page");
+	PRINT_ORDERED("cpu_entry_area", CPU_ENTRY_AREA_BASE, cpu_entry_area_end,
+		      "per_cpu_entry", "CPU_ENTRY_AREA_BASE+CPU_ENTRY_AREA_MAP_SIZE");
+	PRINT_ORDERED("espfix", ESPFIX_BASE_ADDR, espfix_end, "espfix_stacks",
+		      "ESPFIX_BASE_ADDR+P4D_SIZE");
+	PRINT_ORDERED("efi_runtime", EFI_VA_END, EFI_VA_START, "efi_runtime",
+		      "EFI_VA_END+EFI_VA_START");
+	PRINT_ORDERED("kernel_image", __START_KERNEL_map,
+		      (unsigned long)__START_KERNEL_map + KERNEL_IMAGE_SIZE,
+		      "kernel_image", "__START_KERNEL_map+KERNEL_IMAGE_SIZE");
+	PRINT_ORDERED("modules", MODULES_VADDR, MODULES_END, "module_space",
+		      "MODULES_VADDR+MODULES_END");
+	PRINT_ORDERED("fixmap", FIXADDR_START, FIXADDR_TOP, "fixed_mappings",
+		      "FIXADDR_START+FIXADDR_TOP");
+	if (cursor < ULONG_MAX)
+		print_region("reserved_top", cursor, ULONG_MAX, "reserved",
+			     "FIXADDR_TOP+ULONG_MAX");
+
 	pr_info("KOOPS_EVT domain=mm phase=layout action=end\n");
+
+#undef PRINT_ORDERED
+#undef PRINT_GAP_TO
 }
 
 /*
@@ -358,7 +428,7 @@ static int allocate_page_memory(void)
 	if (!page_desc_addr)
 	{
 		pr_err("KOOPS_EVT domain=mm phase=page_allocator action=error api=page_address id=page_desc reason=no_direct_mapping errno=%d\n",
-				-ENOMEM);
+			   -ENOMEM);
 		free_page_memory();
 		return -ENOMEM;
 	}
@@ -726,14 +796,12 @@ static int __init koops_init(void)
 {
 	int ret;
 
-	pr_info("KOOPS_EVT domain=module phase=lifecycle action=run_begin schema=1 module=%s\n",
-			KBUILD_MODNAME);
+	pr_info("KOOPS_EVT domain=module phase=lifecycle action=run_begin schema=1 module=%s\n", KBUILD_MODNAME);
 
 	ret = core_koops_init();
 	if (ret)
 	{
-		pr_err("KOOPS_EVT domain=module phase=lifecycle action=run_end status=error stage=core errno=%d\n",
-				ret);
+		pr_err("KOOPS_EVT domain=module phase=lifecycle action=run_end status=error stage=core errno=%d\n", ret);
 		return ret;
 	}
 
@@ -741,8 +809,7 @@ static int __init koops_init(void)
 	if (ret)
 	{
 		core_koops_exit();
-		pr_err("KOOPS_EVT domain=module phase=lifecycle action=run_end status=error stage=mm errno=%d\n",
-				ret);
+		pr_err("KOOPS_EVT domain=module phase=lifecycle action=run_end status=error stage=mm errno=%d\n", ret);
 		return ret;
 	}
 
