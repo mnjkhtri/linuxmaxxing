@@ -37,11 +37,17 @@ struct vma_record
     u64 flags; /* vm_flags; decoded into read/write/exec/shared permissions in the UI. */
     u64 pgoff; /* File page offset for file-backed VMAs. */
 
-    u32 struct_file; /* Whether vm_file exists; separates file-backed from anon/special VMAs. */
+    u32 struct_file;     /* Whether vm_file exists; separates file-backed from anon/special VMAs. */
+    u64 anon_vma;        /* vma->anon_vma for anonymous reverse-map/COW lineage visualization. */
+    u64 anon_vma_root;   /* anon_vma->root pointer, when anon_vma exists. */
+    u64 anon_vma_parent; /* anon_vma->parent pointer, when anon_vma exists. */
 
-    u64 mapping;     /* struct address_space pointer; target object for page-cache arrows. */
-    u64 cache_pages; /* address_space->nrpages: total cached PAGE_SIZE units for the whole file. */
+    u64 inode;          /* Backing inode number; groups file VMAs that point to the same file. */
+    u32 device;         /* Superblock device id; disambiguates equal inode numbers. */
+    char file_name[64]; /* Dentry name displayed inside file-backed VMA and address_space cards. */
 
+    u64 mapping;                                 /* struct address_space pointer; target object for page-cache arrows. */
+    u64 cache_pages;                             /* address_space->nrpages: total cached PAGE_SIZE units for the whole file. */
     u32 cache_folios;                            /* Folios found in address_space->i_pages. */
     u32 cache_clean_folios;                      /* Folios with neither PG_dirty nor PG_writeback. */
     u32 cache_dirty_folios;                      /* Folios with PG_dirty set. */
@@ -49,11 +55,6 @@ struct vma_record
     u16 cache_order_folios[MAX_CACHE_ORDERS];    /* Folio count per order; pages per folio = 1 << order. */
     u16 cache_order_dirty[MAX_CACHE_ORDERS];     /* Dirty folios per order. */
     u16 cache_order_writeback[MAX_CACHE_ORDERS]; /* Writeback folios per order. */
-
-    u64 inode;  /* Backing inode number; groups file VMAs that point to the same file. */
-    u32 device; /* Superblock device id; disambiguates equal inode numbers. */
-
-    char file_name[64]; /* Dentry name displayed inside file-backed VMA and address_space cards. */
 
     u32 pt_scanned_pages;              /* Number of valid entries in pt_states/pt_targets. */
     u8 pt_states[MAX_PAGES_PER_VMA];   /* Per-page state: none, PTE, swap, or huge mapping. */
@@ -181,6 +182,29 @@ int snapshot_phase_return(struct pt_regs *context)
         {
             record->struct_file = 1;
 
+            /* Inode identity: lets the UI group file-backed VMAs by backing file. */
+            struct inode *inode = BPF_CORE_READ(file, f_inode);
+            if (inode)
+            {
+                record->inode = BPF_CORE_READ(inode, i_ino);
+                record->device = BPF_CORE_READ(inode, i_sb, s_dev);
+            }
+            else
+            {
+                record->inode = record->device = 0;
+            }
+
+            /* Dentry name: short human-readable label for the VMA and address_space card. */
+            record->file_name[0] = 0;
+            struct dentry *dentry = BPF_CORE_READ(file, f_path.dentry);
+            if (dentry)
+            {
+                const unsigned char *name = BPF_CORE_READ(dentry, d_name.name);
+                if (name)
+                    bpf_probe_read_kernel_str(record->file_name, sizeof(record->file_name), name);
+            }
+
+            /* Page-cache object: f_mapping is the address_space whose XArray owns cached folios. */
             struct address_space *mapping = BPF_CORE_READ(file, f_mapping);
             if (mapping)
             {
@@ -193,24 +217,39 @@ int snapshot_phase_return(struct pt_regs *context)
                 record->cache_pages = 0;
             }
 
-            struct inode *inode = BPF_CORE_READ(file, f_inode);
-            if (inode)
+            record->cache_folios = 0;
+            record->cache_clean_folios = 0;
+            record->cache_dirty_folios = 0;
+            record->cache_writeback_folios = 0;
+#pragma unroll
+            for (u32 order = 0; order < MAX_CACHE_ORDERS; order++)
             {
-                record->inode = BPF_CORE_READ(inode, i_ino);
-                record->device = BPF_CORE_READ(inode, i_sb, s_dev);
-            }
-            else
-            {
-                record->inode = record->device = 0;
+                record->cache_order_folios[order] = 0;
+                record->cache_order_dirty[order] = 0;
+                record->cache_order_writeback[order] = 0;
             }
 
-            record->file_name[0] = 0;
-            struct dentry *dentry = BPF_CORE_READ(file, f_path.dentry);
-            if (dentry)
+            if (mapping)
             {
-                const unsigned char *name = BPF_CORE_READ(dentry, d_name.name);
-                if (name)
-                    bpf_probe_read_kernel_str(record->file_name, sizeof(record->file_name), name);
+                /* Walk each address_space once; multiple VMAs may point at the same file cache. */
+                u8 mapping_seen = 0;
+#pragma unroll
+                for (u32 previous = 0; previous < MAX_VMAS; previous++)
+                {
+                    if (previous >= event->vma_count)
+                        break;
+                    if (event->vmas[previous].mapping == record->mapping)
+                        mapping_seen = 1;
+                }
+
+                if (!mapping_seen)
+                {
+                    struct cache_walk cache = {
+                        .mapping = mapping,
+                        .vma_index = event->vma_count,
+                    };
+                    bpf_loop(MAX_XARRAY_SCAN_SLOTS, walk_xarray, &cache, 0);
+                }
             }
         }
         else
@@ -218,43 +257,36 @@ int snapshot_phase_return(struct pt_regs *context)
             record->struct_file = 0;
             record->inode = 0;
             record->device = 0;
+            record->file_name[0] = 0;
+
             record->mapping = 0;
             record->cache_pages = 0;
-            record->file_name[0] = 0;
+            record->cache_folios = 0;
+            record->cache_clean_folios = 0;
+            record->cache_dirty_folios = 0;
+            record->cache_writeback_folios = 0;
+#pragma unroll
+            for (u32 order = 0; order < MAX_CACHE_ORDERS; order++)
+            {
+                record->cache_order_folios[order] = 0;
+                record->cache_order_dirty[order] = 0;
+                record->cache_order_writeback[order] = 0;
+            }
         }
 
-        record->cache_folios = 0;
-        record->cache_clean_folios = 0;
-        record->cache_dirty_folios = 0;
-        record->cache_writeback_folios = 0;
-#pragma unroll
-        for (u32 order = 0; order < MAX_CACHE_ORDERS; order++)
+        /* Anonymous reverse-map object; MAP_PRIVATE file VMAs can get one after COW. */
+        struct anon_vma *anon_vma = BPF_CORE_READ(vma, anon_vma);
+        if (anon_vma)
         {
-            record->cache_order_folios[order] = 0;
-            record->cache_order_dirty[order] = 0;
-            record->cache_order_writeback[order] = 0;
+            record->anon_vma = (u64)anon_vma;
+            record->anon_vma_root = (u64)BPF_CORE_READ(anon_vma, root);
+            record->anon_vma_parent = (u64)BPF_CORE_READ(anon_vma, parent);
         }
-
-        if (file && record->mapping)
+        else
         {
-            u8 mapping_seen = 0;
-#pragma unroll
-            for (u32 previous = 0; previous < MAX_VMAS; previous++)
-            {
-                if (previous >= event->vma_count)
-                    break;
-                if (event->vmas[previous].mapping == record->mapping)
-                    mapping_seen = 1;
-            }
-
-            if (!mapping_seen)
-            {
-                struct cache_walk cache = {
-                    .mapping = (struct address_space *)record->mapping,
-                    .vma_index = event->vma_count,
-                };
-                bpf_loop(MAX_XARRAY_SCAN_SLOTS, walk_xarray, &cache, 0);
-            }
+            record->anon_vma = 0;
+            record->anon_vma_root = 0;
+            record->anon_vma_parent = 0;
         }
 
         struct pt_walk walk = {

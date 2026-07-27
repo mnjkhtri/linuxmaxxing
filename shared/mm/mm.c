@@ -25,6 +25,12 @@ struct vma_record
 	unsigned long long flags;
 	unsigned long long pgoff;
 	unsigned int struct_file;
+	unsigned long long anon_vma;
+	unsigned long long anon_vma_root;
+	unsigned long long anon_vma_parent;
+	unsigned long long inode;
+	unsigned int device;
+	char file_name[64];
 	unsigned long long mapping;
 	unsigned long long cache_pages;
 	unsigned int cache_folios;
@@ -34,9 +40,6 @@ struct vma_record
 	unsigned short cache_order_folios[MAX_CACHE_ORDERS];
 	unsigned short cache_order_dirty[MAX_CACHE_ORDERS];
 	unsigned short cache_order_writeback[MAX_CACHE_ORDERS];
-	unsigned long long inode;
-	unsigned int device;
-	char file_name[64];
 	unsigned int pt_scanned_pages;
 	unsigned char pt_states[MAX_PAGES_PER_VMA];
 	unsigned short pt_targets[MAX_PAGES_PER_VMA];
@@ -330,6 +333,9 @@ static void print_vma(FILE *output, const struct vma_record *vma)
 	json_hex(output, &first, "flags", vma->flags);
 	json_u64(output, &first, "pgoff", vma->pgoff);
 	json_u32(output, &first, "struct_file", vma->struct_file);
+	json_hex(output, &first, "anon_vma", vma->anon_vma);
+	json_hex(output, &first, "anon_vma_root", vma->anon_vma_root);
+	json_hex(output, &first, "anon_vma_parent", vma->anon_vma_parent);
 	json_u32(output, &first, "device", vma->device);
 	json_u64(output, &first, "inode", vma->inode);
 	json_hex(output, &first, "mapping", vma->mapping);
