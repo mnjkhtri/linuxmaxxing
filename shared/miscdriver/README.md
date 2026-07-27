@@ -4,7 +4,7 @@ Build and load the driver against the custom kernel:
 
 ```bash
 make -C shared/miscdriver
-sh /mnt/host/miscdriver/w.sh
+sh /mnt/host/miscdriver/run.sh
 ```
 
 Unload it explicitly when finished:
@@ -477,7 +477,7 @@ make -C shared/miscdriver
 Boot QEMU, mount the host share, and load the driver:
 
 ```sh
-sh /mnt/host/miscdriver/w.sh
+sh /mnt/host/miscdriver/run.sh
 ```
 
 Manual checks inside QEMU:

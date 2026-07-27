@@ -4,7 +4,7 @@ Build and load the driver against the custom kernel:
 
 ```bash
 make -C shared/pci
-sh /mnt/host/pci/w.sh
+sh /mnt/host/pci/run.sh
 ```
 
 The runner leaves `qedu` loaded while testing BARs, interrupts, and DMA. Unload it explicitly when finished:
@@ -281,7 +281,7 @@ make -C shared/pci
 Boot QEMU and load the module inside the guest:
 
 ```sh
-sh /mnt/host/pci/w.sh
+sh /mnt/host/pci/run.sh
 ```
 
 Check the interface:

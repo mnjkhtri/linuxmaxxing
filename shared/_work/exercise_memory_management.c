@@ -121,7 +121,7 @@ static int wait_for_signal(pid_t child, int expected, const char *name)
  */
 static int exercise_file_backed_memory(size_t page_size, volatile unsigned long *checksum)
 {
-	char path[] = "/var/tmp/koops-mm-XXXXXX";
+	char path[] = "/var/tmp/lx-mm-XXXXXX";
 
 	/* Seed deterministic disk contents, then drop cache so the first file faults are cold. */
 	PHASE("file backed: created a %zu KB file, wrote one byte per page, synced it, and evicted cached pages", kb_count(FILE_LENGTH));
@@ -639,7 +639,7 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 	PHASE("transparent huge pages: munmap removed the aligned %zu KB anonymous THP VMA", kb_count(THP_LENGTH));
 	munmap(thp, THP_LENGTH);
 
-	char path[] = "/var/tmp/koops-mm-large-XXXXXX";
+	char path[] = "/var/tmp/lx-mm-large-XXXXXX";
 
 	/* Prepare a real file for file-backed THP faults in the same THP section. */
 	PHASE("transparent huge pages: prepared a %zu KB file for file-backed THP faults", kb_count(FILE_THP_LENGTH));

@@ -12,7 +12,7 @@ rm -f "$OVERLAY"
 qemu-img create -f qcow2 -F qcow2 -b "$BASE_IMAGE" "$OVERLAY"
 truncate -s 128M "$SWAP_IMAGE"
 chmod 600 "$SWAP_IMAGE"
-mkswap --quiet --force --label koops-swap "$SWAP_IMAGE"
+mkswap --quiet --force --label linuxmaxxing-swap "$SWAP_IMAGE"
 
 exec qemu-system-x86_64 \
   -m 1024 \

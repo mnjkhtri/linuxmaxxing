@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef KOOPS_MM_XARRAY_WALK_BPF_H
-#define KOOPS_MM_XARRAY_WALK_BPF_H
+#ifndef LX_MM_XARRAY_WALK_BPF_H
+#define LX_MM_XARRAY_WALK_BPF_H
 
 /*
  * Best-effort bounded XArray slot scan for page-cache accounting.

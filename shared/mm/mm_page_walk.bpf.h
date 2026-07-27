@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-#ifndef KOOPS_MM_PAGE_WALK_BPF_H
-#define KOOPS_MM_PAGE_WALK_BPF_H
+#ifndef LX_MM_PAGE_WALK_BPF_H
+#define LX_MM_PAGE_WALK_BPF_H
 
 /*
  * Best-effort x86-64, 4-level page-table sampler for visualization.

@@ -1,35 +1,10 @@
-# kernel-oops
+# linuxmaxxing
 
-Build and run a custom Linux kernel in QEMU.
+Personal Linux-kernel study lab. This is not meant to be a reusable framework; it is my workspace for building a custom kernel, running small QEMU workloads, capturing kernel state, and visualizing what happened.
 
-## Layout
+## Setup
 
-```text
-app/        Static visualization frontend.
-shared/_work/  Guest programs and scripts that trigger study hooks.
-  fork_25_processes     Process and scheduler workload.
-  exercise_memory_management        Memory-management workload.
-shared/modules/     Out-of-tree study modules.
-shared/miscdriver/ Misc character driver.
-shared/pci/        QEMU EDU PCI driver.
-shared/_captures/  Flat generated capture files, prefixed by producer.
-vm/         QEMU disk images, overlays, and cloud-init seed files.
-linux/      Linux source tree.
-build/  Out-of-tree kernel build output.
-```
-
-## Workloads
-
-Build the compiled workloads once from the repository root:
-
-```bash
-make -C shared/_work
-```
-
-## Dependencies
-
-Install the kernel build tools, QEMU, cloud-image utilities, and `ccache` for
-faster rebuilds.
+Install the basic kernel/QEMU/eBPF tooling:
 
 ```bash
 sudo apt update
@@ -39,76 +14,97 @@ sudo apt install -y \
   cloud-image-utils ccache
 ```
 
-`linux/` is a Git submodule pointing at upstream Linux. Build output stays separate in `build/`.
+Fetch Linux and create the guest disk once:
 
 ```bash
 git submodule update --init --depth 1 linux
-mkdir -p build shared vm
+mkdir -p vm
+wget https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img -O vm/ubuntu-24.04.qcow2
+cloud-localds vm/seed.iso vm/user-data vm/meta-data
 ```
 
-Move the kernel forward by updating the submodule checkout:
+## Build and boot
 
-```bash
-cd linux
-git fetch --depth 1 origin master
-git checkout origin/master
-cd ..
-git add linux
-```
-
-## Configure And Build
+Build the kernel:
 
 ```bash
 ./build.sh
 ```
 
-## Rootfs
-
-Use an Ubuntu cloud image as the guest disk and create a seed ISO for cloud-init data.
-
-```bash
-wget https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img -O vm/ubuntu-24.04.qcow2
-cloud-localds vm/seed.iso vm/user-data vm/meta-data
-```
-
-## Boot
-
-`boot.sh` starts the custom kernel with a disposable overlay disk.
+Boot QEMU:
 
 ```bash
 ./boot.sh
 ```
 
-## Shared Folder
-
-The boot script exposes host `shared/` to the guest with the 9p mount tag `hostshare`.
-
-Inside QEMU:
+Inside QEMU, mount the host share:
 
 ```bash
 mkdir -p /mnt/host
 mount -t 9p -o trans=virtio,version=9p2000.L hostshare /mnt/host
 ```
 
-## Subsystem Studies
+If `/mnt/host` is already mounted, do not mount again.
 
-- [Tracing studies](shared/tracing/README.md)
-- [Memory state and trace observer](shared/mm/README.md)
-- [CFS eBPF tree visualizer](shared/ebpf/README.md)
-- [External kernel modules](shared/modules/README.md)
-- [Misc character driver](shared/miscdriver/README.md)
-- [QEMU EDU PCI driver](shared/pci/README.md)
+## Study folders
 
-## App
+Most study folders under `shared/` are self-contained:
 
-The static frontend visualizes captures under `shared/_captures/`. Start it from the repository root with `PORT=8001 ./run-app.sh` when port 8000 is busy, then open `http://localhost:8000/app/`.
+```text
+Makefile   build the observer/workload/module from the host
+run.sh     run the capture or smoke test from inside QEMU
+README.md  local notes for that specific experiment
+```
 
-## Quit QEMU
+So the normal pattern is:
+
+```bash
+make -C shared/<folder>
+```
+
+then inside QEMU:
+
+```bash
+/mnt/host/<folder>/run.sh
+```
+
+Captures are written under:
+
+```bash
+shared/_captures/
+```
+
+## Visual app
+
+Serve the static app from the repo root:
+
+```bash
+python3 -m http.server 8000
+```
+
+Open:
+
+```text
+http://localhost:8000/app/
+```
+
+Current tabs:
+
+```text
+SCHED       task lifecycle traces
+CFS         per-CPU CFS rb-tree snapshots
+MM          mm_struct, VMAs, page tables, page cache, anon_vma
+TASKS       task_struct/kapi capture view
+LAYOUT      address-layout reference view
+ALLOCATORS  allocator/kapi capture view
+```
+
+## QEMU controls
 
 With `-nographic`:
 
-| Action | Command |
+| Action | Key |
 |---|---|
 | Quit QEMU | `Ctrl-a`, then `x` |
-| Open QEMU monitor | `Ctrl-a`, then `c` |
+| Open monitor | `Ctrl-a`, then `c` |
 | Quit from monitor | `quit` |

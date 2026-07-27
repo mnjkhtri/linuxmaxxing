@@ -3,11 +3,11 @@ set -eu
 
 cd "$(dirname "$0")"
 
-MODULE=koops
-PREFIX=KOOPS_EVT
+MODULE=kapi
+PREFIX=KAPI_EVT
 CAPTURE_DIR=../_captures
-CAPTURE_FILE=$CAPTURE_DIR/modules-koops.txt
-MARKER=KOOPS_CAPTURE_BEGIN_$$_$(date +%s)
+CAPTURE_FILE=$CAPTURE_DIR/kapi.txt
+MARKER=LX_CAPTURE_BEGIN_$$_$(date +%s)
 loaded=no
 
 capture_records()

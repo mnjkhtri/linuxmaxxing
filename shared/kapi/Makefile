@@ -1,6 +1,6 @@
 KDIR ?= ../../build
 
-obj-m += koops.o
+obj-m += kapi.o
 
 .PHONY: all clean
 
