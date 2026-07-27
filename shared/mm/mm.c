@@ -13,6 +13,7 @@
 
 #define MAX_VMAS 16
 #define MAX_PAGES_PER_VMA 512
+#define MAX_CACHE_ORDERS 10
 #define WORKLOAD_PATH "/mnt/host/_work/build/exercise_memory_management"
 #define CAPTURE_DIR "/mnt/host/_captures"
 #define CAPTURE_PATH CAPTURE_DIR "/mm.ndjson"
@@ -26,8 +27,13 @@ struct vma_record
 	unsigned int struct_file;
 	unsigned long long mapping;
 	unsigned long long cache_pages;
-	unsigned int dirty_folios;
-	unsigned int writeback_folios;
+	unsigned int cache_folios;
+	unsigned int cache_clean_folios;
+	unsigned int cache_dirty_folios;
+	unsigned int cache_writeback_folios;
+	unsigned short cache_order_folios[MAX_CACHE_ORDERS];
+	unsigned short cache_order_dirty[MAX_CACHE_ORDERS];
+	unsigned short cache_order_writeback[MAX_CACHE_ORDERS];
 	unsigned long long inode;
 	unsigned int device;
 	char file_name[64];
@@ -241,6 +247,34 @@ static void print_page_targets(FILE *output, const struct vma_record *vma)
 	}
 }
 
+static void print_file_cache(FILE *output, const struct vma_record *vma)
+{
+	int first = 1;
+
+	fputc('{', output);
+	json_u32(output, &first, "folios", vma->cache_folios);
+	json_u32(output, &first, "clean_folios", vma->cache_clean_folios);
+	json_u32(output, &first, "dirty_folios", vma->cache_dirty_folios);
+	json_u32(output, &first, "writeback_folios", vma->cache_writeback_folios);
+	json_comma(output, &first);
+	fputs("\"order_buckets\":[", output);
+	for (unsigned int order = 0; order < MAX_CACHE_ORDERS; order++)
+	{
+		int bucket_first = 1;
+		if (order)
+			fputc(',', output);
+		fputc('{', output);
+		json_u32(output, &bucket_first, "order", order);
+		json_u32(output, &bucket_first, "pages_per_folio", 1U << order);
+		json_u32(output, &bucket_first, "folios", vma->cache_order_folios[order]);
+		json_u32(output, &bucket_first, "dirty", vma->cache_order_dirty[order]);
+		json_u32(output, &bucket_first, "writeback", vma->cache_order_writeback[order]);
+		fputc('}', output);
+	}
+	fputc(']', output);
+	fputc('}', output);
+}
+
 static void print_page_table(FILE *output, const struct vma_record *vma)
 {
 	unsigned int present_pages = 0;
@@ -300,8 +334,9 @@ static void print_vma(FILE *output, const struct vma_record *vma)
 	json_u64(output, &first, "inode", vma->inode);
 	json_hex(output, &first, "mapping", vma->mapping);
 	json_u64(output, &first, "cache_pages", vma->cache_pages);
-	json_u32(output, &first, "dirty_folios", vma->dirty_folios);
-	json_u32(output, &first, "writeback_folios", vma->writeback_folios);
+	json_comma(output, &first);
+	fputs("\"file_cache\":", output);
+	print_file_cache(output, vma);
 	json_string(output, &first, "file_name", vma->file_name);
 	json_comma(output, &first);
 	fputs("\"page_table\":", output);

@@ -7,6 +7,11 @@ char LICENSE[] SEC("license") = "GPL";
 
 #define MAX_VMAS 16
 #define MAX_PAGES_PER_VMA 512
+#define XA_CHUNK_MASK 0x3fULL
+#define XA_CHUNK_SIZE 64
+#define MAX_XARRAY_SCAN_SLOTS (XA_CHUNK_SIZE * XA_CHUNK_SIZE)
+#define MAX_XARRAY_DEPTH 4
+#define MAX_CACHE_ORDERS 10
 #define PAGE_SHIFT 12
 #define PAGE_SIZE (1ULL << PAGE_SHIFT)
 #define PMD_SHIFT 21
@@ -34,10 +39,16 @@ struct vma_record
 
     u32 struct_file; /* Whether vm_file exists; separates file-backed from anon/special VMAs. */
 
-    u64 mapping;          /* struct address_space pointer; target object for page-cache arrows. */
-    u64 cache_pages;      /* address_space->nrpages; shows how much of the file is cached. */
-    u32 dirty_folios;     /* Dirty xarray-tag count; highlights cached folios needing writeback. */
-    u32 writeback_folios; /* Writeback xarray-tag count; shows folios currently under writeback. */
+    u64 mapping;     /* struct address_space pointer; target object for page-cache arrows. */
+    u64 cache_pages; /* address_space->nrpages: total cached PAGE_SIZE units for the whole file. */
+
+    u32 cache_folios;                            /* Folios found in address_space->i_pages. */
+    u32 cache_clean_folios;                      /* Folios with neither PG_dirty nor PG_writeback. */
+    u32 cache_dirty_folios;                      /* Folios with PG_dirty set. */
+    u32 cache_writeback_folios;                  /* Folios with PG_writeback set. */
+    u16 cache_order_folios[MAX_CACHE_ORDERS];    /* Folio count per order; pages per folio = 1 << order. */
+    u16 cache_order_dirty[MAX_CACHE_ORDERS];     /* Dirty folios per order. */
+    u16 cache_order_writeback[MAX_CACHE_ORDERS]; /* Writeback folios per order. */
 
     u64 inode;  /* Backing inode number; groups file VMAs that point to the same file. */
     u32 device; /* Superblock device id; disambiguates equal inode numbers. */
@@ -109,11 +120,7 @@ static __always_inline u64 read_u64(u64 address)
     return value;
 }
 
-static __always_inline u32 count_bits(u64 value)
-{
-    return __builtin_popcountll(value);
-}
-
+#include "mm_xarray_walk.bpf.h"
 #include "mm_page_walk.bpf.h"
 
 SEC("uretprobe")
@@ -179,43 +186,11 @@ int snapshot_phase_return(struct pt_regs *context)
             {
                 record->mapping = (u64)mapping;
                 record->cache_pages = BPF_CORE_READ(mapping, nrpages);
-
-                record->dirty_folios = 0;
-                record->writeback_folios = 0;
-
-                u64 head = (u64)BPF_CORE_READ(mapping, i_pages.xa_head);
-                if (head && (head & 3) == 2)
-                {
-                    struct xa_node *root = (struct xa_node *)(head - 2);
-                    u32 root_shift = BPF_CORE_READ(root, shift);
-
-                    if (root_shift == 0 || root_shift == 6)
-                    {
-                        record->dirty_folios = count_bits(BPF_CORE_READ(root, tags[0]));
-                        record->writeback_folios = count_bits(BPF_CORE_READ(root, tags[1]));
-                    }
-                    else if (root_shift == 12)
-                    {
-#pragma unroll
-                        for (int slot = 0; slot < 64; slot++)
-                        {
-                            u64 child_entry = (u64)BPF_CORE_READ(root, slots[slot]);
-                            if (!child_entry || (child_entry & 3) != 2)
-                                continue;
-
-                            struct xa_node *child = (struct xa_node *)(child_entry - 2);
-                            record->dirty_folios += count_bits(BPF_CORE_READ(child, tags[0]));
-                            record->writeback_folios += count_bits(BPF_CORE_READ(child, tags[1]));
-                        }
-                    }
-                }
             }
             else
             {
                 record->mapping = 0;
                 record->cache_pages = 0;
-                record->dirty_folios = 0;
-                record->writeback_folios = 0;
             }
 
             struct inode *inode = BPF_CORE_READ(file, f_inode);
@@ -245,9 +220,41 @@ int snapshot_phase_return(struct pt_regs *context)
             record->device = 0;
             record->mapping = 0;
             record->cache_pages = 0;
-            record->dirty_folios = 0;
-            record->writeback_folios = 0;
             record->file_name[0] = 0;
+        }
+
+        record->cache_folios = 0;
+        record->cache_clean_folios = 0;
+        record->cache_dirty_folios = 0;
+        record->cache_writeback_folios = 0;
+#pragma unroll
+        for (u32 order = 0; order < MAX_CACHE_ORDERS; order++)
+        {
+            record->cache_order_folios[order] = 0;
+            record->cache_order_dirty[order] = 0;
+            record->cache_order_writeback[order] = 0;
+        }
+
+        if (file && record->mapping)
+        {
+            u8 mapping_seen = 0;
+#pragma unroll
+            for (u32 previous = 0; previous < MAX_VMAS; previous++)
+            {
+                if (previous >= event->vma_count)
+                    break;
+                if (event->vmas[previous].mapping == record->mapping)
+                    mapping_seen = 1;
+            }
+
+            if (!mapping_seen)
+            {
+                struct cache_walk cache = {
+                    .mapping = (struct address_space *)record->mapping,
+                    .vma_index = event->vma_count,
+                };
+                bpf_loop(MAX_XARRAY_SCAN_SLOTS, walk_xarray, &cache, 0);
+            }
         }
 
         struct pt_walk walk = {

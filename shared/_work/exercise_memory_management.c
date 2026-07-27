@@ -40,6 +40,12 @@
 #define SHARED_ANON_HALF_LENGTH (SHARED_ANON_LENGTH / 2)
 #define FILE_LENGTH (2 * MiB)
 #define FILE_HALF_LENGTH (FILE_LENGTH / 2)
+#define FILE_COLD_READS_PER_PAGE 8
+#define FILE_THP_LENGTH (16 * MiB)
+#define FILE_THP_READS_PER_PAGE 8
+#define MM_PT_SAMPLE_PAGES 512
+#define MM_XARRAY_SCAN_SLOTS 4096
+#define MM_HUGE_PMD_PAGES 512
 #define THP_LENGTH (2 * MiB)
 #define THP_ALIGNMENT (2 * MiB)
 #define THP_MAPPING_LENGTH (THP_LENGTH + THP_ALIGNMENT)
@@ -66,6 +72,13 @@ __attribute__((noinline, used, visibility("default"))) void phase(const char *na
 		phase_boundary();
 	}
 	active_phase = name;
+}
+
+static void print_mm_constraints(void)
+{
+	printf("{\"type\":\"mm_constraints\",\"pt_sample_pages\":%u,\"xarray_scan_slots\":%u,\"huge_pmd_pages\":%u}\n",
+	       MM_PT_SAMPLE_PAGES, MM_XARRAY_SCAN_SLOTS, MM_HUGE_PMD_PAGES);
+	fflush(stdout);
 }
 
 static size_t kb_count(size_t bytes)
@@ -163,9 +176,10 @@ static int exercise_file_backed_memory(size_t page_size, volatile unsigned long 
 		return -1;
 	}
 
-	/* Cold reads connect the VMA to page-cache folios and install file PTEs. */
-	PHASE("file shared: cold reads populated page cache and read-only PTEs across %zu KB", kb_count(FILE_LENGTH));
-	for (size_t i = 0; i < FILE_LENGTH; i += page_size)
+	/* Dense forward reads give readahead a real stream instead of one sparse touch per page. */
+	size_t cold_stride = page_size / FILE_COLD_READS_PER_PAGE;
+	PHASE("file shared: cold sequential reads populated page cache using %zu touches per page", (size_t)FILE_COLD_READS_PER_PAGE);
+	for (size_t i = 0; i < FILE_LENGTH; i += cold_stride)
 		*checksum += cold[i];
 
 	/* Dropping PTEs while retaining cache produces warm minor refaults. */
@@ -544,7 +558,7 @@ static int exercise_shared_anonymous_memory(size_t page_size, volatile unsigned 
 }
 
 /* Keep THP independent so it cannot obscure the base-page exercises above. */
-static int exercise_transparent_huge_pages(size_t page_size)
+static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned long *checksum)
 {
 	/* Reserve padding, keep only the aligned 2 MiB VMA, and discard the padding. */
 	PHASE("transparent huge pages: mmap kept one aligned %zu KB THP-sized VMA", kb_count(THP_LENGTH));
@@ -621,10 +635,71 @@ static int exercise_transparent_huge_pages(size_t page_size)
 		return -1;
 	}
 
-	/* Tear down the aligned THP-sized VMA. */
-	PHASE("transparent huge pages: munmap removed the aligned %zu KB THP VMA", kb_count(THP_LENGTH));
+	/* Tear down the aligned anonymous THP-sized VMA. */
+	PHASE("transparent huge pages: munmap removed the aligned %zu KB anonymous THP VMA", kb_count(THP_LENGTH));
 	munmap(thp, THP_LENGTH);
-	return 0;
+
+	char path[] = "/var/tmp/koops-mm-large-XXXXXX";
+
+	/* Prepare a real file for file-backed THP faults in the same THP section. */
+	PHASE("transparent huge pages: prepared a %zu KB file for file-backed THP faults", kb_count(FILE_THP_LENGTH));
+	int fd = mkstemp(path);
+	if (fd < 0)
+	{
+		perror("mkstemp(file THP)");
+		return -1;
+	}
+
+	if (ftruncate(fd, FILE_THP_LENGTH) != 0)
+	{
+		perror("ftruncate(file THP)");
+		close(fd);
+		unlink(path);
+		return -1;
+	}
+	for (size_t i = 0; i < FILE_THP_LENGTH; i += page_size)
+	{
+		unsigned char value = (unsigned char)(0xc0 ^ (i / page_size));
+		if (pwrite(fd, &value, 1, (off_t)i) != 1)
+		{
+			perror("pwrite(file THP)");
+			close(fd);
+			unlink(path);
+			return -1;
+		}
+	}
+
+	int result = 0;
+	if (fsync(fd) != 0 || posix_fadvise(fd, 0, FILE_THP_LENGTH, POSIX_FADV_DONTNEED) != 0)
+		result = -1;
+	unlink(path);
+
+	/* Map the file, mark it hugepage-friendly, then let faults install file THPs. */
+	PHASE("transparent huge pages: file THP mapped a %zu KB read-only MAP_SHARED VMA and requested huge faults", kb_count(FILE_THP_LENGTH));
+	unsigned char *file_thp = mmap(NULL, FILE_THP_LENGTH, PROT_READ, MAP_SHARED, fd, 0);
+	if (file_thp == MAP_FAILED)
+	{
+		perror("mmap(file THP)");
+		close(fd);
+		return -1;
+	}
+	if (madvise(file_thp, FILE_THP_LENGTH, MADV_HUGEPAGE) != 0)
+	{
+		perror("madvise(file THP)");
+		result = -1;
+	}
+
+	/* One snapshot captures PMD-sized file-cache folios plus sampled huge-PMD page-table state. */
+	size_t stride = page_size / FILE_THP_READS_PER_PAGE;
+	PHASE("transparent huge pages: file THP faults populated PMD-sized file-cache folios");
+	for (size_t i = 0; i < FILE_THP_LENGTH; i += stride)
+		*checksum += file_thp[i];
+
+	/* Remove the file-backed THP VMA. */
+	PHASE("transparent huge pages: file THP munmap removed the 16 MiB file VMA");
+	munmap(file_thp, FILE_THP_LENGTH);
+	close(fd);
+	return result;
 }
 
 int main(void)
@@ -637,13 +712,15 @@ int main(void)
 	}
 	size_t page_size = (size_t)configured_page_size;
 
+	print_mm_constraints();
+
 	volatile unsigned long checksum = 0;
 	int result = exercise_file_backed_memory(page_size, &checksum);
 	if (exercise_private_anonymous_memory(page_size, &checksum) != 0)
 		result = -1;
 	if (exercise_shared_anonymous_memory(page_size, &checksum) != 0)
 		result = -1;
-	if (exercise_transparent_huge_pages(page_size) != 0)
+	if (exercise_transparent_huge_pages(page_size, &checksum) != 0)
 		result = -1;
 
 	/* Final boundary lets the observer capture the fully cleaned-up address space. */
