@@ -12,6 +12,7 @@ sudo apt install -y \
   cloud-image-utils ccache
 
 git submodule update --init --depth 1 linux
+git -C linux branch --unset-upstream master 2>/dev/null || true
 mkdir -p vm
 wget https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img -O vm/ubuntu-24.04.qcow2
 cloud-localds vm/seed.iso vm/user-data vm/meta-data

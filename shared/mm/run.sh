@@ -76,9 +76,8 @@ enable_event()
 
 mkdir -p /mnt/host/_captures
 capture_file=/mnt/host/_captures/mm.ndjson
-observer_log=/mnt/host/_captures/mm-observer.log
 : > "$capture_file"
-: > "$observer_log"
+observer_output=$(mktemp /tmp/mm-run.XXXXXX)
 workload_file=$(mktemp /tmp/mm-workload.XXXXXX)
 observer_pid=
 observer_status=0
@@ -95,10 +94,10 @@ stop_observer()
 cleanup()
 {
 	stop_observer
-	rm -f "$workload_file"
+	rm -f "$workload_file" "$observer_output"
 }
 
-/mnt/host/mm/build/mm 2> "$observer_log" &
+/mnt/host/mm/build/mm 2> "$observer_output" &
 observer_pid=$!
 trap cleanup EXIT INT TERM
 
@@ -107,14 +106,14 @@ trap cleanup EXIT INT TERM
 # that the phase-boundary uprobe is attached and the ring buffer is being polled.
 observer_ready=0
 for _ in $(seq 1 100); do
-	if grep -q "capturing phase-boundary VMA snapshots" "$observer_log"; then
+	if grep -q "capturing phase-boundary VMA snapshots" "$observer_output"; then
 		observer_ready=1
 		break
 	fi
 	if ! kill -0 "$observer_pid" 2>/dev/null; then
 		stop_observer
 		echo "mm eBPF observer failed before workload start" >&2
-		cat "$observer_log" >&2
+		cat "$observer_output" >&2
 		exit "${observer_status:-1}"
 	fi
 	sleep 0.1
@@ -122,7 +121,7 @@ done
 if ((observer_ready == 0)); then
 	stop_observer
 	echo "mm eBPF observer did not become ready before workload start" >&2
-	cat "$observer_log" >&2
+	cat "$observer_output" >&2
 	exit 1
 fi
 
@@ -169,11 +168,11 @@ for phase in phases:
         print('mm trace: MISSING snapshot for phase: {name}'.format(name=phase.get('name', '<unnamed>')))
 PY
 if ! grep -q "\"type\":\"mm_snapshot\"" "$capture_file"; then
-	echo "mm eBPF observer produced no mm_snapshot records; see $observer_log" >&2
-	cat "$observer_log" >&2
+	echo "mm eBPF observer produced no mm_snapshot records" >&2
+	cat "$observer_output" >&2
 	exit 1
 fi
-rm -f "$workload_file"
+rm -f "$workload_file" "$observer_output"
 trap - EXIT INT TERM
 echo 0 > tracing_on
 echo 0 > events/enable
