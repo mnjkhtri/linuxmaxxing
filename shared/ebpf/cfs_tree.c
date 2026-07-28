@@ -24,6 +24,7 @@ struct context_event
 	unsigned int cpu;
 	unsigned long long cfs_rq;
 	unsigned long long se;
+	unsigned long long run_node;
 	unsigned long long leftmost;
 	unsigned int node_count;
 	unsigned int truncated;
@@ -114,6 +115,7 @@ static int handle_event(void *ctx, void *data, size_t len)
 	json_u32(&first, "cpu", event->cpu);
 	json_hex(&first, "cfs_rq", event->cfs_rq);
 	json_hex(&first, "se", event->se);
+	json_hex(&first, "run_node", event->run_node);
 	json_hex(&first, "leftmost", event->leftmost);
 	json_u32(&first, "valid_nodes", event->node_count);
 	json_u32(&first, "truncated", event->truncated);

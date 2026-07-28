@@ -24,6 +24,7 @@ struct context_event
 	u32 cpu;
 	u64 cfs_rq;
 	u64 se;
+	u64 run_node;
 	u64 leftmost;
 	u32 node_count;
 	u32 truncated;
@@ -164,6 +165,7 @@ int BPF_KRETPROBE(kretprobe_enqueue_entity)
 	event->cpu = BPF_CORE_READ(cfs_rq, rq, cpu);
 	event->cfs_rq = (u64)cfs_rq;
 	event->se = (u64)args->se;
+	event->run_node = (u64)((char *)args->se + bpf_core_field_offset(struct sched_entity, run_node));
 	event->leftmost = (u64)BPF_CORE_READ(cfs_rq, tasks_timeline.rb_leftmost);
 	event->node_count = 0;
 	event->truncated = 0;
