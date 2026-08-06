@@ -46,15 +46,21 @@ struct vma_record
     u32 device;         /* Superblock device id; disambiguates equal inode numbers. */
     char file_name[64]; /* Dentry name displayed inside file-backed VMA and address_space cards. */
 
-    u64 mapping;                                 /* struct address_space pointer; target object for page-cache arrows. */
-    u64 cache_pages;                             /* address_space->nrpages: total cached PAGE_SIZE units for the whole file. */
-    u32 cache_folios;                            /* Folios found in address_space->i_pages. */
-    u32 cache_clean_folios;                      /* Folios with neither PG_dirty nor PG_writeback. */
-    u32 cache_dirty_folios;                      /* Folios with PG_dirty set. */
-    u32 cache_writeback_folios;                  /* Folios with PG_writeback set. */
-    u16 cache_order_folios[MAX_CACHE_ORDERS];    /* Folio count per order; pages per folio = 1 << order. */
-    u16 cache_order_dirty[MAX_CACHE_ORDERS];     /* Dirty folios per order. */
-    u16 cache_order_writeback[MAX_CACHE_ORDERS]; /* Writeback folios per order. */
+    u64 mapping;     /* struct address_space pointer; target object for page-cache arrows. */
+    u64 cache_pages; /* address_space->nrpages: total cached PAGE_SIZE units for the whole file. */
+
+    u32 cache_folios;                         /* Folios found in address_space->i_pages. */
+    u16 cache_order_folios[MAX_CACHE_ORDERS]; /* Folio count per order; pages per folio = 1 << order. */
+    u16 cache_order_dirty[MAX_CACHE_ORDERS];  /* Dirty folios per order. */
+
+    u32 cache_clean_folios;       /* Folios with neither PG_dirty nor PG_writeback. */
+    u32 cache_dirty_folios;       /* Folios with PG_dirty set. */
+    u32 cache_writeback_folios;   /* Folios with PG_writeback set. */
+    u32 cache_lru_folios;         /* Folios with PG_lru set. */
+    u32 cache_active_folios;      /* Folios with PG_active set. */
+    u32 cache_referenced_folios;  /* Folios with PG_referenced set. */
+    u32 cache_workingset_folios;  /* Folios with PG_workingset set. */
+    u32 cache_unevictable_folios; /* Folios with PG_unevictable set. */
 
     u32 pt_scanned_pages;              /* Number of valid entries in pt_states/pt_targets. */
     u8 pt_states[MAX_PAGES_PER_VMA];   /* Per-page state: none, PTE, swap, or huge mapping. */
@@ -221,12 +227,16 @@ int snapshot_phase_return(struct pt_regs *context)
             record->cache_clean_folios = 0;
             record->cache_dirty_folios = 0;
             record->cache_writeback_folios = 0;
+            record->cache_lru_folios = 0;
+            record->cache_active_folios = 0;
+            record->cache_referenced_folios = 0;
+            record->cache_workingset_folios = 0;
+            record->cache_unevictable_folios = 0;
 #pragma unroll
             for (u32 order = 0; order < MAX_CACHE_ORDERS; order++)
             {
                 record->cache_order_folios[order] = 0;
                 record->cache_order_dirty[order] = 0;
-                record->cache_order_writeback[order] = 0;
             }
 
             if (mapping)
@@ -265,12 +275,16 @@ int snapshot_phase_return(struct pt_regs *context)
             record->cache_clean_folios = 0;
             record->cache_dirty_folios = 0;
             record->cache_writeback_folios = 0;
+            record->cache_lru_folios = 0;
+            record->cache_active_folios = 0;
+            record->cache_referenced_folios = 0;
+            record->cache_workingset_folios = 0;
+            record->cache_unevictable_folios = 0;
 #pragma unroll
             for (u32 order = 0; order < MAX_CACHE_ORDERS; order++)
             {
                 record->cache_order_folios[order] = 0;
                 record->cache_order_dirty[order] = 0;
-                record->cache_order_writeback[order] = 0;
             }
         }
 

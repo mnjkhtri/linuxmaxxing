@@ -37,9 +37,13 @@ struct vma_record
 	unsigned int cache_clean_folios;
 	unsigned int cache_dirty_folios;
 	unsigned int cache_writeback_folios;
+	unsigned int cache_lru_folios;
+	unsigned int cache_active_folios;
+	unsigned int cache_referenced_folios;
+	unsigned int cache_workingset_folios;
+	unsigned int cache_unevictable_folios;
 	unsigned short cache_order_folios[MAX_CACHE_ORDERS];
 	unsigned short cache_order_dirty[MAX_CACHE_ORDERS];
-	unsigned short cache_order_writeback[MAX_CACHE_ORDERS];
 	unsigned int pt_scanned_pages;
 	unsigned char pt_states[MAX_PAGES_PER_VMA];
 	unsigned short pt_targets[MAX_PAGES_PER_VMA];
@@ -259,6 +263,11 @@ static void print_file_cache(FILE *output, const struct vma_record *vma)
 	json_u32(output, &first, "clean_folios", vma->cache_clean_folios);
 	json_u32(output, &first, "dirty_folios", vma->cache_dirty_folios);
 	json_u32(output, &first, "writeback_folios", vma->cache_writeback_folios);
+	json_u32(output, &first, "lru_folios", vma->cache_lru_folios);
+	json_u32(output, &first, "active_folios", vma->cache_active_folios);
+	json_u32(output, &first, "referenced_folios", vma->cache_referenced_folios);
+	json_u32(output, &first, "workingset_folios", vma->cache_workingset_folios);
+	json_u32(output, &first, "unevictable_folios", vma->cache_unevictable_folios);
 	json_comma(output, &first);
 	fputs("\"order_buckets\":[", output);
 	for (unsigned int order = 0; order < MAX_CACHE_ORDERS; order++)
@@ -271,7 +280,6 @@ static void print_file_cache(FILE *output, const struct vma_record *vma)
 		json_u32(output, &bucket_first, "pages_per_folio", 1U << order);
 		json_u32(output, &bucket_first, "folios", vma->cache_order_folios[order]);
 		json_u32(output, &bucket_first, "dirty", vma->cache_order_dirty[order]);
-		json_u32(output, &bucket_first, "writeback", vma->cache_order_writeback[order]);
 		fputc('}', output);
 	}
 	fputc(']', output);

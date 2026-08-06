@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# boot.sh attaches a dedicated swap disk as /dev/vdb. Activate it here as a
-# fallback in case the guest's systemd version ignores systemd.swap-extra=.
 if ! awk 'NR > 1 { found = 1 } END { exit !found }' /proc/swaps; then
 	if [[ ! -b /dev/vdb ]]; then
 		echo "mm trace: /dev/vdb swap disk is missing; boot the guest with boot.sh" >&2
@@ -21,14 +19,18 @@ cat /proc/swaps
 
 cd /sys/kernel/tracing
 echo 0 > tracing_on
-# tracefs allocates this much ring-buffer space per CPU.
-# echo 65536 > buffer_size_kb
+# tracefs allocates this much ring-buffer space per CPU; kmem/page events are noisy.
+if [[ -w buffer_size_kb ]]; then
+	echo 65536 > buffer_size_kb || true
+	echo "mm trace: tracefs buffer_size_kb=$(cat buffer_size_kb) per CPU" >&2
+fi
 echo 0 > events/enable
 echo > set_event
 echo > trace
+if [[ -w trace_clock ]]; then
+	echo mono > trace_clock || true
+fi
 
-# Keep the script portable across kernel configurations. Optional tracepoints
-# are skipped rather than aborting the entire capture.
 enable_event()
 {
 	local event=$1
@@ -41,42 +43,115 @@ enable_event()
 	fi
 }
 
-# Virtual address selection, faults, and address-space teardown.
-# enable_event mmap/vm_unmapped_area
-# enable_event mmap/exit_mmap
-# enable_event exceptions/page_fault_user
+# process VAS:
+enable_event mmap/vm_unmapped_area
+enable_event mmap/exit_mmap
+enable_event exceptions/page_fault_user
+enable_event mmap_lock/mmap_lock_released
+enable_event tlb/tlb_flush
 
-# File-backed faults, page-cache lookup, residency, writeback, and eviction.
-# enable_event filemap/mm_filemap_fault
-# enable_event filemap/mm_filemap_get_pages
-# enable_event filemap/mm_filemap_map_pages
-# enable_event filemap/mm_filemap_add_to_page_cache
-# enable_event filemap/mm_filemap_delete_from_page_cache
-# enable_event writeback/writeback_dirty_folio
-# enable_event writeback/writeback_start
-# enable_event writeback/wbc_writepage
-# enable_event writeback/writeback_pages_written
-# enable_event writeback/writeback_single_inode_start
-# enable_event writeback/writeback_single_inode
+# page cache: faults
+enable_event filemap/mm_filemap_fault
+enable_event filemap/mm_filemap_get_pages
+enable_event filemap/mm_filemap_map_pages
+enable_event filemap/mm_filemap_add_to_page_cache
+enable_event filemap/mm_filemap_delete_from_page_cache
 
-# # kmem accounting plus SLUB and kmalloc object lifetimes.
-# enable_event kmem/rss_stat
-# enable_event kmem/kmem_cache_alloc
-# enable_event kmem/kmem_cache_free
-# enable_event kmem/kmalloc
-# enable_event kmem/kfree
+# page cache: writeback
+enable_event writeback/writeback_dirty_folio
+enable_event writeback/writeback_start
+enable_event writeback/wbc_writepage
+enable_event writeback/writeback_pages_written
+enable_event writeback/writeback_single_inode_start
+enable_event writeback/writeback_single_inode
 
-# # Page allocation, PCP movement, buddy fallback, and fragmentation.
-# enable_event kmem/mm_page_alloc
-# enable_event kmem/mm_page_alloc_zone_locked
-# enable_event kmem/mm_page_alloc_extfrag
-# enable_event kmem/mm_page_pcpu_drain
-# enable_event kmem/mm_page_free
-# enable_event kmem/mm_page_free_batched
+# swap: no swap tracepoints
+
+# lru lifecycle:
+enable_event pagemap/mm_lru_insertion
+enable_event pagemap/mm_lru_activate
+
+# Buddy:
+enable_event kmem/rss_stat
+enable_event kmem/mm_page_alloc
+enable_event kmem/mm_setup_per_zone_wmarks
+enable_event kmem/mm_page_alloc_zone_locked
+enable_event kmem/mm_page_alloc_extfrag
+enable_event kmem/mm_page_free
+enable_event kmem/mm_page_free_batched
+enable_event kmem/mm_page_pcpu_drain
+
+# SLUB/kmalloc:
+enable_event kmem/kmem_cache_alloc
+enable_event kmem/kmem_cache_free
+enable_event kmem/kmalloc
+enable_event kmem/kfree
+
+# THP/khugepaged:
+enable_event huge_memory/mm_khugepaged_scan_pmd
+enable_event huge_memory/mm_collapse_huge_page_isolate
+enable_event huge_memory/mm_collapse_huge_page_swapin
+enable_event huge_memory/mm_collapse_huge_page
+enable_event huge_memory/mm_khugepaged_scan_file
+enable_event huge_memory/mm_khugepaged_collapse_file
+enable_event huge_memory/mm_khugepaged_scan
+
+# reclaim:
+enable_event vmscan/mm_vmscan_direct_reclaim_begin
+enable_event vmscan/mm_vmscan_direct_reclaim_end
+enable_event vmscan/mm_vmscan_wakeup_kswapd
+enable_event vmscan/mm_vmscan_kswapd_wake
+enable_event vmscan/mm_vmscan_kswapd_sleep
+enable_event vmscan/mm_vmscan_balance_pgdat_begin
+enable_event vmscan/mm_vmscan_balance_pgdat_end
+enable_event vmscan/mm_vmscan_lru_isolate
+enable_event vmscan/mm_vmscan_lru_shrink_active
+enable_event vmscan/mm_vmscan_lru_shrink_inactive
+enable_event vmscan/mm_vmscan_write_folio
+enable_event vmscan/mm_vmscan_reclaim_pages
+
+# shrinkers:
+enable_event vmscan/mm_shrink_slab_start
+enable_event vmscan/mm_shrink_slab_end
+
+# NUMA migration:
+enable_event migrate/mm_migrate_pages_start
+enable_event migrate/mm_migrate_pages
+
+# compaction:
+enable_event compaction/mm_compaction_begin
+enable_event compaction/mm_compaction_isolate_migratepages
+enable_event compaction/mm_compaction_isolate_freepages
+enable_event compaction/mm_compaction_migratepages
+enable_event compaction/mm_compaction_end
+enable_event compaction/mm_compaction_wakeup_kcompactd
+enable_event compaction/mm_compaction_kcompactd_wake
+enable_event compaction/mm_compaction_kcompactd_sleep
+enable_event compaction/mm_compaction_deferred
+enable_event compaction/mm_compaction_defer_compaction
+enable_event compaction/mm_compaction_defer_reset
+
+# OOM:
+enable_event oom/reclaim_retry_zone
+enable_event oom/compact_retry
+enable_event oom/mark_victim
+enable_event oom/wake_reaper
+enable_event oom/start_task_reaping
+enable_event oom/finish_task_reaping
+enable_event oom/skip_task_reaping
+
+# percpu allocator:
+enable_event percpu/percpu_alloc_percpu
+enable_event percpu/percpu_alloc_percpu_fail
+enable_event percpu/percpu_free_percpu
+enable_event percpu/percpu_create_chunk
+enable_event percpu/percpu_destroy_chunk
 
 mkdir -p /mnt/host/_captures
 capture_file=/mnt/host/_captures/mm.ndjson
+trace_file=/mnt/host/_captures/mm-trace.txt
 : > "$capture_file"
+: > "$trace_file"
 observer_output=$(mktemp /tmp/mm-run.XXXXXX)
 workload_file=$(mktemp /tmp/mm-workload.XXXXXX)
 observer_pid=
@@ -101,9 +176,6 @@ cleanup()
 observer_pid=$!
 trap cleanup EXIT INT TERM
 
-# The observer process being alive is not enough; BPF loading and uprobe attach
-# can take longer under QEMU. Start the workload only after the observer reports
-# that the phase-boundary uprobe is attached and the ring buffer is being polled.
 observer_ready=0
 for _ in $(seq 1 100); do
 	if grep -q "capturing phase-boundary VMA snapshots" "$observer_output"; then
@@ -172,9 +244,10 @@ if ! grep -q "\"type\":\"mm_snapshot\"" "$capture_file"; then
 	cat "$observer_output" >&2
 	exit 1
 fi
+echo 0 > tracing_on
+cat trace > "$trace_file"
 rm -f "$workload_file" "$observer_output"
 trap - EXIT INT TERM
-echo 0 > tracing_on
 echo 0 > events/enable
 echo > trace
 if ((workload_status != 0)); then

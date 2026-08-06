@@ -5,9 +5,8 @@
 /*
  * Best-effort bounded XArray slot scan for page-cache accounting.
  *
- * nrpages says how many base pages are cached, but it does not tell us how
- * those pages are grouped into folios.  This scans XArray slots directly for
- * the small exercise mappings instead of assuming file indices are dense.
+ * nrpages says how many base pages are cached, but it does not tell us how * those pages are grouped into folios.
+ * This scans XArray slots directly for the small exercise mappings instead of assuming file indices are dense.
  */
 
 static __always_inline bool xa_is_internal_entry(u64 entry)
@@ -41,6 +40,11 @@ static __always_inline void count_cache_folio(struct mm_snapshot *event, u32 vma
     u64 flags = BPF_CORE_READ(folio, flags.f);
     u8 dirty = !!(flags & (1ULL << PG_dirty));
     u8 writeback = !!(flags & (1ULL << PG_writeback));
+    u8 lru = !!(flags & (1ULL << PG_lru));
+    u8 active = !!(flags & (1ULL << PG_active));
+    u8 referenced = !!(flags & (1ULL << PG_referenced));
+    u8 workingset = !!(flags & (1ULL << PG_workingset));
+    u8 unevictable = !!(flags & (1ULL << PG_unevictable));
     u8 order = 0;
 
     if (flags & (1ULL << PG_head))
@@ -48,7 +52,6 @@ static __always_inline void count_cache_folio(struct mm_snapshot *event, u32 vma
     if (order > MAX_CACHE_ORDERS - 1)
         order = MAX_CACHE_ORDERS - 1;
 
-    u32 folio_pages = 1U << order;
     struct vma_record *record = &event->vmas[vma_index];
 
     record->cache_folios++;
@@ -62,12 +65,22 @@ static __always_inline void count_cache_folio(struct mm_snapshot *event, u32 vma
     if (writeback)
     {
         record->cache_writeback_folios++;
-        record->cache_order_writeback[order]++;
     }
     if (!dirty && !writeback)
     {
         record->cache_clean_folios++;
     }
+
+    if (lru)
+        record->cache_lru_folios++;
+    if (active)
+        record->cache_active_folios++;
+    if (referenced)
+        record->cache_referenced_folios++;
+    if (workingset)
+        record->cache_workingset_folios++;
+    if (unevictable)
+        record->cache_unevictable_folios++;
 }
 
 static long walk_xarray(u32 slot, void *data)
