@@ -17,3 +17,4 @@ shared/mm/vmlinux.h
 shared/mm/*.skel.h
 shared/mm/vma_snapshot
 vm/*.raw
+shared/virt/cloudlab
