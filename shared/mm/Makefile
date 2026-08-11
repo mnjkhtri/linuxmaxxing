@@ -25,7 +25,7 @@ $(BUILD_DIR):
 $(VMLINUX): | $(BUILD_DIR)
 	$(BPFTOOL) btf dump file $(KERNEL_BUILD)/vmlinux format c > $@
 
-$(BPF_OBJ): $(BPF_SRC) $(VMLINUX) | $(BUILD_DIR)
+$(BPF_OBJ): $(BPF_SRC) $(DIR)mm_page_walk.bpf.h $(DIR)mm_xarray_walk.bpf.h $(VMLINUX) | $(BUILD_DIR)
 	$(CLANG) -g -O2 -target bpf -D__TARGET_ARCH_x86 -I$(BUILD_DIR) -c $< -o $@
 
 $(SKEL): $(BPF_OBJ) | $(BUILD_DIR)

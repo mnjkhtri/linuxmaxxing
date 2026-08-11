@@ -22,10 +22,11 @@ struct pt_walk
 
 enum pt_page_state
 {
-    PT_PAGE_NONE, /* VMA exists, but this virtual page has no page-table entry. */
-    PT_PAGE_PTE,  /* Present base-page PTE points at a physical page. */
-    PT_PAGE_SWAP, /* Non-present entry carries swap metadata. */
-    PT_PAGE_THP   /* Huge PMD/PUD maps this page-sized slot. */
+    PT_PAGE_NONE,     /* VMA exists, but this virtual page has no page-table entry. */
+    PT_PAGE_PTE,      /* Present base-page PTE points at a physical page. */
+    PT_PAGE_SWAP,     /* Non-present entry carries swap metadata. */
+    PT_PAGE_HUGE_PMD, /* PMD is the leaf for a 2 MiB mapping; this is the practical THP case. */
+    PT_PAGE_HUGE_PUD  /* PUD is the leaf for a valid but less common 1 GiB mapping. */
 };
 
 static __always_inline u64 next_table(u64 entry, u64 page_offset_base)
@@ -34,13 +35,15 @@ static __always_inline u64 next_table(u64 entry, u64 page_offset_base)
     return (entry & PTE_ADDRESS_MASK) + page_offset_base;
 }
 
-static __always_inline void set_page(struct vma_record *vma, u32 index, u8 state, u64 target)
+static __always_inline void set_page(struct vma_record *vma, u32 index, u8 state, u64 target, u8 dirty)
 {
     u32 page_index = index & (MAX_PAGES_PER_VMA - 1);
 
     if (!vma || page_index >= vma->pt_scanned_pages)
         return;
     vma->pt_states[page_index] = state;
+    if (dirty)
+        vma->pt_dirty[page_index >> 6] |= 1ULL << (page_index & 63);
     vma->pt_targets[page_index] = (u16)(target ^ (target >> 16) ^ (target >> 32)); /* Compact PFN identity for COW/sharing view. */
 }
 
@@ -74,13 +77,8 @@ static long walk_page_table(u32 index, void *data)
         goto none;
     if (entry & X86_LARGE)
     {
-        u64 first = address & ~(PUD_SIZE - 1);
-        if (first < walk->start)
-            first = walk->start;
-        set_page(vma, index, PT_PAGE_THP, (entry & PTE_ADDRESS_MASK) >> PAGE_SHIFT);
-        if (address != first)
-            return 0;
-
+        u64 target = ((entry & PTE_ADDRESS_MASK) >> PAGE_SHIFT) + ((address & (PUD_SIZE - 1)) >> PAGE_SHIFT);
+        set_page(vma, index, PT_PAGE_HUGE_PUD, target, !!(entry & X86_DIRTY));
         return 0;
     }
 
@@ -91,13 +89,8 @@ static long walk_page_table(u32 index, void *data)
         goto none;
     if (entry & X86_LARGE)
     {
-        u64 first = address & ~(PMD_SIZE - 1);
-        if (first < walk->start)
-            first = walk->start;
-        set_page(vma, index, PT_PAGE_THP, (entry & PTE_ADDRESS_MASK) >> PAGE_SHIFT);
-        if (address != first)
-            return 0;
-
+        u64 target = ((entry & PTE_ADDRESS_MASK) >> PAGE_SHIFT) + ((address & (PMD_SIZE - 1)) >> PAGE_SHIFT);
+        set_page(vma, index, PT_PAGE_HUGE_PMD, target, !!(entry & X86_DIRTY));
         return 0;
     }
 
@@ -106,17 +99,17 @@ static long walk_page_table(u32 index, void *data)
     entry = read_u64(table + ((address >> PAGE_SHIFT) & PTR_MASK) * sizeof(u64));
     if (entry & X86_PRESENT)
     {
-        set_page(vma, index, PT_PAGE_PTE, (entry & PTE_ADDRESS_MASK) >> PAGE_SHIFT);
+        set_page(vma, index, PT_PAGE_PTE, (entry & PTE_ADDRESS_MASK) >> PAGE_SHIFT, !!(entry & X86_DIRTY));
         return 0;
     }
     if (entry)
     {
-        set_page(vma, index, PT_PAGE_SWAP, 0);
+        set_page(vma, index, PT_PAGE_SWAP, 0, 0);
         return 0;
     }
 
 none:
-    set_page(vma, index, PT_PAGE_NONE, 0);
+    set_page(vma, index, PT_PAGE_NONE, 0, 0);
     return 0;
 }
 

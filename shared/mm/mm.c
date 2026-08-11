@@ -13,6 +13,7 @@
 
 #define MAX_VMAS 16
 #define MAX_PAGES_PER_VMA 512
+#define PT_DIRTY_WORDS ((MAX_PAGES_PER_VMA + 63) / 64)
 #define MAX_CACHE_ORDERS 10
 #define WORKLOAD_PATH "/mnt/host/_work/build/exercise_memory_management"
 #define CAPTURE_DIR "/mnt/host/_captures"
@@ -34,6 +35,8 @@ struct vma_record
 	unsigned long long mapping;
 	unsigned long long cache_pages;
 	unsigned int cache_folios;
+	unsigned short cache_order_folios[MAX_CACHE_ORDERS];
+	unsigned short cache_order_dirty[MAX_CACHE_ORDERS];
 	unsigned int cache_clean_folios;
 	unsigned int cache_dirty_folios;
 	unsigned int cache_writeback_folios;
@@ -42,10 +45,9 @@ struct vma_record
 	unsigned int cache_referenced_folios;
 	unsigned int cache_workingset_folios;
 	unsigned int cache_unevictable_folios;
-	unsigned short cache_order_folios[MAX_CACHE_ORDERS];
-	unsigned short cache_order_dirty[MAX_CACHE_ORDERS];
 	unsigned int pt_scanned_pages;
 	unsigned char pt_states[MAX_PAGES_PER_VMA];
+	unsigned long long pt_dirty[PT_DIRTY_WORDS];
 	unsigned short pt_targets[MAX_PAGES_PER_VMA];
 };
 
@@ -254,6 +256,16 @@ static void print_page_targets(FILE *output, const struct vma_record *vma)
 	}
 }
 
+static void print_page_dirty(FILE *output, const struct vma_record *vma)
+{
+	for (unsigned int page = 0; page < vma->pt_scanned_pages && page < MAX_PAGES_PER_VMA; page++)
+	{
+		if (page)
+			fputc(',', output);
+		fprintf(output, "%llu", (vma->pt_dirty[page >> 6] >> (page & 63)) & 1ULL);
+	}
+}
+
 static void print_file_cache(FILE *output, const struct vma_record *vma)
 {
 	int first = 1;
@@ -291,25 +303,51 @@ static void print_page_table(FILE *output, const struct vma_record *vma)
 	unsigned int present_pages = 0;
 	unsigned int none_pages = 0;
 	unsigned int swap_pages = 0;
-	unsigned int thp_pages = 0;
-	unsigned int thp_entries = 0;
+	unsigned int huge_pmd_pages = 0;
+	unsigned int huge_pmd_entries = 0;
+	unsigned int huge_pud_pages = 0;
+	unsigned int huge_pud_entries = 0;
+	unsigned int dirty_entries = 0;
 	unsigned char previous = 255;
 	int first = 1;
 
 	for (unsigned int page = 0; page < vma->pt_scanned_pages && page < MAX_PAGES_PER_VMA; page++)
 	{
 		unsigned char state = vma->pt_states[page];
+		unsigned int dirty = (vma->pt_dirty[page >> 6] >> (page & 63)) & 1ULL;
 
 		if (state == 1)
+		{
 			present_pages++;
+			dirty_entries += dirty;
+		}
 		else if (state == 2)
 			swap_pages++;
 		else if (state == 3)
 		{
+			unsigned long long address = vma->start + (unsigned long long)page * 4096;
+			int first_huge_slot = previous != 3 || page == 0 || !(address & ((1ULL << 21) - 1));
+
 			present_pages++;
-			thp_pages++;
-			if (previous != 3)
-				thp_entries++;
+			huge_pmd_pages++;
+			if (first_huge_slot)
+			{
+				huge_pmd_entries++;
+				dirty_entries += dirty;
+			}
+		}
+		else if (state == 4)
+		{
+			unsigned long long address = vma->start + (unsigned long long)page * 4096;
+			int first_huge_slot = previous != 4 || page == 0 || !(address & ((1ULL << 30) - 1));
+
+			present_pages++;
+			huge_pud_pages++;
+			if (first_huge_slot)
+			{
+				huge_pud_entries++;
+				dirty_entries += dirty;
+			}
 		}
 		else
 			none_pages++;
@@ -321,11 +359,16 @@ static void print_page_table(FILE *output, const struct vma_record *vma)
 	json_u32(output, &first, "present_pages", present_pages);
 	json_u32(output, &first, "none_pages", none_pages);
 	json_u32(output, &first, "swap_pages", swap_pages);
-	json_u32(output, &first, "thp_pages", thp_pages);
-	json_u32(output, &first, "thp_entries", thp_entries);
+	json_u32(output, &first, "huge_pmd_pages", huge_pmd_pages);
+	json_u32(output, &first, "huge_pmd_entries", huge_pmd_entries);
+	json_u32(output, &first, "huge_pud_pages", huge_pud_pages);
+	json_u32(output, &first, "huge_pud_entries", huge_pud_entries);
+	json_u32(output, &first, "dirty_entries", dirty_entries);
 	json_comma(output, &first);
 	fputs("\"pages\":[", output);
 	print_page_states(output, vma);
+	fputs("],\"dirty\":[", output);
+	print_page_dirty(output, vma);
 	fputs("],\"targets\":[", output);
 	print_page_targets(output, vma);
 	fputs("]}", output);

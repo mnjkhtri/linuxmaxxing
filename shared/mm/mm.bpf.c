@@ -7,6 +7,7 @@ char LICENSE[] SEC("license") = "GPL";
 
 #define MAX_VMAS 16
 #define MAX_PAGES_PER_VMA 512
+#define PT_DIRTY_WORDS ((MAX_PAGES_PER_VMA + 63) / 64)
 #define XA_CHUNK_MASK 0x3fULL
 #define XA_CHUNK_SIZE 64
 #define MAX_XARRAY_SCAN_SLOTS (XA_CHUNK_SIZE * XA_CHUNK_SIZE)
@@ -21,6 +22,7 @@ char LICENSE[] SEC("license") = "GPL";
 #define PTR_MASK 0x1ffULL
 #define PTE_ADDRESS_MASK 0x000ffffffffff000ULL
 #define X86_PRESENT (1ULL << 0)
+#define X86_DIRTY (1ULL << 6)
 #define X86_LARGE (1ULL << 7)
 
 extern struct vm_area_struct *bpf_iter_task_vma_next(struct bpf_iter_task_vma *it) __ksym;
@@ -64,6 +66,7 @@ struct vma_record
 
     u32 pt_scanned_pages;              /* Number of valid entries in pt_states/pt_targets. */
     u8 pt_states[MAX_PAGES_PER_VMA];   /* Per-page state: none, PTE, swap, or huge mapping. */
+    u64 pt_dirty[PT_DIRTY_WORDS];      /* Compact dirty bitmap from mapped PTE/PMD/PUD leaves. */
     u16 pt_targets[MAX_PAGES_PER_VMA]; /* Compact PFN identity for COW/sharing comparison. */
 };
 
@@ -316,6 +319,9 @@ int snapshot_phase_return(struct pt_regs *context)
             walk.pages = MAX_PAGES_PER_VMA;
         }
         record->pt_scanned_pages = walk.pages;
+#pragma unroll
+        for (u32 word = 0; word < PT_DIRTY_WORDS; word++)
+            record->pt_dirty[word] = 0;
 
         /* Bounded eBPF loop: sample each page-sized slot in this VMA. */
         bpf_loop(walk.pages, walk_page_table, &walk, 0);
