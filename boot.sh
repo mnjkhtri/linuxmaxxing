@@ -3,9 +3,9 @@
 set -euo pipefail
 
 ROOT_DIR=$(dirname "$(realpath "$0")")
-OVERLAY="$ROOT_DIR/vm/run-overlay.qcow2"
-SWAP_IMAGE="$ROOT_DIR/vm/run-swap.raw"
-BASE_IMAGE="$ROOT_DIR/vm/ubuntu-24.04.qcow2"
+OVERLAY="$ROOT_DIR/qemu/run-overlay.qcow2"
+SWAP_IMAGE="$ROOT_DIR/qemu/run-swap.raw"
+BASE_IMAGE="$ROOT_DIR/qemu/ubuntu-24.04.qcow2"
 KERNEL_IMAGE="$ROOT_DIR/build/arch/x86/boot/bzImage"
 
 rm -f "$OVERLAY"

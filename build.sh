@@ -29,7 +29,7 @@ fi
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable DYNAMIC_FTRACE               # Runtime patching for low-overhead ftrace.
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable FTRACE_SYSCALLS              # Syscall tracepoints in tracefs.
 
-# eBPF loading and attachment paths used by shared/mm and shared/ebpf.
+# eBPF loading and attachment paths used by shared/memory and shared/scheduler.
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable BPF_SYSCALL                  # bpf() syscall for loading programs/maps.
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable BPF_JIT                      # JIT eBPF for practical runtime cost.
 "$SOURCE_DIR/scripts/config" --file "$BUILD_DIR/.config" --enable BPF_EVENTS                   # Attach eBPF to perf/trace events.
