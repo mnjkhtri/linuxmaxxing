@@ -20,12 +20,12 @@ cleanup()
 	set +e
 	cd /sys/kernel/tracing
 	echo 0 > tracing_on
-	mkdir -p /mnt/host/_captures
-	cat trace > "$capture_file"
 	if [[ -n ${observer_pid:-} ]]; then
 		kill -INT "$observer_pid" 2>/dev/null || true
 		wait "$observer_pid" 2>/dev/null || true
 	fi
+	mkdir -p /mnt/host/_captures
+	cat trace > "$capture_file"
 	rm -f "$observer_output"
 	echo 0 > events/sched/sched_process_fork/enable
 	echo 0 > events/sched/sched_wakeup_new/enable
