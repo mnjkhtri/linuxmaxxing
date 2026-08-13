@@ -1,14 +1,32 @@
 #include <linux/kvm.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <fcntl.h>
 
+#define GUEST_MEM_SIZE 0x4000
+#define DATA_GPA 0x2000
+#define CONTROL_PORT 0xe9
+
+static int set_memory_region(int vm, uint8_t *memory, size_t size)
+{
+	struct kvm_userspace_memory_region region = {
+		.slot = 0,
+		.flags = 0,
+		.guest_phys_addr = 0,
+		.memory_size = size,
+		.userspace_addr = (uint64_t)memory,
+	};
+
+	return ioctl(vm, KVM_SET_USER_MEMORY_REGION, &region);
+}
+
 int main(void)
 {
-	const size_t guest_mem_size = 0x1000;
+	const size_t guest_mem_size = GUEST_MEM_SIZE;
 
 	int kvm = open("/dev/kvm", O_RDWR | O_CLOEXEC);
 	if (kvm < 0)
@@ -45,9 +63,16 @@ int main(void)
 		perror("mmap guest memory");
 		return 1;
 	}
+	uint8_t *replacement_mem = mmap(NULL, guest_mem_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (replacement_mem == MAP_FAILED)
+	{
+		perror("mmap replacement guest memory");
+		return 1;
+	}
+	uint8_t *active_mem = guest_mem;
 
 	/* Load the tiny real-mode program at guest physical address 0x0000. */
-	FILE *guest = fopen("guest.bin", "rb");
+	FILE *guest = fopen("build/guest.bin", "rb");
 	if (!guest)
 	{
 		perror("fopen guest.bin");
@@ -63,14 +88,7 @@ int main(void)
 	printf("loaded guest.bin: %zu bytes\n", guest_size);
 
 	/* KVM_SET_USER_MEMORY_REGION maps guest physical 0x0000 to our userspace page. */
-	struct kvm_userspace_memory_region mem = {
-		.slot = 0,
-		.flags = 0,
-		.guest_phys_addr = 0,
-		.memory_size = guest_mem_size,
-		.userspace_addr = (uint64_t)guest_mem,
-	};
-	if (ioctl(vm, KVM_SET_USER_MEMORY_REGION, &mem) < 0)
+	if (set_memory_region(vm, active_mem, guest_mem_size) < 0)
 	{
 		perror("KVM_SET_USER_MEMORY_REGION");
 		return 1;
@@ -127,6 +145,7 @@ int main(void)
 		return 1;
 	}
 
+	/* Re-enter the vCPU after each userspace-visible KVM exit until the guest halts. */
 	for (;;)
 	{
 		/* KVM_RUN enters the guest and returns when KVM must report an exit to userspace. */
@@ -136,33 +155,72 @@ int main(void)
 			return 1;
 		}
 
+		/* Handle guest IN/OUT instructions that KVM forwards to userspace. */
 		if (run->exit_reason == KVM_EXIT_IO)
 		{
+			/* Locate the transferred bytes inside the shared struct kvm_run mapping. */
 			uint8_t *data = (uint8_t *)run + run->io.data_offset;
-			if (run->io.direction == KVM_EXIT_IO_OUT)
+
+			/* Port 0xe9 carries synchronization requests from this toy guest. */
+			if (run->io.direction == KVM_EXIT_IO_OUT && run->io.port == CONTROL_PORT)
 			{
-				printf("userspace received KVM_EXIT_IO OUT port=0x%x value=0x%02x '%c'\n", run->io.port, data[0], data[0]);
+				/* Command 1 discards the host page backing guest data GFN 2. */
+				if (data[0] == 1)
+				{
+					/* The host-MM invalidation makes KVM remove the corresponding EPT mapping. */
+					if (madvise(active_mem + DATA_GPA, 0x1000, MADV_DONTNEED) < 0)
+					{
+						perror("madvise(MADV_DONTNEED)");
+						return 1;
+					}
+				}
+
+				/* Command 2 replaces the entire KVM memory slot with new host memory. */
+				else if (data[0] == 2)
+				{
+					/* Preserve guest bytes so execution can continue from the replacement mapping. */
+					memcpy(replacement_mem, active_mem, guest_mem_size);
+
+					/* Delete slot 0, then recreate it over the replacement host mapping. */
+					if (set_memory_region(vm, NULL, 0) < 0 ||
+						set_memory_region(vm, replacement_mem, guest_mem_size) < 0)
+					{
+						perror("replace KVM memory region");
+						return 1;
+					}
+					/* Use the replacement mapping for subsequent host-side guest-memory operations. */
+					active_mem = replacement_mem;
+				}
+				printf("userspace handled guest control command %u\n", data[0]);
 			}
-			else
+
+			/* Complete an IN instruction by placing the emulated device value in kvm_run. */
+			else if (run->io.direction == KVM_EXIT_IO_IN)
 			{
 				data[0] = 0x11;
 				printf("userspace received KVM_EXIT_IO IN port=0x%x value=0x%02x\n", run->io.port, data[0]);
 			}
+			/* Log ordinary OUT instructions that are not synchronization requests. */
+			else
+				printf("userspace received KVM_EXIT_IO OUT port=0x%x value=0x%02x\n", run->io.port, data[0]);
 			continue;
 		}
 
+		/* Report guest accesses to GPAs that KVM routes to userspace as MMIO. */
 		if (run->exit_reason == KVM_EXIT_MMIO)
 		{
 			printf("userspace received KVM_EXIT_MMIO addr=0x%llx len=%u write=%u data=0x%02x\n", (unsigned long long)run->mmio.phys_addr, run->mmio.len, run->mmio.is_write, run->mmio.data[0]);
 			continue;
 		}
 
+		/* HLT is the guest's intentional completion signal for this experiment. */
 		if (run->exit_reason == KVM_EXIT_HLT)
 		{
 			printf("userspace received KVM_EXIT_HLT\n");
 			break;
 		}
 
+		/* Any unhandled exit means the toy VMM cannot safely resume the guest. */
 		printf("unexpected KVM exit reason: %u\n", run->exit_reason);
 		return 1;
 	}

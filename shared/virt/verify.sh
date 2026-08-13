@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_FILE="${VIRT_TARGET_FILE:-$SCRIPT_DIR/cloudlab}"
 SSH_CONNECT_TIMEOUT="${SSH_CONNECT_TIMEOUT:-10}"
-SSH_KNOWN_HOSTS="${SSH_KNOWN_HOSTS:-}"
+SSH_KNOWN_HOSTS="${SSH_KNOWN_HOSTS:-$SCRIPT_DIR/../_captures/cloudlab-known-hosts}"
 
 usage()
 {
@@ -37,20 +37,16 @@ else
 fi
 
 command -v ssh >/dev/null 2>&1 || { echo "error: required command not found: ssh" >&2; exit 1; }
+mkdir -p "$(dirname -- "$SSH_KNOWN_HOSTS")"
 
 ssh_opts=(
 	-o BatchMode=yes
 	-o ConnectTimeout="$SSH_CONNECT_TIMEOUT"
 	-o ServerAliveInterval=5
 	-o ServerAliveCountMax=1
+	-o StrictHostKeyChecking=accept-new
+	-o UserKnownHostsFile="$SSH_KNOWN_HOSTS"
 )
-
-if [[ -n "$SSH_KNOWN_HOSTS" ]]; then
-	ssh_opts+=(
-		-o StrictHostKeyChecking=accept-new
-		-o UserKnownHostsFile="$SSH_KNOWN_HOSTS"
-	)
-fi
 
 REMOTE_SCRIPT=$(cat <<'REMOTE'
 set -euo pipefail
@@ -118,19 +114,12 @@ install_deps_if_needed()
 
 verify_kvm()
 {
-	if grep -m1 -E "vmx|svm" /proc/cpuinfo; then
-		echo "CPU virtualization: detected"
-	else
-		echo "CPU virtualization: missing"
-		exit 10
-	fi
+	grep -qm1 vmx /proc/cpuinfo ||
+		{ echo "Intel VMX: missing; this observer decodes Intel EPT, not AMD NPT"; exit 10; }
+	echo "Intel VMX: detected"
 
 	sudo -n modprobe kvm
-	if grep -qm1 vmx /proc/cpuinfo; then
-		sudo -n modprobe kvm_intel
-	elif grep -qm1 svm /proc/cpuinfo; then
-		sudo -n modprobe kvm_amd
-	fi
+	sudo -n modprobe kvm_intel
 
 	[[ -e /dev/kvm ]] || { echo "/dev/kvm: missing"; exit 11; }
 	echo "/dev/kvm: available"
@@ -139,7 +128,7 @@ verify_kvm()
 
 verify_tracefs()
 {
-	local tracepoints="not mounted" d
+	local tracepoints="not mounted" mmu_tracepoints="not mounted" d
 	sudo -n mkdir -p /sys/kernel/tracing /sys/kernel/debug
 	mountpoint -q /sys/kernel/tracing || sudo -n mount -t tracefs nodev /sys/kernel/tracing 2>/dev/null || true
 	mountpoint -q /sys/kernel/debug || sudo -n mount -t debugfs nodev /sys/kernel/debug 2>/dev/null || true
@@ -147,13 +136,27 @@ verify_tracefs()
 	for d in /sys/kernel/tracing/events/kvm /sys/kernel/debug/tracing/events/kvm; do
 		if sudo -n test -d "$d"; then
 			tracepoints="$d"
-			echo 1 | sudo -n tee "$d/enable" >/dev/null
+			break
+		fi
+	done
+	for d in /sys/kernel/tracing/events/kvmmmu /sys/kernel/debug/tracing/events/kvmmmu; do
+		if sudo -n test -d "$d"; then
+			mmu_tracepoints="$d"
 			break
 		fi
 	done
 
 	echo "KVM tracepoints: $tracepoints"
-	[[ "$tracepoints" != "not mounted" ]] && echo "KVM tracepoints enabled: yes" || echo "KVM tracepoints enabled: no"
+	[[ "$tracepoints" != "not mounted" ]] || exit 14
+	for event in kvm_entry kvm_exit kvm_userspace_exit kvm_unmap_hva_range; do
+		sudo -n test -r "$tracepoints/$event/format" ||
+			{ echo "KVM tracepoint missing: $event"; exit 14; }
+	done
+	[[ "$mmu_tracepoints" != "not mounted" ]] ||
+		{ echo "KVM MMU tracepoints: not mounted"; exit 14; }
+	sudo -n test -r "$mmu_tracepoints/kvm_mmu_spte_requested/format" ||
+		{ echo "KVM MMU tracepoint missing: kvm_mmu_spte_requested"; exit 14; }
+	echo "KVM state-sampling tracepoints: compatible"
 }
 
 print_basics

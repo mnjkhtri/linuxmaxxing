@@ -68,11 +68,10 @@ struct ept_entry_record
 
 struct guest_gfn
 {
-    __u64 gfn;      /* Guest frame number being sampled; EPT's closest match to one sampled MM page slot. */
-    __u64 gva;      /* Guest virtual address; currently equals GPA because guest paging is off. */
-    __u64 gpa;      /* Guest physical address: gfn << PAGE_SHIFT. */
-    __u64 leaf_pfn; /* Host PFN from the leaf SPTE when mapped. */
-
+    __u64 gfn;       /* Guest frame number being sampled; EPT's closest match to one sampled MM page slot. */
+    __u64 gva;       /* Guest virtual address; currently equals GPA because guest paging is off. */
+    __u64 gpa;       /* Guest physical address: gfn << PAGE_SHIFT. */
+    __u64 leaf_pfn;  /* Host PFN from the leaf SPTE when mapped. */
     __u8 ept_mapped; /* Whether the EPT walk reached a real RAM leaf mapping. */
     __u8 ept_mmio;   /* Whether the walk reached KVM's non-mapping MMIO marker. */
     __u8 leaf_level; /* Level that provided the RAM leaf; 1 means normal 4 KiB page. */
@@ -82,19 +81,14 @@ struct guest_gfn
 
 struct vcpu_mm_snapshot
 {
-    __u64 timestamp_ns; /* Monotonic timestamp for ordering snapshots. */
-    __u64 pid_tgid;     /* Combined PID/TID of the userspace VMM thread. */
-    __u64 trace_event;  /* 1=kvm_entry, 2=kvm_exit, 3=kvm_userspace_exit. */
-    __u64 trace_reason; /* VM-exit or userspace-exit reason when the tracepoint provides one. */
+    __u64 timestamp_ns; /* Monotonic timestamp for ordering adjacent state snapshots. */
+    __u64 pid_tgid;     /* VMM thread whose vCPU state was sampled. */
     __u64 vcpu;         /* struct kvm_vcpu pointer from the raw KVM tracepoint arguments. */
     __u64 kvm;          /* Owning struct kvm pointer for this vCPU. */
     __u64 mmu;          /* vcpu->arch.mmu, KVM's software MMU/EPT state object. */
     __u64 root_hpa;     /* Host physical address of the EPT root page. */
     __u64 root_pgd;     /* KVM root PGD/GPA metadata, useful for comparing kernel versions. */
-    __u64 rip;          /* Guest RIP when this tracepoint exposes it cheaply. */
-
-    char comm[16]; /* Process name filter and displayed command. */
-
+    char comm[16];
     struct guest_gfn gfns[MAX_GFN_SAMPLES]; /* Bounded GFN sample window. */
 };
 
@@ -114,7 +108,7 @@ struct
     __uint(max_entries, 1 << 20);
 } events SEC(".maps");
 
-/* kvm_userspace_exit does not expose vcpu in its formatted fields, so remember the current thread's last vCPU from kvm_entry/kvm_exit. */
+/* Host-MM callbacks do not expose vcpu, so remember the VMM thread's last vCPU. */
 struct
 {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -161,10 +155,24 @@ static __always_inline __u16 ept_index(__u64 gpa, __u8 level)
     return (gpa >> 12) & PTR_MASK;
 }
 
-/* Walk one sampled guest frame number through KVM's EPT/TDP page table. */
-static __always_inline void walk_gfn(struct vcpu_mm_snapshot *event, __u32 slot, __u64 root_hpa)
+static __always_inline __u64 ept_leaf_pfn(__u64 spte, __u64 gpa, __u8 level)
 {
-    struct guest_gfn *record = &event->gfns[slot];
+    __u64 base_pfn = (spte & SPTE_ADDRESS_MASK) >> PAGE_SHIFT;
+    __u64 offset_pages = 0;
+
+    /* A large EPT leaf maps 2 MiB at level 2 or 1 GiB at level 3. */
+    if (level > 1)
+    {
+        __u8 offset_bits = PAGE_SHIFT + (9 * (level - 1));
+        offset_pages = (gpa & ((1ULL << offset_bits) - 1)) >> PAGE_SHIFT;
+    }
+    return base_pfn + offset_pages;
+}
+
+/* Walk one sampled guest frame number through KVM's EPT/TDP page table. */
+static __always_inline void walk_gfn(struct vcpu_mm_snapshot *snapshot, __u32 slot, __u64 root_hpa)
+{
+    struct guest_gfn *record = &snapshot->gfns[slot];
     __u64 gpa = ((__u64)slot) << PAGE_SHIFT;
     __u64 table_hpa = root_hpa;
     __u64 table = (root_hpa && root_hpa != ~0ULL) ? hpa_to_direct_map(root_hpa) : 0;
@@ -224,7 +232,7 @@ static __always_inline void walk_gfn(struct vcpu_mm_snapshot *event, __u32 slot,
             entry->leaf = 1;
             record->ept_mapped = 1;
             record->leaf_level = level;
-            record->leaf_pfn = (spte & SPTE_ADDRESS_MASK) >> PAGE_SHIFT;
+            record->leaf_pfn = ept_leaf_pfn(spte, gpa, level);
             table_hpa = 0;
             table = 0;
             continue;
@@ -236,7 +244,7 @@ static __always_inline void walk_gfn(struct vcpu_mm_snapshot *event, __u32 slot,
 }
 
 /* Snapshot vCPU MM/EPT state from the same KVM tracepoint events that the UI displays. */
-static __always_inline int snapshot_vcpu_mm(struct kvm_vcpu *vcpu, __u64 trace_event, __u64 trace_reason, __u64 rip)
+static __always_inline int snapshot_vcpu_mm(struct kvm_vcpu *vcpu)
 {
     __u32 zero = 0;
     struct vcpu_mm_snapshot *event = bpf_map_lookup_elem(&scratch, &zero);
@@ -257,14 +265,11 @@ static __always_inline int snapshot_vcpu_mm(struct kvm_vcpu *vcpu, __u64 trace_e
 
     event->timestamp_ns = bpf_ktime_get_ns();
     event->pid_tgid = pid_tgid;
-    event->trace_event = trace_event;
-    event->trace_reason = trace_reason;
     event->vcpu = (__u64)vcpu;
     event->kvm = (__u64)BPF_CORE_READ(vcpu, kvm);
     event->mmu = (__u64)mmu;
     event->root_hpa = root_hpa;
     event->root_pgd = root_pgd;
-    event->rip = rip;
 
 #pragma unroll
     for (__u32 i = 0; i < MAX_GFN_SAMPLES; i++)
@@ -278,25 +283,51 @@ SEC("raw_tp/kvm_entry")
 int kvm_entry_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
     struct kvm_vcpu *vcpu = (struct kvm_vcpu *)ctx->args[0];
-    return snapshot_vcpu_mm(vcpu, 1, 0, 0);
+    return snapshot_vcpu_mm(vcpu);
 }
 
-SEC("raw_tp/kvm_exit")
-int kvm_exit_snapshot(struct bpf_raw_tracepoint_args *ctx)
+SEC("tp/kvm/kvm_exit")
+int kvm_exit_snapshot(void *ctx)
 {
-    __u64 reason = ctx->args[0];
-    struct kvm_vcpu *vcpu = (struct kvm_vcpu *)ctx->args[1];
-    return snapshot_vcpu_mm(vcpu, 2, reason, 0);
-}
-
-SEC("raw_tp/kvm_userspace_exit")
-int kvm_userspace_exit_snapshot(struct bpf_raw_tracepoint_args *ctx)
-{
+    (void)ctx;
     __u64 pid_tgid = bpf_get_current_pid_tgid();
     struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
-    __u64 reason = ctx->args[0];
 
     if (!vcpu)
         return 0;
-    return snapshot_vcpu_mm(*vcpu, 3, reason, 0);
+    return snapshot_vcpu_mm(*vcpu);
+}
+
+SEC("tp/kvm/kvm_userspace_exit")
+int kvm_userspace_exit_snapshot(void *ctx)
+{
+    (void)ctx;
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
+    if (!vcpu)
+        return 0;
+    return snapshot_vcpu_mm(*vcpu);
+}
+
+SEC("tp/kvm/kvm_unmap_hva_range")
+int kvm_unmap_hva_range_snapshot(void *ctx)
+{
+    (void)ctx;
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
+
+    if (!vcpu)
+        return 0;
+    return snapshot_vcpu_mm(*vcpu);
+}
+
+SEC("tp/kvmmmu/kvm_mmu_spte_requested")
+int kvm_mmu_spte_requested_snapshot(void *ctx)
+{
+    (void)ctx;
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
+    if (!vcpu)
+        return 0;
+    return snapshot_vcpu_mm(*vcpu);
 }

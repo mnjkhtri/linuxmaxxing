@@ -45,14 +45,11 @@ struct vcpu_mm_snapshot
 {
 	unsigned long long timestamp_ns;
 	unsigned long long pid_tgid;
-	unsigned long long trace_event;
-	unsigned long long trace_reason;
 	unsigned long long vcpu;
 	unsigned long long kvm;
 	unsigned long long mmu;
 	unsigned long long root_hpa;
 	unsigned long long root_pgd;
-	unsigned long long rip;
 	char comm[16];
 	struct guest_gfn gfns[MAX_GFN_SAMPLES];
 };
@@ -123,13 +120,6 @@ static void json_string(FILE *output, int *first, const char *name, const char *
 	json_string_value(output, value, 16);
 }
 
-static void json_literal_string(FILE *output, int *first, const char *name, const char *value)
-{
-	json_comma(output, first);
-	fprintf(output, "\"%s\":", name);
-	json_string_value(output, value, strlen(value));
-}
-
 static void json_u64(FILE *output, int *first, const char *name, unsigned long long value)
 {
 	json_comma(output, first);
@@ -159,17 +149,6 @@ static void print_entry(FILE *output, const struct ept_entry_record *entry)
 	fputc('}', output);
 }
 
-static const char *trace_event_name(unsigned long long event)
-{
-	if (event == 1)
-		return "kvm_entry";
-	if (event == 2)
-		return "kvm_exit";
-	if (event == 3)
-		return "kvm_userspace_exit";
-	return "unknown";
-}
-
 static void print_gfn(FILE *output, const struct guest_gfn *gfn)
 {
 	int first = 1;
@@ -195,34 +174,30 @@ static void print_gfn(FILE *output, const struct guest_gfn *gfn)
 /* libbpf invokes this for every KVM tracepoint snapshot emitted by the BPF program. */
 static int handle_event(void *context, void *data, size_t length)
 {
-	const struct vcpu_mm_snapshot *event = data;
+	const struct vcpu_mm_snapshot *snapshot = data;
 	FILE *output = context;
 	int first = 1;
 
-	if (length < sizeof(*event))
+	if (length < sizeof(*snapshot))
 		return 0;
 	fputc('{', output);
 	json_string(output, &first, "type", "vcpu_mm_snapshot");
 	static unsigned int sequence;
 	json_u64(output, &first, "sequence", sequence++);
-	json_literal_string(output, &first, "trace_event", trace_event_name(event->trace_event));
-	json_u64(output, &first, "trace_event_id", event->trace_event);
-	json_u64(output, &first, "trace_reason", event->trace_reason);
-	json_u64(output, &first, "timestamp_ns", event->timestamp_ns);
-	json_string(output, &first, "comm", event->comm);
-	json_hex(output, &first, "vcpu", event->vcpu);
-	json_hex(output, &first, "kvm", event->kvm);
-	json_hex(output, &first, "mmu", event->mmu);
-	json_hex(output, &first, "root_hpa", event->root_hpa);
-	json_hex(output, &first, "root_pgd", event->root_pgd);
-	json_hex(output, &first, "rip", event->rip);
+	json_u64(output, &first, "timestamp_ns", snapshot->timestamp_ns);
+	json_string(output, &first, "comm", snapshot->comm);
+	json_hex(output, &first, "vcpu", snapshot->vcpu);
+	json_hex(output, &first, "kvm", snapshot->kvm);
+	json_hex(output, &first, "mmu", snapshot->mmu);
+	json_hex(output, &first, "root_hpa", snapshot->root_hpa);
+	json_hex(output, &first, "root_pgd", snapshot->root_pgd);
 	json_comma(output, &first);
 	fputs("\"gfns\":[", output);
 	for (int i = 0; i < MAX_GFN_SAMPLES; i++)
 	{
 		if (i)
 			fputc(',', output);
-		print_gfn(output, &event->gfns[i]);
+		print_gfn(output, &snapshot->gfns[i]);
 	}
 	fputs("]}\n", output);
 	fflush(output);
