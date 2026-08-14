@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/prctl.h>
 #include <sys/sysinfo.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -704,6 +705,12 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 
 int main(void)
 {
+	if (prctl(PR_SET_NAME, "workload_mm", 0, 0, 0) != 0)
+	{
+		perror("prctl(PR_SET_NAME)");
+		return 1;
+	}
+
 	long configured_page_size = sysconf(_SC_PAGESIZE);
 	if (configured_page_size <= 0)
 	{

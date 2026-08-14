@@ -45,7 +45,9 @@ tracepoints enabled.
 hooks use KVM events only as sampling boundaries and emit pure EPT state
 snapshots; the UI derives changes by comparing adjacent snapshots.
 
-The guest uses GFN 2 as a data page and requests two synchronization exercises
+The guest keeps code in GFN 0, uses the last slot page (GFN 7) for data, and
+leaves GFNs 1-6 untouched so their EPT states remain visually distinct. It
+requests two synchronization exercises
 through port `0xe9`:
 
 1. The VMM calls `madvise(MADV_DONTNEED)` on that page. Linux emits an MMU
@@ -81,7 +83,8 @@ for each captured VMA
 EPT sampling model:
 
 ```text
-take at most the first MAX_GFN_SAMPLES guest frames
+sample GFN 0-15 densely
+sample the command-4 access GFN in the huge-page range
 for each sampled guest frame number
   convert GFN to GPA
   start at KVM's EPT root HPA from kvm_vcpu->arch.mmu

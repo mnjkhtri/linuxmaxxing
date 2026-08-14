@@ -13,7 +13,7 @@
  *
  *   hook the same KVM tracepoints shown in the VIRT UI
  *   at each selected KVM execution, MMU, or invalidation boundary
- *     take at most the first MAX_GFN_SAMPLES guest frames
+ *     sample GFN 0-15 plus the command-4 access in the huge-page range
  *     convert GFN to GPA
  *     start at KVM's EPT root HPA from kvm_vcpu->arch.mmu
  *     walk the EPT/TDP page table
@@ -48,7 +48,10 @@ char LICENSE[] SEC("license") = "GPL";
 #define EPT_SUPPRESS_VE (1ULL << 63)
 #define EPT_MMIO_MASK (EPT_READ | EPT_WRITE | EPT_EXEC | EPT_SUPPRESS_VE)
 #define EPT_MMIO_VALUE (EPT_WRITE | EPT_EXEC)
-#define MAX_GFN_SAMPLES 32
+#define SLOT0_GFN_SAMPLES 16
+#define HUGE_GFN_SAMPLES 1
+#define MAX_GFN_SAMPLES (SLOT0_GFN_SAMPLES + HUGE_GFN_SAMPLES)
+#define HUGE_GFN_BASE 512
 #define EPT_LEVELS 4
 
 /* Userspace resolves page_offset_base so BPF can read EPT pages through the kernel direct map. */
@@ -173,15 +176,24 @@ static __always_inline __u64 ept_leaf_pfn(__u64 spte, __u64 gpa, __u8 level)
     return base_pfn + offset_pages;
 }
 
+static __always_inline __u64 sampled_gfn(__u32 slot)
+{
+    /* Keep the low-GFN view dense, then walk the GFN that faults in the huge range. */
+    if (slot < SLOT0_GFN_SAMPLES)
+        return slot;
+    return HUGE_GFN_BASE;
+}
+
 /* Walk one sampled guest frame number through KVM's EPT/TDP page table. */
 static __always_inline void walk_gfn(struct vcpu_mm_snapshot *snapshot, __u32 slot, __u64 root_hpa)
 {
     struct guest_gfn *record = &snapshot->gfns[slot];
-    __u64 gpa = ((__u64)slot) << PAGE_SHIFT;
+    __u64 gfn = sampled_gfn(slot);
+    __u64 gpa = gfn << PAGE_SHIFT;
     __u64 table_hpa = root_hpa;
     __u64 table = (root_hpa && root_hpa != ~0ULL) ? hpa_to_direct_map(root_hpa) : 0;
 
-    record->gfn = slot;
+    record->gfn = gfn;
 
     /* This toy guest has paging off, so guest virtual address equals guest physical address for now. */
     record->gva = gpa;

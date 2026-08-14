@@ -108,9 +108,8 @@ echo "irq == ${QEDU_IRQ}" > "${TRACEFS}/events/irq/irq_handler_exit/filter"
 echo "irq == ${QEDU_IRQ}" > "${TRACEFS}/events/irq_vectors/vector_config/filter"
 echo "irq == ${QEDU_IRQ}" > "${TRACEFS}/events/irq_vectors/vector_alloc/filter"
 
-# Permanent workqueue tracepoints expose the hardirq -> worker handoff. The
-# dedicated queue name keeps queue_work noise out; the HTML matches the two
-# qedu_dma callback symbols for the remaining lifecycle events.
+# Permanent workqueue tracepoints expose the hardirq -> worker handoff.
+# The dedicated queue name keeps queue_work noise out; the HTML matches the two qedu_dma callback symbols for the remaining lifecycle events.
 echo 'workqueue == "qedu_dma"' > "${TRACEFS}/events/workqueue/workqueue_queue_work/filter"
 echo 1 > "${TRACEFS}/events/workqueue/workqueue_queue_work/enable"
 echo 1 > "${TRACEFS}/events/workqueue/workqueue_activate_work/enable"

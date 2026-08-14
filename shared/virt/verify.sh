@@ -163,11 +163,25 @@ verify_tracefs()
 	echo "KVM state-sampling tracepoints: compatible"
 }
 
+verify_thp()
+{
+	local thp=/sys/kernel/mm/transparent_hugepage
+
+	if ! sudo -n test -r "$thp/enabled" || ! sudo -n test -r "$thp/hpage_pmd_size"; then
+		echo "transparent huge pages: unavailable; command 4 will show base-page EPT leaves"
+		return 0
+	fi
+	echo "transparent huge pages: available ($(sudo -n cat "$thp/hpage_pmd_size") bytes)"
+	echo "THP enabled policy: $(sudo -n cat "$thp/enabled")"
+	echo "THP defrag policy: $(sudo -n cat "$thp/defrag")"
+}
+
 print_basics
 fix_hostname_lookup
 install_deps_if_needed
 verify_kvm
 verify_tracefs
+verify_thp
 REMOTE
 )
 

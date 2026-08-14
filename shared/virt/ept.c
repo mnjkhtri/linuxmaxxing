@@ -11,7 +11,9 @@
 
 #define CAPTURE_DIR "captures"
 #define CAPTURE_PATH CAPTURE_DIR "/ept.ndjson"
-#define MAX_GFN_SAMPLES 32
+#define SLOT0_GFN_SAMPLES 16
+#define HUGE_GFN_SAMPLES 1
+#define MAX_GFN_SAMPLES (SLOT0_GFN_SAMPLES + HUGE_GFN_SAMPLES)
 #define EPT_LEVELS 4
 
 /* Must match the BPF event byte-for-byte. */

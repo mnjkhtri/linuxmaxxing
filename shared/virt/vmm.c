@@ -7,18 +7,21 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#define GUEST_MEM_SIZE 0x4000
+#define GUEST_MEM_SIZE 0x8000
+#define HUGE_MEM_SIZE 0x200000
+#define THP_MAPPING_SIZE (HUGE_MEM_SIZE * 2)
+#define HUGE_GPA 0x200000
 #define GUEST_PAGE_SIZE 0x1000
-#define DATA_GPA 0x2000
+#define DATA_GPA 0x7000
 #define DATA_GFN (DATA_GPA / GUEST_PAGE_SIZE)
 #define CONTROL_PORT 0xe9
 
-static int set_memory_region(int vm, uint8_t *memory, size_t size, uint32_t flags)
+static int set_memory_region(int vm, uint32_t slot, uint64_t guest_phys_addr, uint8_t *memory, size_t size, uint32_t flags)
 {
 	struct kvm_userspace_memory_region region = {
-		.slot = 0,
+		.slot = slot,
 		.flags = flags,
-		.guest_phys_addr = 0,
+		.guest_phys_addr = guest_phys_addr,
 		.memory_size = size,
 		.userspace_addr = (uint64_t)memory,
 	};
@@ -89,8 +92,8 @@ int main(void)
 	fclose(guest);
 	printf("loaded guest.bin: %zu bytes\n", guest_size);
 
-	/* KVM_SET_USER_MEMORY_REGION maps guest physical 0x0000 to our userspace page. */
-	if (set_memory_region(vm, active_mem, guest_mem_size, 0) < 0)
+	/* KVM_SET_USER_MEMORY_REGION maps eight guest pages, GFN 0 through GFN 7. */
+	if (set_memory_region(vm, 0, 0, active_mem, guest_mem_size, 0) < 0)
 	{
 		perror("KVM_SET_USER_MEMORY_REGION");
 		return 1;
@@ -166,7 +169,7 @@ int main(void)
 			/* Port 0xe9 carries synchronization requests from this toy guest. */
 			if (run->io.direction == KVM_EXIT_IO_OUT && run->io.port == CONTROL_PORT)
 			{
-				/* Command 1 discards the host page backing guest data GFN 2. */
+				/* Command 1 discards the host page backing guest data GFN 7. */
 				if (data[0] == 1)
 				{
 					/* The host-MM invalidation makes KVM remove the corresponding EPT mapping. */
@@ -180,12 +183,13 @@ int main(void)
 				/* Command 2 replaces the entire KVM memory slot with new host memory. */
 				else if (data[0] == 2)
 				{
-					/* Preserve guest bytes so execution can continue from the replacement mapping. */
-					memcpy(replacement_mem, active_mem, guest_mem_size);
+					/* Preserve code and GFN 7 while leaving the unused GFN 1-6 gap untouched. */
+					memcpy(replacement_mem, active_mem, guest_size);
+					memcpy(replacement_mem + DATA_GPA, active_mem + DATA_GPA, GUEST_PAGE_SIZE);
 
 					/* Delete slot 0, then recreate it over the replacement host mapping. */
-					if (set_memory_region(vm, NULL, 0, 0) < 0 ||
-						set_memory_region(vm, replacement_mem, guest_mem_size, 0) < 0)
+					if (set_memory_region(vm, 0, 0, NULL, 0, 0) < 0 ||
+						set_memory_region(vm, 0, 0, replacement_mem, guest_mem_size, 0) < 0)
 					{
 						perror("replace KVM memory region");
 						return 1;
@@ -194,7 +198,7 @@ int main(void)
 					active_mem = replacement_mem;
 				}
 
-				/* Command 3 keeps the mapping but resets dirty tracking for data GFN 2. */
+				/* Command 3 keeps the mapping but resets dirty tracking for data GFN 7. */
 				else if (data[0] == 3)
 				{
 					unsigned long clear_bitmap = 1UL << DATA_GFN;
@@ -205,8 +209,8 @@ int main(void)
 						.dirty_bitmap = &clear_bitmap,
 					};
 
-					/* Enable dirty tracking, then clear only data GFN 2's dirty state. */
-					if (set_memory_region(vm, active_mem, guest_mem_size, KVM_MEM_LOG_DIRTY_PAGES) < 0)
+					/* Enable dirty tracking, then clear only data GFN 7's dirty state. */
+					if (set_memory_region(vm, 0, 0, active_mem, guest_mem_size, KVM_MEM_LOG_DIRTY_PAGES) < 0)
 					{
 						perror("enable KVM dirty logging");
 						return 1;
@@ -215,6 +219,40 @@ int main(void)
 					if (ioctl(vm, KVM_CLEAR_DIRTY_LOG, &clear) < 0)
 					{
 						perror("KVM_CLEAR_DIRTY_LOG");
+						return 1;
+					}
+				}
+
+				/* Command 4 adds one aligned 2 MiB THP-backed data slot at GPA 0x200000. */
+				else if (data[0] == 4)
+				{
+					uint8_t *mapping = mmap(NULL, THP_MAPPING_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+					if (mapping == MAP_FAILED)
+					{
+						perror("mmap THP candidate");
+						return 1;
+					}
+					uint8_t *huge_mem = (uint8_t *)(((uintptr_t)mapping + HUGE_MEM_SIZE - 1) & ~(uintptr_t)(HUGE_MEM_SIZE - 1));
+					size_t prefix = (size_t)(huge_mem - mapping);
+					size_t suffix = THP_MAPPING_SIZE - prefix - HUGE_MEM_SIZE;
+
+					/* Keep only one 2 MiB-aligned anonymous VMA. */
+					if ((prefix && munmap(mapping, prefix) < 0) ||
+						(suffix && munmap(huge_mem + HUGE_MEM_SIZE, suffix) < 0))
+					{
+						perror("align THP candidate");
+						return 1;
+					}
+					/* Ask for THP backing; base pages remain a valid observable fallback. */
+					if (madvise(huge_mem, HUGE_MEM_SIZE, MADV_HUGEPAGE) < 0)
+						perror("warning: madvise(MADV_HUGEPAGE)");
+					for (size_t offset = 0; offset < HUGE_MEM_SIZE; offset += GUEST_PAGE_SIZE)
+						huge_mem[offset] = (uint8_t)(offset / GUEST_PAGE_SIZE);
+					/* Slot 0 keeps executable code; slot 1 is data-only so KVM can use an L2 leaf. */
+					if (set_memory_region(vm, 1, HUGE_GPA, huge_mem, HUGE_MEM_SIZE, 0) < 0)
+					{
+						perror("install 2 MiB KVM memory region");
 						return 1;
 					}
 				}
