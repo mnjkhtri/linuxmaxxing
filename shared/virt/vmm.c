@@ -8,14 +8,16 @@
 #include <fcntl.h>
 
 #define GUEST_MEM_SIZE 0x4000
+#define GUEST_PAGE_SIZE 0x1000
 #define DATA_GPA 0x2000
+#define DATA_GFN (DATA_GPA / GUEST_PAGE_SIZE)
 #define CONTROL_PORT 0xe9
 
-static int set_memory_region(int vm, uint8_t *memory, size_t size)
+static int set_memory_region(int vm, uint8_t *memory, size_t size, uint32_t flags)
 {
 	struct kvm_userspace_memory_region region = {
 		.slot = 0,
-		.flags = 0,
+		.flags = flags,
 		.guest_phys_addr = 0,
 		.memory_size = size,
 		.userspace_addr = (uint64_t)memory,
@@ -88,7 +90,7 @@ int main(void)
 	printf("loaded guest.bin: %zu bytes\n", guest_size);
 
 	/* KVM_SET_USER_MEMORY_REGION maps guest physical 0x0000 to our userspace page. */
-	if (set_memory_region(vm, active_mem, guest_mem_size) < 0)
+	if (set_memory_region(vm, active_mem, guest_mem_size, 0) < 0)
 	{
 		perror("KVM_SET_USER_MEMORY_REGION");
 		return 1;
@@ -182,14 +184,39 @@ int main(void)
 					memcpy(replacement_mem, active_mem, guest_mem_size);
 
 					/* Delete slot 0, then recreate it over the replacement host mapping. */
-					if (set_memory_region(vm, NULL, 0) < 0 ||
-						set_memory_region(vm, replacement_mem, guest_mem_size) < 0)
+					if (set_memory_region(vm, NULL, 0, 0) < 0 ||
+						set_memory_region(vm, replacement_mem, guest_mem_size, 0) < 0)
 					{
 						perror("replace KVM memory region");
 						return 1;
 					}
 					/* Use the replacement mapping for subsequent host-side guest-memory operations. */
 					active_mem = replacement_mem;
+				}
+
+				/* Command 3 keeps the mapping but resets dirty tracking for data GFN 2. */
+				else if (data[0] == 3)
+				{
+					unsigned long clear_bitmap = 1UL << DATA_GFN;
+					struct kvm_clear_dirty_log clear = {
+						.slot = 0,
+						.num_pages = guest_mem_size / GUEST_PAGE_SIZE,
+						.first_page = 0,
+						.dirty_bitmap = &clear_bitmap,
+					};
+
+					/* Enable dirty tracking, then clear only data GFN 2's dirty state. */
+					if (set_memory_region(vm, active_mem, guest_mem_size, KVM_MEM_LOG_DIRTY_PAGES) < 0)
+					{
+						perror("enable KVM dirty logging");
+						return 1;
+					}
+					/* KVM clears EPT D (or write-protects without A/D), then invalidates cached translations. */
+					if (ioctl(vm, KVM_CLEAR_DIRTY_LOG, &clear) < 0)
+					{
+						perror("KVM_CLEAR_DIRTY_LOG");
+						return 1;
+					}
 				}
 				printf("userspace handled guest control command %u\n", data[0]);
 			}

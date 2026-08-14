@@ -65,8 +65,13 @@ mkdir -p captures
 observer=$!
 trace_dir=""
 trace_instance=""
+kprobe_event=""
 
 cleanup() {
+	if [[ -n "$kprobe_event" && -n "$trace_dir" ]]; then
+		echo 0 > "$trace_instance/events/kprobes/$kprobe_event/enable" 2>/dev/null || true
+		echo "-:kprobes/$kprobe_event" > "$trace_dir/kprobe_events" 2>/dev/null || true
+	fi
 	if [[ -n "$trace_instance" ]]; then
 		echo 0 > "$trace_instance/tracing_on" 2>/dev/null || true
 		rmdir "$trace_instance" 2>/dev/null || true
@@ -121,6 +126,10 @@ echo 1 > "$trace_instance/events/kvm/kvm_exit/enable"
 echo 1 > "$trace_instance/events/kvm/kvm_userspace_exit/enable"
 echo 1 > "$trace_instance/events/kvm/kvm_unmap_hva_range/enable"
 echo 1 > "$trace_instance/events/kvmmmu/kvm_mmu_spte_requested/enable"
+echo 1 > "$trace_instance/events/kvmmmu/kvm_mmu_set_spte/enable"
+kprobe_event="kernel_oops_kvm_flush_$$"
+echo "p:kprobes/$kprobe_event kvm:kvm_flush_remote_tlbs" > "$trace_dir/kprobe_events"
+echo 1 > "$trace_instance/events/kprobes/$kprobe_event/enable"
 echo 1 > "$trace_instance/tracing_on"
 
 ./build/vmm

@@ -27,6 +27,8 @@ struct ept_entry_record
 	unsigned char readable;
 	unsigned char writable;
 	unsigned char executable;
+	unsigned char accessed;
+	unsigned char dirty;
 };
 
 struct guest_gfn
@@ -146,6 +148,8 @@ static void print_entry(FILE *output, const struct ept_entry_record *entry)
 	json_u64(output, &first, "r", entry->readable);
 	json_u64(output, &first, "w", entry->writable);
 	json_u64(output, &first, "x", entry->executable);
+	json_u64(output, &first, "a", entry->accessed);
+	json_u64(output, &first, "d", entry->dirty);
 	fputc('}', output);
 }
 

@@ -156,6 +156,10 @@ verify_tracefs()
 		{ echo "KVM MMU tracepoints: not mounted"; exit 14; }
 	sudo -n test -r "$mmu_tracepoints/kvm_mmu_spte_requested/format" ||
 		{ echo "KVM MMU tracepoint missing: kvm_mmu_spte_requested"; exit 14; }
+	sudo -n test -r "$mmu_tracepoints/kvm_mmu_set_spte/format" ||
+		{ echo "KVM MMU tracepoint missing: kvm_mmu_set_spte"; exit 14; }
+	sudo -n awk '$3 == "kvm_flush_remote_tlbs" { found=1 } END { exit !found }' /proc/kallsyms ||
+		{ echo "KVM symbol missing: kvm_flush_remote_tlbs"; exit 14; }
 	echo "KVM state-sampling tracepoints: compatible"
 }
 

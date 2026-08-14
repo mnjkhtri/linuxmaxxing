@@ -28,5 +28,10 @@ _start:
 	outb %al, $0xe9      	/* KVM_EXIT_IO transfers the command to userspace. */
 	movw $0x3333, 0x2000 	/* Map GFN 2 through the replacement host memory. */
 
+	/* Command 3 keeps GFN 2's PFN but clears its EPT dirty-tracking state. */
+	movb $3, %al
+	outb %al, $0xe9      	/* KVM invalidates the cached translation after clearing D (or write-protecting). */
+	movw $0x4444, 0x2000 	/* Write sets EPT D again; hosts without EPT A/D instead take a write violation. */
+
 	movw %ax, 0x4001     	/* Outside registered RAM, so userspace gets KVM_EXIT_MMIO. */
 	hlt                  	/* Finish the guest with KVM_EXIT_HLT. */

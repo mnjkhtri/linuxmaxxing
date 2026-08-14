@@ -12,7 +12,7 @@
  * EPT version in this file:
  *
  *   hook the same KVM tracepoints shown in the VIRT UI
- *   for each kvm_entry/kvm_exit/kvm_userspace_exit event
+ *   at each selected KVM execution, MMU, or invalidation boundary
  *     take at most the first MAX_GFN_SAMPLES guest frames
  *     convert GFN to GPA
  *     start at KVM's EPT root HPA from kvm_vcpu->arch.mmu
@@ -43,6 +43,8 @@ char LICENSE[] SEC("license") = "GPL";
 #define EPT_WRITE (1ULL << 1)
 #define EPT_EXEC (1ULL << 2)
 #define EPT_LARGE (1ULL << 7)
+#define EPT_ACCESSED (1ULL << 8)
+#define EPT_DIRTY (1ULL << 9)
 #define EPT_SUPPRESS_VE (1ULL << 63)
 #define EPT_MMIO_MASK (EPT_READ | EPT_WRITE | EPT_EXEC | EPT_SUPPRESS_VE)
 #define EPT_MMIO_VALUE (EPT_WRITE | EPT_EXEC)
@@ -64,6 +66,8 @@ struct ept_entry_record
     __u8 readable;   /* EPT read permission. */
     __u8 writable;   /* EPT write permission. */
     __u8 executable; /* EPT execute permission. */
+    __u8 accessed;   /* Hardware EPT accessed state when EPT A/D is enabled. */
+    __u8 dirty;      /* Hardware EPT dirty state when EPT A/D is enabled. */
 };
 
 struct guest_gfn
@@ -209,6 +213,8 @@ static __always_inline void walk_gfn(struct vcpu_mm_snapshot *snapshot, __u32 sl
         entry->readable = !!(spte & EPT_READ);
         entry->writable = !!(spte & EPT_WRITE);
         entry->executable = !!(spte & EPT_EXEC);
+        entry->accessed = !!(spte & EPT_ACCESSED);
+        entry->dirty = !!(spte & EPT_DIRTY);
         entry->leaf = 0;
 
         if (entry->mmio)
@@ -327,6 +333,30 @@ int kvm_mmu_spte_requested_snapshot(void *ctx)
     (void)ctx;
     __u64 pid_tgid = bpf_get_current_pid_tgid();
     struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
+    if (!vcpu)
+        return 0;
+    return snapshot_vcpu_mm(*vcpu);
+}
+
+SEC("tp/kvmmmu/kvm_mmu_set_spte")
+int kvm_mmu_set_spte_snapshot(void *ctx)
+{
+    (void)ctx;
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
+
+    if (!vcpu)
+        return 0;
+    return snapshot_vcpu_mm(*vcpu);
+}
+
+SEC("kprobe/kvm_flush_remote_tlbs")
+int kvm_flush_remote_tlbs_snapshot(void *ctx)
+{
+    (void)ctx;
+    __u64 pid_tgid = bpf_get_current_pid_tgid();
+    struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
+
     if (!vcpu)
         return 0;
     return snapshot_vcpu_mm(*vcpu);
