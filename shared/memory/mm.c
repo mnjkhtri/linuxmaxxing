@@ -17,7 +17,7 @@
 #define MAX_CACHE_ORDERS 10
 #define WORKLOAD_PATH "/mnt/host/memory/workload_mm"
 #define CAPTURE_DIR "/mnt/host/_captures"
-#define CAPTURE_PATH CAPTURE_DIR "/memory-observer.ndjson"
+#define CAPTURE_PATH CAPTURE_DIR "/memory.eBPF.ndjson"
 
 struct vma_record
 {

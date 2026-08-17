@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QEDU interrupt flight recorder</title>
+<title>QEDU PCI I/O flight recorder</title>
 <link rel="stylesheet" href="../theme.css?v=7">
 <style>
 html,body{width:100%;height:100%;overflow:hidden;background:transparent}
@@ -21,6 +21,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent}
 .panel-head h2{margin:0;font:650 10px var(--mono);letter-spacing:.07em;text-transform:uppercase}
 .panel-head .sub{margin-left:auto;color:var(--faint);font:8px var(--mono);white-space:nowrap}
 .irq-strip{margin-left:auto;min-width:0;display:flex;align-items:center;justify-content:flex-end;gap:6px;overflow-x:auto;color:var(--faint);font:7px var(--mono);white-space:nowrap}
+.irq-strip .cat-m{color:#cf9bff}.irq-strip .cat-d{color:#7fe3d2}.irq-strip .cat-i{color:#f0a45d}.irq-strip .cat-s{color:#7fd89a}
 .irq-strip span{margin-left:0}.irq-strip b{color:var(--cyan);font-weight:750}.irq-strip small{color:var(--muted);font:6px var(--mono)}.irq-strip i{color:#3d5363;font-style:normal}
 .overview{min-width:0;min-height:0;padding:8px 10px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(7,12,18,.72),rgba(7,12,18,.42));overflow:auto}
 .overview svg{display:block;width:100%;height:100%;min-height:0}
@@ -47,14 +48,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent}
 <body>
 <main class="irq-lab">
 <header class="head">
-<div><div class="eyebrow">QEDU / CPU ENTRY / INTERRUPT DELIVERY</div><h1>Interrupt <span>flight recorder</span></h1><p>one write(2), one sleeping task, one device interrupt — followed across the syscall and hardirq boundary</p></div>
+<div><div class="eyebrow">QEDU / PCI / MMIO · DMA · IRQ</div><h1>I/O <span>flight recorder</span></h1><p>MMIO BAR registers, coherent DMA, and shared INTx delivery — one qedu PCI device (QEMU EDU) traced end to end</p></div>
 <div id="status" role="status"><i class="trace-dot"></i><span>following QEDU execution…</span></div>
 </header>
 <section class="workbench">
 <section class="panel stage">
-<header class="panel-head"><h2>Kernel execution path</h2><div class="irq-strip"><span>PCI <b id="m-device">—</b> <small id="m-device-sub">QEMU EDU</small></span><i>|</i><span>APIC <b id="m-vector">—</b> <small id="m-vector-sub">vector allocation</small></span><i>|</i><span>IRQ <b id="m-irq">—</b> <small id="m-irq-sub">runtime entries</small></span><i>|</i><span>syscalls <b id="m-syscalls">—</b></span><i>|</i><span>sleeps <b id="m-sleeps">—</b></span><i>|</i><span>faults <b id="m-faults">—</b></span></div></header>
+<header class="panel-head"><h2>Kernel execution path</h2><div class="irq-strip"><span>PCI <b id="m-device">—</b> <small id="m-device-sub">QEMU EDU</small></span><i>|</i><span>APIC <b id="m-vector">—</b> <small id="m-vector-sub">vector allocation</small></span><i>|</i><span>IRQ <b id="m-irq">—</b> <small id="m-irq-sub">runtime entries</small></span><i>|</i><span class="cat-m">MMIO <b id="m-mmio">—</b></span><i>|</i><span class="cat-d">DMA <b id="m-dma">—</b></span><i>|</i><span class="cat-i">IRQ <b id="m-irqcat">—</b></span><i>|</i><span class="cat-s">SYSCALL <b id="m-sys">—</b></span><i>|</i><span>syscalls <b id="m-syscalls">—</b></span><i>|</i><span>sleeps <b id="m-sleeps">—</b></span><i>|</i><span>faults <b id="m-faults">—</b></span></div></header>
 <div class="overview"><svg id="timeline" viewBox="0 0 900 520" role="img" aria-label="Kernel execution events grouped by context in timestamp order"></svg></div>
-<section class="irq-evidence"><h3>Interrupt delivery evidence</h3><div class="irq-evidence-flow"><b id="evidence-device">QEDU device</b><i>→</i><b id="evidence-vector">vector —</b><i>→</i><span class="irq-gap">APIC / IDT delivery not directly traced</span><i>→</i><b id="evidence-entry">IRQ handler entry</b><i>→</i><b id="evidence-exit">IRQ handler exit</b></div></section>
+<section class="irq-evidence"><h3>I/O delivery evidence</h3><div class="irq-evidence-flow"><span class="irq-gap">MMIO · factorial</span><i>→</i><span class="irq-gap">DMA · coherent echo</span><i>→</i><b id="evidence-vector">vector —</b><i>→</i><span class="irq-gap">APIC / IDT not directly traced</span></div></section>
 </section>
 <aside class="panel notebook">
 <section class="inspect"><div class="inspect-type"><i class="trace-dot"></i><span id="inspect-type">event</span></div><h3 id="inspect-title">Select a trace event</h3><dl class="fields" id="fields"><dt>status</dt><dd>waiting</dd></dl></section>
@@ -69,9 +70,11 @@ html,body{width:100%;height:100%;overflow:hidden;background:transparent}
 'use strict';
 
 var BASE='../../shared/_captures/';
-var PATHS=['interrupts-trace.txt','interrupts-report.txt'];
+var PATHS=['io-Trace.txt','io-Report.txt'];
 var events=[],phases=[],markers=[],irqSpans=[],sleeps=[],workerPids={},meta={},debugState={},sysfsState={};
 var selectedPhase=0,selectedEvent=null,runStart=0,runEnd=0,workloadPid=0,vectorEvent=null;
+var CAT={factorial:'mmio',dma:'dma',sysfs:'syscall',debugfs:'syscall',run:'io'};
+var CAT_LABEL={mmio:'MMIO',dma:'DMA',irq:'IRQ',syscall:'SYSCALL',sched:'SCHED',io:'IO'};
 var NS='http://www.w3.org/2000/svg';
 
 function $(id){return document.getElementById(id)}
@@ -168,10 +171,10 @@ function buildPhases(){
 		if(name!=='factorial'&&name!=='dma_echo'&&name!=='sysfs'&&name!=='debugfs')return;
 		var end=markers.find(function(candidate){return candidate.time>=e.time&&candidate.marker.phase===name&&candidate.marker.action!=='begin'});
 		if(!end)return;
-		if(name==='factorial')addPhase('factorial','Factorial('+e.marker.input+') → '+end.marker.result,e,end,{input:e.marker.input,result:end.marker.result,bytes:end.marker.bytes,summary:'Integer write enters qedu_write(), sleeps, and resumes after one factorial completion IRQ.'});
-		if(name==='dma_echo')addPhase('dma','DMA echo · '+e.marker.bytes+' B',e,end,{bytes:e.marker.bytes,reads:end.marker.read_calls,summary:'One synchronous write performs RAM → EDU and EDU → RAM, with one completion IRQ per direction.'});
-		if(name==='sysfs')addPhase('sysfs','Sysfs · '+e.marker.attribute,e,end,{summary:'Open, write, read, and close a stable device attribute from process context.'});
-		if(name==='debugfs')addPhase('debugfs','Debugfs · '+e.marker.file,e,end,{summary:'Open, read, and close the developer diagnostics state.'});
+		if(name==='factorial')addPhase('factorial','MMIO · Factorial('+e.marker.input+') → '+end.marker.result,e,end,{kind:'mmio',input:e.marker.input,result:end.marker.result,bytes:end.marker.bytes,summary:'Integer write enters qedu_write(), sleeps, and resumes after one factorial completion IRQ.'});
+		if(name==='dma_echo')addPhase('dma','DMA · echo · '+e.marker.bytes+' B',e,end,{kind:'dma',bytes:e.marker.bytes,reads:end.marker.read_calls,summary:'One synchronous write performs RAM → EDU and EDU → RAM, with one completion IRQ per direction.'});
+		if(name==='sysfs')addPhase('sysfs','SYSCALL · Sysfs · '+e.marker.attribute,e,end,{kind:'syscall',summary:'Open, write, read, and close a stable device attribute from process context.'});
+		if(name==='debugfs')addPhase('debugfs','SYSCALL · Debugfs · '+e.marker.file,e,end,{kind:'syscall',summary:'Open, read, and close the developer diagnostics state.'});
 	});
 	var order={sysfs:0,debugfs:1,factorial:2,dma:3};
 	phases.sort(function(a,b){return order[a.kind]-order[b.kind]||a.start-b.start});phases.forEach(function(p,i){p.index=i});
@@ -185,6 +188,9 @@ function isWorkloadEvent(e){
 	if(e.wake)return e.wake.pid===workloadPid;
 	return false
 }
+function phaseOf(e){return phases.find(function(p){return e.time>=p.start&&e.time<=p.end})}
+function eventCat(e,p){p=p||phaseOf(e);if(/^(irq_|vector_)/.test(e.type))return'irq';if(e.workqueue||e.workerSchedule)return'dma';return(p&&p.data&&p.data.kind)||'io'}
+function catCounts(){var c={mmio:0,dma:0,irq:0,syscall:0,sched:0};events.forEach(function(e){if(e.time<runStart||e.time>runEnd)return;var k=eventCat(e);if(c[k]!=null)c[k]++});return c}
 function phaseEvents(phase){
 	return events.filter(function(e){return e.time>=phase.start&&e.time<=phase.end&&(isWorkloadEvent(e)||e.workerSchedule)});
 }
@@ -210,9 +216,12 @@ function renderMetrics(){
 	$('m-syscalls').textContent=entrySyscalls().length+' entries';
 	$('m-sleeps').textContent=sleeps.filter(function(s){return s.start>=runStart&&s.end<=runEnd&&s.state.charAt(0)==='S'}).length+' interruptible';
 	$('m-faults').textContent=faults.length+' faults';
+	var cc=catCounts();
+	$('m-mmio').textContent=cc.mmio+' events';
+	$('m-dma').textContent=cc.dma+' events';
+	$('m-irqcat').textContent=cc.irq+' × IRQ';
+	$('m-sys').textContent=cc.syscall+' entries';
 	$('evidence-vector').textContent=vector&&vector.vector?'vector '+vector.vector.vector+' · CPU '+(vector.vector.cpu||vector.cpu):'vector —';
-	$('evidence-entry').textContent=irq.length+' × handler entry';
-	$('evidence-exit').textContent=irq.length+' × handler exit';
 }
 function svg(name,attrs,text){
 	var node=document.createElementNS(NS,name);Object.keys(attrs||{}).forEach(function(k){node.setAttribute(k,attrs[k])});if(text!=null)node.textContent=text;return node
@@ -235,7 +244,7 @@ function renderTimeline(){
 		{key:'syscall',x:side+laneGap,title:'SYSCALL',note:'sys_enter / sys_exit'},
 		{key:'scheduler',x:side+laneGap*2,title:'SCHED',note:'switch / wakeup'},
 		{key:'hardirq',x:side+laneGap*3,title:'IRQ',note:'handler entry / exit'},
-		{key:'workqueue',x:side+laneGap*4,title:'DEFERRED WORK',note:'queue / execute'},
+		{key:'workqueue',x:side+laneGap*4,title:'DMA WORK',note:'queue / execute · bottom half'},
 		{key:'exception',x:side+laneGap*5,title:'EXCEPTION',note:'page fault'}
 	],row=34,top=88,contentHeight=Math.max(20,(records.length-1)*row+20),needed=top+contentHeight+14,height=Math.max(visible,needed),bottom=height-14;
 	root.setAttribute('viewBox','0 0 '+viewWidth+' '+height);
@@ -258,9 +267,9 @@ function renderTimeline(){
 		var activity=svg('g',{class:'activity-event','data-event':event.index});
 		activity.appendChild(svg('rect',{x:lane.x-82,y:y-13,width:164,height:26,rx:5,class:'activity-hit'}));
 		activity.appendChild(svg('rect',{x:lane.x-78,y:y-10,width:156,height:20,rx:4,class:nodeClass}));
-		activity.appendChild(svg('text',{x:lane.x-6,y:y+2.5,'text-anchor':'middle',class:'activity-line'},short(eventTitle(event)+' · '+event.body,29)));
+		activity.appendChild(svg('text',{x:lane.x-6,y:y+2.5,'text-anchor':'middle',class:'activity-line'},short(event.type+' · '+event.body,29)));
 		activity.appendChild(svg('rect',{x:lane.x+53,y:y-7,width:22,height:14,rx:3,class:'cpu-badge '+cpuClass}));
-		activity.appendChild(svg('text',{x:lane.x+64,y:y+2.5,'text-anchor':'middle',class:'cpu-badge-text'},'C'+event.cpu));
+		activity.appendChild(svg('text',{x:lane.x+64,y:y+2.5,'text-anchor':'middle',class:'cpu-badge-text'},'C'+event.cpu));;
 		activity.appendChild(svg('text',{x:lane.x-94,y:y+2.5,'text-anchor':'end',class:'activity-time'},'+'+duration(event.time-phase.start)));
 		root.appendChild(activity);
 	});
@@ -277,7 +286,7 @@ function eventTitle(e){
 	if(e.syscall)return e.syscall+' · '+e.direction;
 	if(e.type==='irq_handler_entry')return'IRQ '+e.irq+' enters qedu';
 	if(e.type==='irq_handler_exit')return'IRQ '+e.irq+' '+e.ret;
-	if(e.workqueue)return e.type.replace('workqueue_','work · ');
+	if(e.workqueue)return e.type;
 	if(e.workerSchedule&&e.sched){
 		if(workerPids[e.sched.prevPid]&&(e.sched.state.charAt(0)==='S'||e.sched.state.charAt(0)==='D'))return e.sched.prevComm+' sleeps · state '+e.sched.state;
 		if(workerPids[e.sched.nextPid])return e.sched.nextComm+' resumes';
@@ -288,13 +297,30 @@ function eventTitle(e){
 	return e.type
 }
 function eventClass(e){if(!e)return'event';if(e.type.indexOf('irq_')===0)return'hardirq';if(e.workqueue)return'deferred work';if(e.syscall)return'syscall';if(e.type.indexOf('sched_')===0)return'scheduler';if(e.type==='page_fault_user')return'exception';if(e.marker)return'workload';return e.type}
+function payloadRows(e){
+	var rows={};
+	if(e.syscall&&e.direction==='exit'){var rm=e.body.match(/->\s*(0x[0-9a-f]+|-?\d+)/);rows.ret=rm?rm[1]:e.body.trim();return rows}
+	if(e.syscall){
+		e.body.split(',').forEach(function(p){var kv=p.match(/^\s*([A-Za-z_]+):\s*([^,]*)$/);if(kv)rows[kv[1]]=kv[2].trim()});
+		if(!Object.keys(rows).length)rows.payload=e.body;
+		return rows
+	}
+	if(e.workqueue){var wm=e.body.match(/work struct ([0-9a-fA-F]+)/);if(wm)rows.work='0x'+wm[1];var fn=e.body.match(/function ([A-Za-z0-9_.]+)/);if(fn)rows.function=fn[1]}
+	if(e.type==='sched_switch'){
+		var sw=e.body.replace(/\s*==>\s*/,' next_comm=').match(/([A-Za-z_]+)=("[^"]*"|\S+)/g);
+		if(sw)sw.forEach(function(t){var kv=t.match(/^([A-Za-z_]+)=(.*)$/);if(kv)rows[kv[1]]=kv[2]});
+	}
+	var tokens=e.body.replace(/\s*==>\s*/g,' ').match(/([A-Za-z_]+)=("[^"]*"|\S+)/g);
+	if(tokens)tokens.forEach(function(t){var kv=t.match(/^([A-Za-z_]+)=(.*)$/);if(kv&&rows[kv[1]]==null)rows[kv[1]]=kv[2]});
+	if(!Object.keys(rows).length)rows.payload=e.body;
+	return rows
+}
 function renderInspector(){
 	var e=selectedEvent;if(!e){$('inspect-title').textContent='No event';return}
-	$('inspect-type').textContent=eventClass(e);$('inspect-title').textContent=eventTitle(e);
+	$('inspect-type').textContent='TRACEPOINT';$('inspect-title').textContent=e.type;
 	var fields={timestamp:e.time.toFixed(6)+' s',relative:duration(e.time-runStart),cpu:'CPU '+e.cpu,context:e.flags,emitter:e.task+'['+e.pid+']'};
 	if(e.irq!=null)fields.irq=e.irq;if(e.irqName)fields.handler=e.irqName;if(e.ret)fields.result=e.ret;if(e.syscall)fields.direction=e.direction;
-	if(e.fault){fields.address=e.fault.address;fields.ip=e.fault.ip;fields.error_code=e.fault.error_code}
-	fields.payload=short(e.body,110);
+	Object.keys(payloadRows(e)).forEach(function(k){if(fields[k]==null)fields[k]=payloadRows(e)[k]});
 	$('fields').innerHTML=Object.keys(fields).map(function(k){return'<dt>'+esc(k)+'</dt><dd title="'+esc(fields[k])+'">'+esc(fields[k])+'</dd>'}).join('');
 }
 function renderPhaseList(){
@@ -320,14 +346,14 @@ function load(parts){
 	var report=parseSections(parts[1]),workload=report.workload||'';
 	events=parseTrace(parts[0]);meta=parsePairs(report.metadata||'','=');debugState=parseDebug(report.debugfs||'');sysfsState=parsePairs(report.sysfs||'','=');
 	if(!events.length)throw Error('no interrupt events');
-	workloadPid=number(meta.workload_pid,events.find(function(e){return e.marker})&&events.find(function(e){return e.marker}).pid);
+	workloadPid=Number(meta.workload_pid)||((events.find(function(e){return e.marker})||{}).pid)||0;
 	markDeviceSyscalls();buildIrqs();buildSleeps();markWorkerSchedulerEvents();buildPhases();if(!phases.length)throw Error('no workload phases parsed');
-	if(workload.indexOf('phase=run action=end')<0)throw Error('workload did not finish');
+	if(workload.indexOf('phase=run action=end')<0&&!/phase=run\b[^\n]*action=end/.test(workload))throw Error('workload did not finish');
 	$('status').innerHTML='<i class="trace-dot"></i><span>'+events.length+' events · '+phases.length+' operations</span>';
 	renderMetrics();renderState();
 	selectedPhase=Math.max(0,phases.findIndex(function(p){return p.kind==='dma'}));selectPhase(selectedPhase)
 }
-Promise.all(PATHS.map(function(path){return fetch(BASE+path+'?v='+Date.now(),{cache:'no-store'}).then(function(response){if(!response.ok)throw Error(path+' HTTP '+response.status);return response.text()})})).then(load).catch(function(error){$('status').textContent='INT data error · '+error.message;$('inspect-title').textContent=error.message});
+Promise.all(PATHS.map(function(path){return fetch(BASE+path+'?v='+Date.now(),{cache:'no-store'}).then(function(response){if(!response.ok)throw Error(path+' HTTP '+response.status);return response.text()})})).then(load).catch(function(error){$('status').textContent='IO data error · '+error.message;$('inspect-title').textContent=error.message});
 })();
 </script>
 </body>

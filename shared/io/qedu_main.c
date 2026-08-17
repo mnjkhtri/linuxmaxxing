@@ -24,7 +24,7 @@ MODULE_PARM_DESC(selftest, "Run probe-time MMIO, IRQ, and DMA self-tests");
  * Together they demonstrate PCI discovery and resource ownership, BAR MMIO, shared interrupts, coherent DMA, wait queues, a misc character device, and reverse-order cleanup.
  *
  * Build from the repository root:
- *   make -C shared/interrupts
+ *   make -C shared/io
  *
  * After booting the repository's QEMU guest, load and inspect it with:
  *

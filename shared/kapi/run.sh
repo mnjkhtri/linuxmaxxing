@@ -6,7 +6,7 @@ cd "$(dirname "$0")"
 MODULE=kapi
 PREFIX=KAPI_EVT
 CAPTURE_DIR=../_captures
-CAPTURE_FILE=$CAPTURE_DIR/kapi.txt
+CAPTURE_FILE=$CAPTURE_DIR/kapi-Report.txt
 MARKER=LX_CAPTURE_BEGIN_$$_$(date +%s)
 loaded=no
 

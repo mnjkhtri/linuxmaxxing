@@ -3,15 +3,15 @@ set -euo pipefail
 
 # One workload run feeds both halves of the SCHED visualization:
 #
-#   tracefs sched_* events  -> scheduler-lifecycle.txt -> task lifetimes
-#   eBPF __enqueue_entity   -> scheduler-cfs.ndjson    -> per-CPU RB trees
+#   tracefs sched_* events  -> scheduler-Trace.txt          -> task lifetimes
+#   eBPF __enqueue_entity   -> scheduler.eBPF.ndjson        -> per-CPU RB trees
 #
 # Starting both observers before workload_fork keeps their timestamps aligned.
 # Run this inside the guest after `make -C shared/scheduler` on the host.
 
-capture_file=/mnt/host/_captures/scheduler-lifecycle.txt
-cfs_capture=/mnt/host/_captures/scheduler-cfs.ndjson
-observer_output=$(mktemp /tmp/scheduler-cfs.XXXXXX)
+capture_file=/mnt/host/_captures/scheduler-Trace.txt
+cfs_capture=/mnt/host/_captures/scheduler.eBPF.ndjson
+observer_output=$(mktemp /tmp/scheduler.eBPF.XXXXXX)
 observer_pid=
 workload_status=0
 

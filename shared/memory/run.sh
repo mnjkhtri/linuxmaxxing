@@ -148,8 +148,8 @@ enable_event percpu/percpu_create_chunk
 enable_event percpu/percpu_destroy_chunk
 
 mkdir -p /mnt/host/_captures
-capture_file=/mnt/host/_captures/memory-observer.ndjson
-trace_file=/mnt/host/_captures/memory-trace.txt
+capture_file=/mnt/host/_captures/memory.eBPF.ndjson
+trace_file=/mnt/host/_captures/memory-Trace.txt
 : > "$capture_file"
 : > "$trace_file"
 observer_output=$(mktemp /tmp/mm-run.XXXXXX)

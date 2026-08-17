@@ -6,8 +6,8 @@ cd -- "$(dirname -- "$0")"
 MODULE=./qedu.ko
 WORKLOAD=./workload_qedu
 CAPTURE_DIR=${QEDU_CAPTURE_DIR:-../_captures}
-TRACE_CAPTURE=${CAPTURE_DIR}/interrupts-trace.txt
-REPORT_CAPTURE=${CAPTURE_DIR}/interrupts-report.txt
+TRACE_CAPTURE=${CAPTURE_DIR}/io-Trace.txt
+REPORT_CAPTURE=${CAPTURE_DIR}/io-Report.txt
 
 TRACEFS=
 TRACE_SAVED=0
@@ -47,11 +47,11 @@ if [[ $(id -u) -ne 0 ]]; then
 	exit 1
 fi
 if [[ ! -r ${MODULE} ]]; then
-	echo "qedu-run: error: missing ${MODULE}; run make -C shared/interrupts" >&2
+	echo "qedu-run: error: missing ${MODULE}; run make -C shared/io" >&2
 	exit 1
 fi
 if [[ ! -x ${WORKLOAD} ]]; then
-	echo "qedu-run: error: missing ${WORKLOAD}; run make -C shared/interrupts" >&2
+	echo "qedu-run: error: missing ${WORKLOAD}; run make -C shared/io" >&2
 	exit 1
 fi
 
@@ -175,7 +175,7 @@ trace_clock=$(sed -n 's/.*\[\([^]]*\)\].*/\1/p' "${TRACEFS}/trace_clock")
 	echo
 	echo
 	echo '[metadata]'
-	echo "workload_pid=$(sed -n 's/.*phase=run action=begin pid=\([0-9]*\).*/\1/p' "${TRACE_CAPTURE}" | head -n 1)"
+	echo "workload_pid=$(sed -n 's/.*phase=run[[:space:]].*action=begin[[:space:]]pid=\([0-9]*\).*/\1/p' "${TRACE_CAPTURE}" | head -n 1)"
 	echo "qedu_irq=${QEDU_IRQ}"
 	echo "trace_clock=${trace_clock:-unknown}"
 	echo "kernel=$(uname -r)"
