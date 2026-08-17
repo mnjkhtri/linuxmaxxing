@@ -10,7 +10,7 @@
 #include "ept.skel.h"
 
 #define CAPTURE_DIR "captures"
-#define CAPTURE_PATH CAPTURE_DIR "/ept.ndjson"
+#define CAPTURE_PATH CAPTURE_DIR "/virt-ept.eBPF.ndjson"
 #define SLOT0_GFN_SAMPLES 16
 #define HUGE_GFN_SAMPLES 1
 #define MAX_GFN_SAMPLES (SLOT0_GFN_SAMPLES + HUGE_GFN_SAMPLES)

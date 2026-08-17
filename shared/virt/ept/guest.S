@@ -1,7 +1,7 @@
 /*
- * Tiny guest for observing EPT changes.
- * It starts in 16-bit real mode, installs flat 32-bit segments, and leaves paging off, so GVA == GPA while EPT still translates GPA to HPA.
- * Slot 0 uses GFN 0 for code and GFN 7 for data; GFNs 1-6 are untouched, and MMIO is at GFN 10.
+ * The guest starts in real mode, enters flat 32-bit protected mode, then performs the EPT memory workload.
+ * Each 0xe9 command asks the VMM to reshape the EPT (MADV_DONTNEED, slot replacement, dirty-log clear, and a 2 MiB THP-backed slot);
+ * writing GFN 7 / the huge slot between commands faults in and walks the EPT.  Port 0x82 ends the run.
  */
 .code16
 .global _start
@@ -20,6 +20,7 @@ protected_mode:
 	movw %ax, %ds
 	movw %ax, %es
 	movw %ax, %ss
+	movl $0x0ff0, %esp
 
 	movl $0, %eax        	/* Select CPUID leaf 0. */
 	cpuid                	/* VM exit handled by KVM in the kernel. */
@@ -53,7 +54,11 @@ protected_mode:
 	outb %al, $0xe9      	/* Slot 0 keeps code; slot 1 receives the huge host page. */
 	movw $0x5555, 0x200000	/* Flat 32-bit addressing reaches the data-only huge slot. */
 
-	hlt                  	/* Finish the guest with KVM_EXIT_HLT. */
+	/* Close the capture after the EPT workload. */
+	movb $0, %al
+	outb %al, $0x82
+
+	hlt
 
 .align 8
 gdt:

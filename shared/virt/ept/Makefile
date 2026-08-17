@@ -1,3 +1,5 @@
+.DELETE_ON_ERROR:
+
 CC ?= gcc
 CFLAGS ?= -O0 -g -Wall -Wextra
 AS ?= as
@@ -30,7 +32,7 @@ $(BUILD_DIR):
 	mkdir -p $@
 
 $(VMM): vmm.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) $< -o $@
+	$(CC) $(CFLAGS) -pthread $< -o $@
 
 $(GUEST_OBJ): guest.S | $(BUILD_DIR)
 	$(AS) --32 $< -o $@

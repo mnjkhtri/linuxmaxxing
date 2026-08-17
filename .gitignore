@@ -15,6 +15,7 @@ modules.order
 shared/_captures/
 qemu/*.raw
 shared/virt/cloudlab
+shared/.cloudlab-known-hosts
 *.orig
 *-review.png
 !shared/memory/build/

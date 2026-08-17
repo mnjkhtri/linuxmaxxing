@@ -1,11 +1,15 @@
 #include <linux/kvm.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <time.h>
 
 #define GUEST_MEM_SIZE 0x8000
 #define HUGE_MEM_SIZE 0x200000
@@ -52,7 +56,6 @@ int main(void)
 		fprintf(stderr, "unexpected KVM API version: %d\n", api_version);
 		return 1;
 	}
-
 	/* KVM_CREATE_VM creates one VM object; its fd is used for VM-wide ioctls. */
 	int vm = ioctl(kvm, KVM_CREATE_VM, 0);
 	if (vm < 0)
@@ -90,7 +93,7 @@ int main(void)
 		return 1;
 	}
 	fclose(guest);
-	printf("loaded guest.bin: %zu bytes\n", guest_size);
+	(void)guest_size;
 
 	/* KVM_SET_USER_MEMORY_REGION maps eight guest pages, GFN 0 through GFN 7. */
 	if (set_memory_region(vm, 0, 0, active_mem, guest_mem_size, 0) < 0)
@@ -256,37 +259,39 @@ int main(void)
 						return 1;
 					}
 				}
-				printf("userspace handled guest control command %u\n", data[0]);
+
+				/* EPT workload controls remain guest I/O. */
+			}
+
+			/* Port 0x82 closes the run after the EPT workload has finished. */
+			else if (run->io.direction == KVM_EXIT_IO_OUT && run->io.port == 0x82)
+			{
+				break;
 			}
 
 			/* Complete an IN instruction by placing the emulated device value in kvm_run. */
 			else if (run->io.direction == KVM_EXIT_IO_IN)
 			{
 				data[0] = 0x11;
-				printf("userspace received KVM_EXIT_IO IN port=0x%x value=0x%02x\n", run->io.port, data[0]);
+				(void)run->io.port;
 			}
-			/* Log ordinary OUT instructions that are not synchronization requests. */
-			else
-				printf("userspace received KVM_EXIT_IO OUT port=0x%x value=0x%02x\n", run->io.port, data[0]);
 			continue;
 		}
 
 		/* Report guest accesses to GPAs that KVM routes to userspace as MMIO. */
 		if (run->exit_reason == KVM_EXIT_MMIO)
 		{
-			printf("userspace received KVM_EXIT_MMIO addr=0x%llx len=%u write=%u data=0x%02x\n", (unsigned long long)run->mmio.phys_addr, run->mmio.len, run->mmio.is_write, run->mmio.data[0]);
 			continue;
 		}
 
 		/* HLT is the guest's intentional completion signal for this experiment. */
 		if (run->exit_reason == KVM_EXIT_HLT)
 		{
-			printf("userspace received KVM_EXIT_HLT\n");
 			break;
 		}
 
 		/* Any unhandled exit means the toy VMM cannot safely resume the guest. */
-		printf("unexpected KVM exit reason: %u\n", run->exit_reason);
+		fprintf(stderr, "unexpected KVM exit reason: %u\n", run->exit_reason);
 		return 1;
 	}
 
