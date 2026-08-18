@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CFS per-CPU runqueues</title>
+  <link rel="stylesheet" href="../../theme.css?v=21">
+  <link rel="stylesheet" href="scheduler.css?v=1">
+</head>
+<body>
+<main class="cfs">
+
+  <header class="head">
+    <div>
+      <div class="eyebrow">SCHED / FAIR CLASS / PER-CPU</div>
+      <h1><span>CFS</span> runqueue laboratory</h1>
+      <p>Per-CPU cfs_rq state · the active dot marks which CPU changed</p>
+    </div>
+    <div id="status" role="status">
+      <i class="trace-dot"></i><span>following scheduler evolution…</span>
+    </div>
+  </header>
+
+  <section class="cpu-rail" id="cpu-rail" aria-label="Detected runqueues"></section>
+
+  <section class="workbench">
+
+    <aside class="panel life-rail">
+      <header class="panel-head">
+        <h2>Task lifetimes</h2>
+        <span id="life-summary">building…</span>
+      </header>
+      <div class="life-canvas" id="life-canvas" role="img" aria-label="Task lifetimes aligned with CFS state changes"></div>
+    </aside>
+
+    <div class="trees" id="trees"></div>
+
+    <aside class="panel notebook">
+      <header class="panel-head">
+        <h2>CFS internals</h2>
+        <span id="op">enqueue</span>
+      </header>
+      <div class="note">
+        <div class="layer"><i class="trace-dot"></i><span id="layer">current transition</span></div>
+        <h2 id="title">Per-CPU CFS state</h2>
+        <p id="copy"></p>
+        <dl class="kv">
+          <dt>CPU</dt><dd id="v-cpu">—</dd>
+          <dt>cfs_rq</dt><dd id="v-rq">—</dd>
+          <dt>emitter TID</dt><dd id="v-tid">—</dd>
+          <dt>sched_entity</dt><dd id="v-se">—</dd>
+          <dt>rb_node</dt><dd id="v-node">—</dd>
+          <dt>leftmost</dt><dd id="v-left">—</dd>
+        </dl>
+        <div class="checks" id="checks"></div>
+        <div class="migration" id="migration">
+          <div class="migration-head">
+            <b>CROSS-CPU</b>
+            <span id="migration-count">0 events</span>
+            <span class="migration-nav">
+              <button id="prev-mig" aria-label="Previous cross-CPU event">←</button>
+              <button id="next-mig" aria-label="Next cross-CPU event">→</button>
+            </span>
+          </div>
+          <div id="migration-text">Building cross-CPU index…</div>
+        </div>
+      </div>
+    </aside>
+
+  </section>
+
+  <nav class="panel toolbar playback-bar cfs-player" aria-label="Global capture playback">
+    <button id="prev">Prev</button>
+    <button id="play">Play</button>
+    <button id="next">Next</button>
+    <input id="scrub" class="playback-scrub" type="range" min="0" max="0" value="0" aria-label="Global capture frame">
+    <span id="counter" class="playback-counter">— / —</span>
+    <span class="sep playback-sep"></span>
+    <select id="speed" class="playback-speed" aria-label="Playback speed">
+      <option value="1">1 event/s</option>
+      <option value="25">25 events/s</option>
+      <option value="100">100 events/s</option>
+      <option value="1000" selected>1000 events/s</option>
+    </select>
+    <span class="badge playback-badge">global capture order</span>
+    <span class="sep playback-sep"></span>
+    <button id="load">Open capture</button>
+    <input id="file" type="file" accept=".ndjson,.json,.log,.txt" hidden>
+  </nav>
+
+</main>
+<script src="scheduler.js?v=3"></script>
+</body>
+</html>

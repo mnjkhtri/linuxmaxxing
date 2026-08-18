@@ -3,6 +3,7 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_tracing.h>
+#include "cfs_event.h"
 
 char LICENSE[] SEC("license") = "GPL";
 
@@ -13,36 +14,20 @@ char LICENSE[] SEC("license") = "GPL";
  * We observe __enqueue_entity twice: the kprobe saves its cfs_rq and sched_entity arguments, then the kretprobe reads the tree after insertion.
  * BTF describes these kernel types and CO-RE relocates their field offsets for the running kernel.
  * CO-RE adapts layouts; it does not make arbitrary kernel addresses safe, so every pointer still comes from a probe argument or a field reached from one.
+ *
+ * The emitted event carries the actual kernel-observed root and cached leftmost (captured directly, never reconstructed in userspace), the enqueued entity's rb_node, and a bounded BFS of the tree in cfs_event.
  */
-#define MAX_TREE_NODES 31
 
-/* One fixed-size tree state sent through the ring buffer to cfs.c. */
-struct tree_node
+/* Temporary state shared by the matching entry and return probes. */
+struct saved_args
 {
-	u64 node;
-	u64 left;
-	u64 right;
-	u32 color;
-	char comm[16];
-};
-
-struct context_event
-{
-	u64 timestamp_ns;
-	u32 tid;
-	u32 cpu;
-	u64 cfs_rq;
-	u64 se;
-	u64 run_node;
-	u64 leftmost;
-	u32 node_count;
-	u32 truncated;
-	struct tree_node nodes[MAX_TREE_NODES];
+	struct cfs_rq *cfs_rq;
+	struct sched_entity *se;
 };
 
 struct scratch_state
 {
-	struct context_event event;
+	struct cfs_event event;
 	struct rb_node *traversal_worklist[MAX_TREE_NODES];
 	u32 head;
 	u32 tail;
@@ -75,13 +60,6 @@ static __always_inline void read_node_comm(struct rb_node *node, char *comm)
 		comm[0] = 0;
 }
 
-/* Temporary state shared by the matching entry and return probes. */
-struct saved_args
-{
-	struct cfs_rq *cfs_rq;
-	struct sched_entity *se;
-};
-
 struct
 {
 	__uint(type, BPF_MAP_TYPE_HASH);
@@ -100,7 +78,8 @@ struct
 } scratch SEC(".maps");
 
 /*
- * Breadth-first traversal uses an explicitly bounded bpf_loop callback. The verifier needs the range checks immediately before every variable-index access.
+ * Breadth-first traversal uses an explicitly bounded bpf_loop callback.
+ * The verifier needs the range checks immediately before every variable-index access.
  * If the 31-slot worklist fills while children remain, truncated is set so userspace never mistakes a partial tree for a complete one.
  */
 static long walk_one_node(u64 index, void *ctx)
@@ -115,7 +94,7 @@ static long walk_one_node(u64 index, void *ctx)
 		!scratch_state_ptr->traversal_worklist[scratch_state_ptr->head])
 		return 1;
 
-	struct context_event *event = &scratch_state_ptr->event;
+	struct cfs_event *event = &scratch_state_ptr->event;
 	struct rb_node *node = scratch_state_ptr->traversal_worklist[scratch_state_ptr->head++];
 	fill_node(&event->nodes[index], node);
 	if (event->nodes[index].left)
@@ -144,7 +123,8 @@ struct
 } events SEC(".maps");
 
 /*
- * Entry probe: correlate arguments by pid_tgid. It deliberately emits no event because __enqueue_entity has not finished changing the tree yet.
+ * Entry probe: correlate arguments by pid_tgid.
+ * It deliberately emits no event because __enqueue_entity has not finished changing the tree yet.
  */
 SEC("kprobe/__enqueue_entity")
 int BPF_KPROBE(kprobe_enqueue_entity)
@@ -175,13 +155,17 @@ int BPF_KRETPROBE(kretprobe_enqueue_entity)
 	if (!scratch_state_ptr)
 		return 0;
 
-	struct context_event *event = &scratch_state_ptr->event;
-	event->timestamp_ns = bpf_ktime_get_ns();
+	struct cfs_event *event = &scratch_state_ptr->event;
+	event->time_ns = bpf_ktime_get_ns();
+	event->pid = (u32)(id >> 32);
 	event->tid = (u32)id;
-	event->cpu = BPF_CORE_READ(cfs_rq, rq, cpu);
+	event->cpu = bpf_get_smp_processor_id();
+	bpf_get_current_comm(event->comm, sizeof(event->comm));
 	event->cfs_rq = (u64)cfs_rq;
 	event->se = (u64)args->se;
 	event->run_node = (u64)((char *)args->se + bpf_core_field_offset(struct sched_entity, run_node));
+	event->nr_running = BPF_CORE_READ(cfs_rq, rq, nr_running);
+	event->root = (u64)BPF_CORE_READ(cfs_rq, tasks_timeline.rb_root.rb_node);
 	event->leftmost = (u64)BPF_CORE_READ(cfs_rq, tasks_timeline.rb_leftmost);
 	event->node_count = 0;
 	event->truncated = 0;

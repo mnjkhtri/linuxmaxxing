@@ -20,6 +20,11 @@ shared/.cloudlab-known-hosts
 *-review.png
 !shared/memory/build/
 shared/*/build/*
-!shared/memory/build/mm
 shared/*/vmlinux.h
 shared/*/*.skel.h
+
+# Compiled experiment binaries (built on the host, run in the guest via 9p).
+shared/scheduler/cfs
+shared/scheduler/workload_fork
+shared/io/workload_qedu
+shared/memory/workload_mm
