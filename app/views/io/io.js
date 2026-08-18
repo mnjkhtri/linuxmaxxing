@@ -234,14 +234,14 @@ function renderTimeline(){
 		var laneKey=traceLane(event),cpuClass='cpu-'+event.cpu,nodeClass='activity-node '+laneKey+' '+cpuClass+(selectedEvent&&selectedEvent.index===event.index?' selected':'');
 		var activity=svg('g',{class:'activity-event','data-event':event.index});
 		var clipId='clip'+event.index;
-		var defs2=svg('clipPath',{id:clipId});defs2.appendChild(svg('rect',{x:lane.x-86,y:y-10,width:136,height:20,rx:4}));
+		var defs2=svg('clipPath',{id:clipId});defs2.appendChild(svg('rect',{x:lane.x-84,y:y-10,width:130,height:20,rx:4}));
 		activity.appendChild(defs2);
 		activity.appendChild(svg('rect',{x:lane.x-90,y:y-13,width:180,height:26,rx:5,class:'activity-hit'}));
 		activity.appendChild(svg('rect',{x:lane.x-86,y:y-10,width:172,height:20,rx:4,class:nodeClass}));
-		var label=svg('text',{x:lane.x-6,y:y+2.5,'text-anchor':'middle','clip-path':'url(#'+clipId+')',class:'activity-line'},short(event.type+' · '+event.body,33));
+		var label=svg('text',{x:lane.x-19,y:y+2.5,'text-anchor':'middle','clip-path':'url(#'+clipId+')',class:'activity-line'},event.type+short(' · '+event.body,24));
 		activity.appendChild(label);
-		activity.appendChild(svg('rect',{x:lane.x+53,y:y-7,width:22,height:14,rx:3,class:'cpu-badge '+cpuClass}));
-		activity.appendChild(svg('text',{x:lane.x+64,y:y+2.5,'text-anchor':'middle',class:'cpu-badge-text'},'C'+event.cpu));
+		activity.appendChild(svg('rect',{x:lane.x+55,y:y-7,width:24,height:14,rx:3,class:'cpu-badge '+cpuClass}));
+		activity.appendChild(svg('text',{x:lane.x+67,y:y+2.5,'text-anchor':'middle',class:'cpu-badge-text'},'C'+event.cpu));
 		activity.appendChild(svg('text',{x:lane.x-94,y:y+2.5,'text-anchor':'end',class:'activity-time'},'+'+durNs(event.time_ns-phase.start)));
 		root.appendChild(activity);
 	});
