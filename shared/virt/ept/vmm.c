@@ -15,6 +15,7 @@
 #define HUGE_MEM_SIZE 0x200000
 #define THP_MAPPING_SIZE (HUGE_MEM_SIZE * 2)
 #define HUGE_GPA 0x200000
+#define HUGE_GFN_2ND (HUGE_GPA / 0x1000 + 1) /* GFN 513, GPA 0x201000: command-5 probe page. */
 #define GUEST_PAGE_SIZE 0x1000
 #define DATA_GPA 0x7000
 #define DATA_GFN (DATA_GPA / GUEST_PAGE_SIZE)
@@ -32,6 +33,9 @@ static int set_memory_region(int vm, uint32_t slot, uint64_t guest_phys_addr, ui
 
 	return ioctl(vm, KVM_SET_USER_MEMORY_REGION, &region);
 }
+
+/* The Command-4 huge slot backing, kept alive so Command 5 can re-register the same mapping with dirty logging. */
+static uint8_t *huge_mem;
 
 int main(void)
 {
@@ -236,7 +240,7 @@ int main(void)
 						perror("mmap THP candidate");
 						return 1;
 					}
-					uint8_t *huge_mem = (uint8_t *)(((uintptr_t)mapping + HUGE_MEM_SIZE - 1) & ~(uintptr_t)(HUGE_MEM_SIZE - 1));
+					huge_mem = (uint8_t *)(((uintptr_t)mapping + HUGE_MEM_SIZE - 1) & ~(uintptr_t)(HUGE_MEM_SIZE - 1));
 					size_t prefix = (size_t)(huge_mem - mapping);
 					size_t suffix = THP_MAPPING_SIZE - prefix - HUGE_MEM_SIZE;
 
@@ -256,6 +260,27 @@ int main(void)
 					if (set_memory_region(vm, 1, HUGE_GPA, huge_mem, HUGE_MEM_SIZE, 0) < 0)
 					{
 						perror("install 2 MiB KVM memory region");
+						return 1;
+					}
+				}
+
+				/*
+				 * Command 5 enables fine-grained dirty tracking on the existing huge slot.
+				 * The same slot, GPA, HVA, and size stay; only the flags change to KVM_MEM_LOG_DIRTY_PAGES.
+				 * Depending on the target kernel, KVM write-protects the region eagerly, which requires
+				 * splitting the level-2 huge leaf into level-1 4 KiB leaves (TDP-MMU eager page splitting).
+				 * The EPT observer reports whatever structure the kernel actually produces, not an assumed one.
+				 */
+				else if (data[0] == 5)
+				{
+					if (!huge_mem)
+					{
+						fprintf(stderr, "command 5 before a command 4 huge slot\n");
+						return 1;
+					}
+					if (set_memory_region(vm, 1, HUGE_GPA, huge_mem, HUGE_MEM_SIZE, KVM_MEM_LOG_DIRTY_PAGES) < 0)
+					{
+						perror("enable dirty logging on 2 MiB slot");
 						return 1;
 					}
 				}

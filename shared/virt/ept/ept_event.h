@@ -21,7 +21,7 @@
 /* Bounded-observation limits: they define the ABI and the public capture metadata. */
 #define EPT_LEVELS 4
 #define SLOT0_GFN_SAMPLES 16
-#define HUGE_GFN_SAMPLES 1
+#define HUGE_GFN_SAMPLES 2
 #define MAX_GFN_SAMPLES (SLOT0_GFN_SAMPLES + HUGE_GFN_SAMPLES)
 #define HUGE_GFN_BASE 512
 

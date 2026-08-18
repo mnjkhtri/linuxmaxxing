@@ -1,6 +1,6 @@
 /*
  * The guest starts in real mode, enters flat 32-bit protected mode, then performs the EPT memory workload.
- * Each 0xe9 command asks the VMM to reshape the EPT (MADV_DONTNEED, slot replacement, dirty-log clear, and a 2 MiB THP-backed slot);
+ * Each 0xe9 command asks the VMM to reshape the EPT (MADV_DONTNEED, slot replacement, dirty-log clear, one 2 MiB THP-backed slot, and its dirty-logging split);
  * writing GFN 7 / the huge slot between commands faults in and walks the EPT.  Port 0x82 ends the run.
  */
 .code16
@@ -53,6 +53,11 @@ protected_mode:
 	movb $4, %al
 	outb %al, $0xe9      	/* Slot 0 keeps code; slot 1 receives the huge host page. */
 	movw $0x5555, 0x200000	/* Flat 32-bit addressing reaches the data-only huge slot. */
+
+	/* Command 5 asks KVM to split the huge EPT mapping for dirty logging. */
+	movb $5, %al
+	outb %al, $0xe9      	/* VMM re-registers slot 1 with KVM_MEM_LOG_DIRTY_PAGES. */
+	movw $0x6666, 0x201000	/* Second 4 KiB page inside the same 2 MiB range, after the split. */
 
 	/* Close the capture after the EPT workload. */
 	movb $0, %al

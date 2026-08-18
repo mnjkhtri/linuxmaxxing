@@ -13,7 +13,7 @@
  *
  *   hook the same KVM tracepoints shown in the VIRT UI
  *   at each selected KVM execution, MMU, or invalidation boundary
- *     sample GFN 0-15 plus the command-4 access in the huge-page range
+ *     sample GFN 0-15 plus GFN 512/513 across the command-4 huge and command-5 split accesses
  *     convert GFN to GPA
  *     start at KVM's EPT root HPA from kvm_vcpu->arch.mmu
  *     walk the EPT/TDP page table
@@ -137,10 +137,11 @@ static __always_inline __u64 ept_leaf_pfn(__u64 spte, __u64 gpa, __u8 level)
 
 static __always_inline __u64 sampled_gfn(__u32 slot)
 {
-	/* Keep the low-GFN view dense, then walk the GFN that faults in the huge range. */
+	/* Keep the low-GFN view dense, then walk the huge-range pages the workload touches. */
+	/* Command 4 faults GFN 512; command 5 later faults GFN 513 so the split is visible across two 4 KiB pages. */
 	if (slot < SLOT0_GFN_SAMPLES)
 		return slot;
-	return HUGE_GFN_BASE;
+	return HUGE_GFN_BASE + (slot - SLOT0_GFN_SAMPLES);
 }
 
 /* Walk one sampled guest frame number through KVM's EPT/TDP page table. */
