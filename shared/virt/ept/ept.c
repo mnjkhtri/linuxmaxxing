@@ -105,6 +105,7 @@ static void write_meta(struct json_writer *jw)
 	json_u32(jw, "huge_gfn_samples", HUGE_GFN_SAMPLES);
 	json_u32(jw, "max_gfn_samples", MAX_GFN_SAMPLES);
 	json_u32(jw, "huge_gfn_base", HUGE_GFN_BASE);
+	json_u32(jw, "huge_gfn_stride", HUGE_GFN_STRIDE);
 	json_object_end(jw);
 	json_newline(jw);
 }

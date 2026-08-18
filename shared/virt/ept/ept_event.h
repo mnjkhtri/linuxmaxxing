@@ -21,9 +21,10 @@
 /* Bounded-observation limits: they define the ABI and the public capture metadata. */
 #define EPT_LEVELS 4
 #define SLOT0_GFN_SAMPLES 16
-#define HUGE_GFN_SAMPLES 2
+#define HUGE_GFN_SAMPLES 8
 #define MAX_GFN_SAMPLES (SLOT0_GFN_SAMPLES + HUGE_GFN_SAMPLES)
 #define HUGE_GFN_BASE 512
+#define HUGE_GFN_STRIDE 64 /* 64 GFN (256 KiB) gap between huge samples across the 2 MiB window. */
 
 /* The KVM boundary that produced this snapshot; the loader owns the readable names. */
 enum ept_event_type

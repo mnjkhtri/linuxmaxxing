@@ -267,8 +267,7 @@ int main(void)
 				/*
 				 * Command 5 enables fine-grained dirty tracking on the existing huge slot.
 				 * The same slot, GPA, HVA, and size stay; only the flags change to KVM_MEM_LOG_DIRTY_PAGES.
-				 * Depending on the target kernel, KVM write-protects the region eagerly, which requires
-				 * splitting the level-2 huge leaf into level-1 4 KiB leaves (TDP-MMU eager page splitting).
+				 * Eager write-protection splits the level-2 huge leaf into level-1 4 KiB leaves on TDP-MMU kernels.
 				 * The EPT observer reports whatever structure the kernel actually produces, not an assumed one.
 				 */
 				else if (data[0] == 5)
