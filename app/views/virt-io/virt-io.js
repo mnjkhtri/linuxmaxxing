@@ -108,13 +108,20 @@ function derivePhases(){
     });
     var B=accepts.length?accepts[0]:1,
         C=accepts.length>1?accepts[1]:B,
-        D=dmas.length?dmas[0]:C;
+        E=dmas.length?dmas[0]:(frames.length-1),
+        D=(accepts.length>2&&accepts[2]<E)?accepts[2]:E;
     phases=[
         {id:'A',label:'APIC READY',range:[0,B-1],note:'IDT · LAPIC · IOAPIC RTE(4) · marker 0x11'},
         {id:'B',label:'NORMAL IRQ',range:[B,C-1],note:'CMD_IRQ_ONLY · IOAPIC→LAPIC→ISR→EOI'},
-        {id:'C',label:'IF=0 PENDING',range:[C,D-1],note:'IRQ raised while IF=0 · marker 0x12 · STI'},
-        {id:'D',label:'VIRTUAL DMA',range:[D,frames.length-1],note:'DMA_TO_DEVICE & DMA_FROM_DEVICE'}
+        {id:'C',label:'IF=0 PENDING',range:[C,D-1],note:'IRQ raised while IF=0 · marker 0x12 · STI'}
     ];
+    if(D<E){
+        phases.push({id:'D',label:'IRQ BURST IF=0',range:[D,E-1],note:'CMD_IRQ_BURST · 3 same-vector GSI edges · one IRR bit · one ISR run · marker 0x13'});
+        phases.push({id:'E',label:'VIRTUAL DMA',range:[E,frames.length-1],note:'DMA_TO_DEVICE & DMA_FROM_DEVICE'});
+    }else{
+        /* A pre-burst capture still renders the DMA phase as the last one. */
+        phases.push({id:'D',label:'VIRTUAL DMA',range:[E,frames.length-1],note:'DMA_TO_DEVICE & DMA_FROM_DEVICE'});
+    }
     phases.forEach(function(p){p.count=Math.max(0,p.range[1]-p.range[0]+1)});
 }
 
@@ -258,16 +265,21 @@ function renderRte(f){
 
 function renderIrqState(f){
     if(!f)return'<div class="matrix"></div>';
-    var irr=!!f.irr,isr=!!f.isr,pending=irr&&!isr;
-    return'<div class="matrix'+(pending?' pending':'')+'"><div class="m-head"><span>INTERRUPT STATE</span><small>vector '+meta.device_vector+'</small></div>'+
+    var irr=!!f.irr,isr=!!f.isr,pending=irr&&!isr,
+        ph=phases[phaseOf(selected)]||{},
+        burst=ph.id==='D',
+        foot=pending
+            ?(burst?'several same-vector edges held ONE LAPIC IRR bit while IF=0 · STI releases a single delivery'
+              :'IF=0 holds the vector in the LAPIC until STI releases delivery')
+            :isr?'vector 0x40 in service until guest EOI'
+            :(burst?'3 edges already latched into one pending bit · nothing serviced yet'
+              :'no interrupt queued at this observation');
+    return'<div class="matrix'+(pending?' pending':'')+'"><div class="m-head"><span>INTERRUPT STATE</span><small>vector '+meta.device_vector+(burst?' · phase D burst':'')+'</small></div>'+
         '<div class="m-row"><small>interrupt routed</small><b class="'+(f.name==='kvm_ioapic_set_irq'||f.rte?'lit':'')+'">'+esc(f.name==='kvm_ioapic_set_irq'||f.rte?'yes':'no')+'</b></div>'+
         '<div class="m-row"><small>LAPIC IRR pending</small><b class="'+(irr?'lit':'')+'">'+esc(irr?'yes':'no')+'</b></div>'+
         '<div class="m-row"><small>guest ISR running</small><b class="'+(isr?'lit':'')+'">'+esc(isr?'yes':'no')+'</b></div>'+
         '<div class="m-row"><small>state</small><b class="'+(pending?'warn':(isr?'lit':''))+'">'+esc(pending?'PENDING (IF=0)':(isr?'DELIVERED / in service':'idle'))+'</b></div>'+
-        '<div class="m-foot">'+esc(pending
-            ?'IF=0 holds the vector in the LAPIC until STI releases delivery'
-            :isr?'vector 0x40 in service until guest EOI'
-            :'no interrupt queued at this observation')+'</div></div>';
+        '<div class="m-foot">'+esc(foot)+'</div></div>';
 }
 
 function renderDma(f){
@@ -369,7 +381,7 @@ function renderAll(){
     renderPhases();
     renderInspector(f);
     $('status').innerHTML='<i class="trace-dot"></i><span>'+frames.length+' snapshots · '+
-        trace.length+' trace events · 4 phases · vcpu '+ (f&&f.vcpu?short(f.vcpu):'—')+'</span>';
+        trace.length+' trace events · '+phases.length+' phases · vcpu '+ (f&&f.vcpu?short(f.vcpu):'—')+'</span>';
 }
 
 function select(i){

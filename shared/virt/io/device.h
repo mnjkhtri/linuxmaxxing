@@ -34,6 +34,10 @@
 #define CMD_IRQ_ONLY 1u
 #define CMD_DMA_TO_DEVICE 2u
 #define CMD_DMA_FROM_DEVICE 3u
+#define CMD_IRQ_BURST 4u /* Several same-vector GSI pulses while the guest has IF=0. */
+
+/* Deterministic edge-pulse count for CMD_IRQ_BURST (each pulse is an assert/deassert pair). */
+#define IRQ_BURST_PULSES 3u
 
 /* STATUS bits read from REG_STATUS. */
 #define STATUS_BUSY 0x01u
@@ -55,5 +59,6 @@
 /* Phase markers written through MARKER_PORT. */
 #define MARKER_APIC_READY 0x11u
 #define MARKER_IRQ_PENDING_IF0 0x12u
+#define MARKER_IRQ_BURST_PENDING 0x13u /* Sync point: burst raised while IF=0, nothing serviced yet. */
 
 #endif /* DEVICE_H */

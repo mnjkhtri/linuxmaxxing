@@ -19,8 +19,10 @@
  *   A  APIC ready  -- install IDT, configure LAPIC + IOAPIC RTE(4), marker, sti
  *   B  normal IRQ  -- CMD_IRQ_ONLY, full IOAPIC -> LAPIC -> inject -> ISR -> EOI
  *   C  pending while IF=0 -- cli, CMD_IRQ_ONLY, sync marker, sti;nop, deliver
- *   D  DMA_TO_DEVICE / DMA_FROM_DEVICE
- *   D verifies every DMA byte: DMA_TO reads the device buffer back, DMA_FROM compares the destination.
+ *   D  IRQ burst while IF=0 -- cli, CMD_IRQ_BURST (IRQ_BURST_PULSES pulses on the same GSI), sync marker, sti;nop
+ *   D shows coalescing: several same-vector edges hold ONE LAPIC IRR bit, and one ISR run services the burst.
+ *   E  DMA_TO_DEVICE / DMA_FROM_DEVICE (existing DMA phase, renumbered from D)
+ *   E verifies every DMA byte: DMA_TO reads the device buffer back, DMA_FROM compares the destination.
  *   Any verification failure halts permanently, and the VMM reports that halt as a failed run.
  *   Only byte-exact DMA reaches port 0x82, the VMM's sole success signal.
  *
@@ -41,6 +43,9 @@
 .set CMD_IRQ_ONLY,        1           /* no I/O data; proves pure interrupt delivery */
 .set CMD_DMA_TO_DEVICE,   2           /* guest RAM -> device internal buffer */
 .set CMD_DMA_FROM_DEVICE, 3           /* device internal buffer -> guest RAM */
+.set CMD_IRQ_BURST,       4           /* several same-vector GSI pulses while IF=0 */
+
+.set IRQ_BURST_PULSES, 3
 
 .set DEVICE_GSI,    4                 /* global system interrupt this device raises */
 .set DEVICE_VECTOR, 0x40              /* interrupt vector routed into the guest IDT */
@@ -51,6 +56,7 @@
 .set DONE_PORT,   0x82                /* outb terminates the VMM run */
 .set MARKER_APIC_READY,      0x11     /* phase A complete: LAPIC+IOAPIC programmed */
 .set MARKER_IRQ_PENDING_IF0, 0x12     /* phase C: IRQ raised while guest IF=0 */
+.set MARKER_IRQ_BURST_PENDING, 0x13   /* phase D: burst raised while IF=0, nothing serviced yet */
 
 /* ---- arch MMIO regions (virtual LAPIC / IOAPIC) ---- */
 .set LAPIC_BASE,  0xfee00000          /* architectural local APIC MMIO page */
@@ -126,7 +132,7 @@ protected_mode:
 	 */
 	movl $0, %eax
 	movl %eax, LAPIC_BASE + LAPIC_TPR
-	movl $(0x100 + 0x0f), %eax
+	movl $(0x100 + 0xff), %eax
 	movl %eax, LAPIC_BASE + LAPIC_SVR
 
 	/*
@@ -167,10 +173,25 @@ protected_mode:
 	nop                            /* consume the STI shadow; 0x40 now injects */
 	WAIT_IRQ_COUNT 2
 
-	/* ---- Phase D: virtual DMA (device internal buffer <-> guest RAM). ---- */
+	/*
+	 * ---- Phase D: same-vector IRQ burst while IF=0. ----
+	 * The VMM raises IRQ_BURST_PULSES distinct edges on DEVICE_GSI while IF is still 0.
+	 * The LAPIC holds one IRR bit for DEVICE_VECTOR no matter how many edges arrive: IRR is a bit, not a counter.
+	 * The marker forces a synchronization VM exit so the observer samples that single-pending state deterministically.
+	 * sti's one instruction shadow means 0x40 only delivers on the next instruction (nop), exactly one ISR run later.
+	 */
+	cli
+	movl $CMD_IRQ_BURST, DEVICE_MMIO_BASE + REG_COMMAND
+	movb $MARKER_IRQ_BURST_PENDING, %al
+	outb %al, $MARKER_PORT
+	sti                            /* IF becomes 1 only after the next instruction */
+	nop                            /* consume the STI shadow; the single pending vector now injects */
+	WAIT_IRQ_COUNT 3
+
+	/* ---- Phase E: virtual DMA (device internal buffer <-> guest RAM), existing DMA unchanged. ---- */
 	movl $DMA_SRC, DEVICE_MMIO_BASE + REG_DMA_GPA       /* source: guest RAM 0x6000 */
 	movl $CMD_DMA_TO_DEVICE, DEVICE_MMIO_BASE + REG_COMMAND
-	WAIT_IRQ_COUNT 3                                       /* guest saw completion IRQ */
+	WAIT_IRQ_COUNT 4                                       /* guest saw completion IRQ */
 
 	/* The device buffer must now read back the guest source exactly; a no-op copy fails here. */
 	movl $0, %ecx
@@ -187,7 +208,7 @@ protected_mode:
 
 	movl $DMA_DST, DEVICE_MMIO_BASE + REG_DMA_GPA        /* dest: guest RAM 0x7000 */
 	movl $CMD_DMA_FROM_DEVICE, DEVICE_MMIO_BASE + REG_COMMAND
-	WAIT_IRQ_COUNT 4
+	WAIT_IRQ_COUNT 5
 
 	/* The destination must equal the expected device pattern byte for byte. */
 	cld

@@ -111,19 +111,35 @@ __attribute__((noinline)) int device_dma_transfer(struct toy_device *dev, uint8_
 }
 
 /*
+ * One legacy edge on DEVICE_GSI: assert then deassert through KVM_IRQ_LINE.
+ * The in-kernel irqchip (virtual IOAPIC + LAPIC) delivers vector DEVICE_VECTOR; the VMM never injects directly.
+ * Every command that raises the interrupt uses this same edge path.
+ */
+static void raise_gsi_edge(int vm)
+{
+	struct kvm_irq_level level = {.irq = DEVICE_GSI, .level = 1};
+
+	if (ioctl(vm, KVM_IRQ_LINE, &level) < 0)
+		perror("KVM_IRQ_LINE assert");
+	level.level = 0;
+	if (ioctl(vm, KVM_IRQ_LINE, &level) < 0)
+		perror("KVM_IRQ_LINE deassert");
+}
+
+/*
  * Execute a command synchronously, then signal completion through STATUS + IRQ.
- * The completion interrupt is a legacy edge on DEVICE_GSI: assert then deassert through KVM_IRQ_LINE.
- * So the in-kernel irqchip (virtual IOAPIC + LAPIC) delivers vector DEVICE_VECTOR to the guest.  The VMM never injects directly.
+ * CMD_IRQ_BURST raises IRQ_BURST_PULSES distinct edges on the same GSI while the guest keeps IF=0.
+ * The LAPIC holds one pending IRR bit for DEVICE_VECTOR regardless of how many edges arrive, which is the point of the phase.
  */
 static void device_execute_command(int vm, struct toy_device *dev, uint8_t *guest_mem, uint64_t guest_mem_size)
 {
-	struct kvm_irq_level level = {.irq = DEVICE_GSI, .level = 1};
 	int ret = -1;
 
 	dev->status = STATUS_BUSY;
 	switch (dev->command)
 	{
 	case CMD_IRQ_ONLY:
+	case CMD_IRQ_BURST:
 		ret = 0; /* pure interrupt delivery; no I/O data changes */
 		break;
 	case CMD_DMA_TO_DEVICE:
@@ -143,11 +159,13 @@ static void device_execute_command(int vm, struct toy_device *dev, uint8_t *gues
 	/* Only a successful operation raises the completion interrupt; a failed copy must not look done. */
 	if (ret != 0)
 		return;
-	if (ioctl(vm, KVM_IRQ_LINE, &level) < 0)
-		perror("KVM_IRQ_LINE assert");
-	level.level = 0;
-	if (ioctl(vm, KVM_IRQ_LINE, &level) < 0)
-		perror("KVM_IRQ_LINE deassert");
+	if (dev->command == CMD_IRQ_BURST)
+	{
+		for (unsigned int i = 0; i < IRQ_BURST_PULSES; i++)
+			raise_gsi_edge(vm);
+	}
+	else
+		raise_gsi_edge(vm);
 }
 
 /* MMIO read: synthesize the register value in the guest's data buffer. */
