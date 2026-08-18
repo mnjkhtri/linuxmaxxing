@@ -1,33 +1,40 @@
 #!/usr/bin/env bash
 set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
-REPO_ROOT="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
 CAPTURE_ROOT="$REPO_ROOT/shared/_captures"
 TARGET_FILE="$SCRIPT_DIR/../cloudlab"
 REMOTE_DIR="kernel-oops-virt-ept"
+EPT_DIR="$REMOTE_DIR/shared/virt/ept"
 TARGET="$(sed -n '1{/^[[:space:]]*#/d; s/^[[:space:]]*//; s/[[:space:]]*$//; p; q}' "$TARGET_FILE")"
 [ -n "$TARGET" ] || { echo "error: empty CloudLab target" >&2; exit 1; }
 ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o StrictHostKeyChecking=no)
 mkdir -p "$CAPTURE_ROOT"
 fetch_captures()
 {
-	scp -p "${ssh_opts[@]}" "$TARGET:$REMOTE_DIR/captures/virt-ept-Trace.txt" "$CAPTURE_ROOT/virt-ept-Trace.txt"
-	scp -p "${ssh_opts[@]}" "$TARGET:$REMOTE_DIR/captures/virt-ept.eBPF.ndjson" "$CAPTURE_ROOT/virt-ept.eBPF.ndjson"
+	scp -p "${ssh_opts[@]}" "$TARGET:$EPT_DIR/captures/virt-ept-Trace.txt" "$CAPTURE_ROOT/virt-ept-Trace.txt"
+	scp -p "${ssh_opts[@]}" "$TARGET:$EPT_DIR/captures/virt-ept.eBPF.ndjson" "$CAPTURE_ROOT/virt-ept.eBPF.ndjson"
+	# The observer log only exists for runs made after the fetch started including it.
+	# A missing log must never abort the fetch of the two primary captures.
+	scp -p "${ssh_opts[@]}" "$TARGET:$EPT_DIR/captures/virt-ept-observer.log" "$CAPTURE_ROOT/virt-ept-observer.log" 2>/dev/null || true
 }
 if [ "${VIRT_FETCH_ONLY:-0}" = 1 ]; then
 	fetch_captures
 	exit 0
 fi
-ssh "${ssh_opts[@]}" "$TARGET" "mkdir -p -- '$REMOTE_DIR'"
-scp -p "${ssh_opts[@]}" "$SCRIPT_DIR/vmm.c" "$SCRIPT_DIR/guest.S" "$SCRIPT_DIR/ept.c" "$SCRIPT_DIR/ept.bpf.c" "$SCRIPT_DIR/Makefile" "$TARGET:$REMOTE_DIR/"
-ssh "${ssh_opts[@]}" "$TARGET" "cd '$REMOTE_DIR' && make all"
-ssh "${ssh_opts[@]}" "$TARGET" "sudo -n bash -s -- '$REMOTE_DIR'" <<'REMOTE'
+# Stage the experiment as a mirrored tree on the remote.
+# The Makefile SHARED_DIR (.. from shared/virt/ept) then resolves to the shared/ dir holding json_writer.c.
+ssh "${ssh_opts[@]}" "$TARGET" "mkdir -p -- '$EPT_DIR' '$REMOTE_DIR/shared'"
+scp -p "${ssh_opts[@]}" "$SCRIPT_DIR/vmm.c" "$SCRIPT_DIR/guest.S" "$SCRIPT_DIR/ept.c" "$SCRIPT_DIR/ept.bpf.c" "$SCRIPT_DIR/ept_event.h" "$SCRIPT_DIR/Makefile" "$TARGET:$EPT_DIR/"
+scp -p "${ssh_opts[@]}" "$REPO_ROOT/shared/json_writer.c" "$REPO_ROOT/shared/json_writer.h" "$TARGET:$REMOTE_DIR/shared/"
+ssh "${ssh_opts[@]}" "$TARGET" "cd '$EPT_DIR' && make all"
+ssh "${ssh_opts[@]}" "$TARGET" "sudo -n bash -s -- '$EPT_DIR'" <<'REMOTE'
 set -euo pipefail
 REMOTE_DIR="$1"
 cd "$REMOTE_DIR"
 rm -rf captures
 mkdir -p captures
-./build/ept 2> captures/virt-ept-observer.log &
+./build/ept > captures/virt-ept.eBPF.ndjson 2> captures/virt-ept-observer.log &
 observer=$!
 trace_dir=""
 trace_instance=""
@@ -47,11 +54,11 @@ cleanup()
 }
 trap cleanup EXIT
 for _ in $(seq 1 40); do
-	grep -q 'capturing KVM EPT snapshots' captures/virt-ept-observer.log 2>/dev/null && break
+	grep -q '^LX_READY' captures/virt-ept-observer.log 2>/dev/null && break
 	kill -0 "$observer" 2>/dev/null || { cat captures/virt-ept-observer.log >&2; exit 1; }
 	sleep 0.1
 done
-grep -q 'capturing KVM EPT snapshots' captures/virt-ept-observer.log || exit 1
+grep -q '^LX_READY' captures/virt-ept-observer.log || { cat captures/virt-ept-observer.log >&2; exit 1; }
 mountpoint -q /sys/kernel/tracing || mount -t tracefs nodev /sys/kernel/tracing 2>/dev/null || true
 mountpoint -q /sys/kernel/debug || mount -t debugfs nodev /sys/kernel/debug 2>/dev/null || true
 for d in /sys/kernel/tracing /sys/kernel/debug/tracing; do

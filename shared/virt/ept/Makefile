@@ -1,5 +1,8 @@
 .DELETE_ON_ERROR:
 
+DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+SHARED_DIR := $(abspath $(DIR)../..)
+
 CC ?= gcc
 CFLAGS ?= -O0 -g -Wall -Wextra
 AS ?= as
@@ -8,20 +11,23 @@ CLANG ?= clang
 BPFTOOL ?= bpftool
 PKG_CONFIG ?= pkg-config
 
-BUILD_DIR := build
+BUILD_DIR := $(DIR)build
 VMM := $(BUILD_DIR)/vmm
 GUEST_OBJ := $(BUILD_DIR)/guest.o
 GUEST_BIN := $(BUILD_DIR)/guest.bin
-BPF_SRC := ept.bpf.c
+BPF_SRC := $(DIR)ept.bpf.c
 BPF_OBJ := $(BUILD_DIR)/ept.bpf.o
 SKEL := $(BUILD_DIR)/ept.skel.h
 KVM_TYPES := $(BUILD_DIR)/kvm_types.h
 KVM_COMPAT := $(BUILD_DIR)/kvm_compat.h
 VMLINUX := $(BUILD_DIR)/vmlinux.h
 EPT := $(BUILD_DIR)/ept
+EVENT_HDR := $(DIR)ept_event.h
+JSON_WRITER_SRC := $(SHARED_DIR)/json_writer.c
+JSON_WRITER_HDR := $(SHARED_DIR)/json_writer.h
 KVM_BTF_SOURCE := $(shell test -e /sys/kernel/btf/kvm && echo /sys/kernel/btf/kvm || echo /sys/kernel/btf/vmlinux)
 
-EPT_CFLAGS := -g -O2 -Wall -Wextra -I$(BUILD_DIR)
+EPT_CFLAGS := -g -O2 -Wall -Wextra -I$(BUILD_DIR) -I$(SHARED_DIR)
 BPF_CFLAGS := -g -O2 -target bpf -D__TARGET_ARCH_x86 -I$(BUILD_DIR)
 
 .PHONY: all clean clean-ept
@@ -31,10 +37,10 @@ all: $(VMM) $(GUEST_BIN) $(EPT)
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(VMM): vmm.c | $(BUILD_DIR)
+$(VMM): $(DIR)vmm.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -pthread $< -o $@
 
-$(GUEST_OBJ): guest.S | $(BUILD_DIR)
+$(GUEST_OBJ): $(DIR)guest.S | $(BUILD_DIR)
 	$(AS) --32 $< -o $@
 
 $(GUEST_BIN): $(GUEST_OBJ)
@@ -64,17 +70,17 @@ $(KVM_COMPAT): | $(BUILD_DIR)
 		echo '#define READ_KVM_MMU_ROOT_PGD(mmu) BPF_CORE_READ(mmu, root.pgd)' >> $@; \
 	fi
 
-$(BPF_OBJ): $(BPF_SRC) $(VMLINUX) $(KVM_TYPES) $(KVM_COMPAT) | $(BUILD_DIR)
+$(BPF_OBJ): $(BPF_SRC) $(EVENT_HDR) $(VMLINUX) $(KVM_TYPES) $(KVM_COMPAT) | $(BUILD_DIR)
 	$(CLANG) $(BPF_CFLAGS) -c $< -o $@
 
 $(SKEL): $(BPF_OBJ) | $(BUILD_DIR)
 	$(BPFTOOL) gen skeleton $< > $@
 
-$(EPT): ept.c $(SKEL) | $(BUILD_DIR)
-	$(CC) $(EPT_CFLAGS) -o $@ $< $(shell $(PKG_CONFIG) --libs libbpf) -lelf -lz
+$(EPT): $(DIR)ept.c $(SKEL) $(EVENT_HDR) $(JSON_WRITER_SRC) $(JSON_WRITER_HDR) | $(BUILD_DIR)
+	$(CC) $(EPT_CFLAGS) -o $@ $< $(JSON_WRITER_SRC) $(shell $(PKG_CONFIG) --libs libbpf) -lelf -lz
 
 clean-ept:
 	rm -f $(BPF_OBJ) $(SKEL) $(EPT) $(VMLINUX) $(KVM_TYPES) $(KVM_COMPAT)
 
 clean:
-	rm -rf $(BUILD_DIR) vmm guest.o guest.bin
+	rm -rf $(BUILD_DIR)
