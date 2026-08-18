@@ -105,6 +105,12 @@ protected_mode:
 
 	call setup_idt            /* guest builds and loads its own IDT */
 
+	/* The 8259 PIC also receives GSI 4 and would preempt the IOAPIC with its own vector. */
+	/* The guest masks every PIC line so only the IOAPIC route delivers the device interrupt. */
+	movb $0xff, %al
+	outb %al, $0x21          /* master PIC OCW1: mask all IRQs */
+	outb %al, $0xa1          /* slave PIC OCW1: mask all IRQs */
+
 	/*
 	 * LAPIC setup (virtual LAPIC MMIO at 0xfee00000):
 	 * TPR=0 admits every interrupt priority; SVR bit 8 software-enables the APIC and picks spurious vector 0x0f.
