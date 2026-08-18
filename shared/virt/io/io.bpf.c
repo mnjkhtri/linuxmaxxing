@@ -26,246 +26,215 @@
  * defines READ_KVM_LAPIC_REGS / READ_KVM_IOAPIC_RTE.  Until those reads are
  * confirmed, the controller-state fields stay zero and the UI shows them as
  * "not sampled" -- never fake.
+ *
+ * The shared ABI in io_event.h owns the record layout, grouped into
+ * event_info / context / state.  This file only fills that ABI and never
+ * decides JSON shape.
+ *
+ * Every tracepoint fills one shared ring buffer, and the event type rides in
+ * the record itself.  The loader therefore needs no separate event tag.
  */
-
 #include "vmlinux.h"
-#include "kvm_types.h"  /* Generated CO-RE KVM structs when KVM is a module. */
+#include "kvm_types.h"	/* Generated CO-RE KVM structs when KVM is a module. */
 #include "kvm_compat.h" /* Generated: layout differences + the readers below. */
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
+#include "io_event.h"
 
 char LICENSE[] SEC("license") = "GPL";
 
-#define DEVICE_VECTOR 0x40
-#define DEVICE_GSI    4
-
-/* One event -> one ring-buffer record, drained by io.c as NDJSON. */
-struct irq_snapshot
-{
-    __u64 timestamp_ns;
-    __u64 pid_tgid;
-    __u64 vcpu;    /* struct kvm_vcpu * that owns this event */
-    __u64 kvm;     /* owning struct kvm * */
-    __u64 apic;    /* struct kvm_lapic *, when this tracepoint exposes one */
-    __u64 ioapic;  /* struct kvm_ioapic *, when this tracepoint exposes one */
-    char   comm[16];
-
-    /* Controller state for DEVICE_VECTOR / DEVICE_GSI, best-effort. */
-    __u32 rte_low;  /* IOAPIC redirection entry low 32 bits for DEVICE_GSI */
-    __u32 rte_high; /* IOAPIC redirection entry high 32 bits for DEVICE_GSI */
-    __u8  irr;      /* LAPIC IRR bit for DEVICE_VECTOR */
-    __u8  isr;      /* LAPIC ISR bit for DEVICE_VECTOR */
-
-    /* Upfrobed virtual-DMA operation (reliable, from real ABI args). */
-    __u64 dma_guest_base; /* host userspace base backing the guest GPA */
-    __u64 dma_gpa;        /* guest physical address targeted */
-    __u32 dma_len;        /* transfer length (fixed DMA_XFER_SIZE) */
-    __u32 dma_dir;        /* CMD_DMA_TO_DEVICE / CMD_DMA_FROM_DEVICE */
-};
-
-/* Per-CPU scratch avoids a large snapshot on the tiny BPF stack. */
+/* Per-CPU scratch avoids putting a large snapshot on the tiny BPF stack. */
 struct
 {
-    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
-    __uint(max_entries, 1);
-    __type(key, __u32);
-    __type(value, struct irq_snapshot);
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, __u32);
+	__type(value, struct vio_event);
 } scratch SEC(".maps");
 
-/*
- * One ring buffer per event.  With a shared buffer the record is anonymous and
- * we could only tell which tracepoint fired via a bookkeeping tag; instead the
- * loader (io.c) tags each buffer's name, so the record itself stays clean.
- */
-#define IO_RINGBUF(name)                                   \
-    struct                                                 \
-    {                                                      \
-        __uint(type, BPF_MAP_TYPE_RINGBUF);                \
-        __uint(max_entries, 1 << 20);                      \
-    } name SEC(".maps")
-
-IO_RINGBUF(events_entry);
-IO_RINGBUF(events_exit);
-IO_RINGBUF(events_userspace_exit);
-IO_RINGBUF(events_ioapic_set_irq);
-IO_RINGBUF(events_apic_accept_irq);
-IO_RINGBUF(events_inj_virq);
-IO_RINGBUF(events_eoi);
-IO_RINGBUF(events_apic);
-IO_RINGBUF(events_dma);
-
-/* vmm thread -> its vcpu, so callbacks without a vcpu arg can recover it. */
+/* The loader drains this ring buffer and writes one NDJSON record per snapshot. */
 struct
 {
-    __uint(type, BPF_MAP_TYPE_HASH);
-    __uint(max_entries, 64);
-    __type(key, __u64);
-    __type(value, struct kvm_vcpu *);
+	__uint(type, BPF_MAP_TYPE_RINGBUF);
+	__uint(max_entries, 1 << 20);
+} events SEC(".maps");
+
+/* Remember the VMM thread to its vcpu association so callbacks without a vcpu argument can recover it. */
+struct
+{
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 64);
+	__type(key, __u64);
+	__type(value, struct kvm_vcpu *);
 } current_vcpu SEC(".maps");
 
 /* Keep the capture focused on our toy VMM process. */
 static __always_inline int is_vmm_comm(char comm[16])
 {
-    const char expected[4] = "vmm";
+	const char expected[4] = "vmm";
+
 #pragma unroll
-    for (int i = 0; i < 3; i++)
-        if (comm[i] != expected[i])
-            return 0;
-    return comm[3] == '\0';
+	for (int i = 0; i < 3; i++)
+		if (comm[i] != expected[i])
+			return 0;
+	return comm[3] == '\0';
 }
 
 /* Fixed metadata for a snapshot taken from the owning vcpu. */
-static __always_inline void snapshot_base(struct irq_snapshot *s, struct kvm_vcpu *vcpu)
+static __always_inline void snapshot_base(struct vio_event *event, struct kvm_vcpu *vcpu)
 {
-    s->timestamp_ns = bpf_ktime_get_ns();
-    bpf_get_current_comm(s->comm, sizeof(s->comm));
-    if (!is_vmm_comm(s->comm))
-        return;
-    s->pid_tgid = bpf_get_current_pid_tgid();
-    s->vcpu = (__u64)vcpu;
-    s->kvm = (__u64)BPF_CORE_READ(vcpu, kvm);
+	__u64 pid_tgid;
+
+	bpf_get_current_comm(event->context.comm, sizeof(event->context.comm));
+	if (!is_vmm_comm(event->context.comm))
+		return;
+	pid_tgid = bpf_get_current_pid_tgid();
+	bpf_map_update_elem(&current_vcpu, &pid_tgid, &vcpu, BPF_ANY);
+	event->time_ns = bpf_ktime_get_ns();
+	event->context.pid = (unsigned int)(pid_tgid >> 32);
+	event->context.tid = (unsigned int)pid_tgid;
+	event->context.cpu = bpf_get_smp_processor_id();
+	event->state.vcpu = (__u64)vcpu;
+	event->state.kvm = (__u64)BPF_CORE_READ(vcpu, kvm);
 }
 
 /* Best-effort read of one DEVICE_VECTOR bit in a LAPIC IRR/ISR field. */
 static __always_inline __u8 lapic_pending_bit(const struct kvm_lapic *apic, __u32 base)
 {
-    const __u32 *regs = READ_KVM_LAPIC_REGS(apic);
-    __u32 word = (base >> 2) + (DEVICE_VECTOR >> 5) * 4; /* 32 vectors occupy 4 u32 slots */
-    __u32 bit = 1u << (DEVICE_VECTOR & 31);
-    __u32 value = 0;
+	const __u32 *regs = READ_KVM_LAPIC_REGS(apic);
+	__u32 word = (base >> 2) + (DEVICE_VECTOR >> 5) * 4; /* The 32 vectors of a bank occupy four u32 slots. */
+	__u32 bit = 1u << (DEVICE_VECTOR & 31);
+	__u32 value = 0;
 
-    if (!regs)
-        return 0;
-    bpf_probe_read_kernel(&value, sizeof(value), &regs[word]);
-    return !!(value & bit);
+	if (!regs)
+		return 0;
+	bpf_probe_read_kernel(&value, sizeof(value), &regs[word]);
+	return !!(value & bit);
 }
 
-/* Emit one record into a per-event ring buffer, sampling controller state. */
-static __always_inline int emit_boundary(void *rb, struct kvm_vcpu *vcpu, const struct kvm_lapic *lapic, const struct kvm_ioapic *ioapic)
+/* Emit one record into the shared ring buffer, sampling controller state. */
+static __always_inline int emit_boundary(enum io_event_type event_type, struct kvm_vcpu *vcpu, const struct kvm_lapic *lapic, const struct kvm_ioapic *ioapic)
 {
-    __u32 zero = 0;
-    struct irq_snapshot *s = bpf_map_lookup_elem(&scratch, &zero);
+	__u32 zero = 0;
+	struct vio_event *event = bpf_map_lookup_elem(&scratch, &zero);
 
-    if (!s || !vcpu)
-        return 0;
-    snapshot_base(s, vcpu);
-    if (!is_vmm_comm(s->comm))
-        return 0;
+	if (!event || !vcpu)
+		return 0;
+	snapshot_base(event, vcpu);
+	if (!is_vmm_comm(event->context.comm))
+		return 0;
 
-    s->apic = (__u64)lapic;
-    s->ioapic = (__u64)ioapic;
+	event->event_info.event = (unsigned int)event_type;
+	event->state.apic = (__u64)lapic;
+	event->state.ioapic = (__u64)ioapic;
 
-    /* Controller state is surfaced only when the target exposes the readers. */
-    if (ioapic && READ_KVM_IOAPIC_RTE_AVAILABLE) {
-        __u64 rte = READ_KVM_IOAPIC_RTE(ioapic, DEVICE_GSI);
+	/* Controller state is surfaced only when the target exposes the readers. */
+	if (ioapic && READ_KVM_IOAPIC_RTE_AVAILABLE)
+		event->state.controller.rte = READ_KVM_IOAPIC_RTE(ioapic, DEVICE_GSI);
+	if (lapic)
+	{
+		event->state.controller.irr = lapic_pending_bit(lapic, 0x200u); /* LAPIC IRR base */
+		event->state.controller.isr = lapic_pending_bit(lapic, 0x100u); /* LAPIC ISR base */
+	}
 
-        s->rte_low = (__u32)rte;
-        s->rte_high = (__u32)(rte >> 32);
-    }
-    if (lapic) {
-        s->irr = lapic_pending_bit(lapic, 0x200u); /* LAPIC IRR base */
-        s->isr = lapic_pending_bit(lapic, 0x100u); /* LAPIC ISR base */
-    }
-
-    bpf_ringbuf_output(rb, s, sizeof(*s), 0);
-    return 0;
+	bpf_ringbuf_output(&events, event, sizeof(*event), 0);
+	return 0;
 }
 
-/* ---- events that expose the vcpu directly ---- */
+/* The events below expose the vcpu directly as their first raw-tracepoint argument. */
 
 SEC("raw_tp/kvm_entry")
 int kvm_entry_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-    struct kvm_vcpu *vcpu = (struct kvm_vcpu *)ctx->args[0];
-    __u64 pid_tgid = bpf_get_current_pid_tgid();
-
-    if (vcpu)
-        bpf_map_update_elem(&current_vcpu, &pid_tgid, &vcpu, BPF_ANY);
-    return emit_boundary(&events_entry, vcpu, NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_ENTRY, (struct kvm_vcpu *)ctx->args[0], NULL, NULL);
 }
 
 SEC("raw_tp/kvm_exit")
 int kvm_exit_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-    return emit_boundary(&events_exit, (struct kvm_vcpu *)ctx->args[0], NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_EXIT, (struct kvm_vcpu *)ctx->args[0], NULL, NULL);
 }
 
 SEC("raw_tp/kvm_userspace_exit")
 int kvm_userspace_exit_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-    return emit_boundary(&events_userspace_exit, (struct kvm_vcpu *)ctx->args[0], NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_USERSPACE_EXIT, (struct kvm_vcpu *)ctx->args[0], NULL, NULL);
 }
 
 SEC("raw_tp/kvm_apic_accept_irq")
 int kvm_apic_accept_irq_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-    return emit_boundary(&events_apic_accept_irq, (struct kvm_vcpu *)ctx->args[0], NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_APIC_ACCEPT_IRQ, (struct kvm_vcpu *)ctx->args[0], NULL, NULL);
 }
 
 SEC("raw_tp/kvm_inj_virq")
 int kvm_inj_virq_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-    return emit_boundary(&events_inj_virq, (struct kvm_vcpu *)ctx->args[0], NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_INJ_VIRQ, (struct kvm_vcpu *)ctx->args[0], NULL, NULL);
 }
 
-/* ---- kvm_ioapic_set_irq exposes the ioapic directly ---- */
+/* kvm_ioapic_set_irq exposes the ioapic directly but needs the vcpu from the association map. */
 SEC("raw_tp/kvm_ioapic_set_irq")
 int kvm_ioapic_set_irq_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-    struct kvm_ioapic *ioapic = (struct kvm_ioapic *)ctx->args[0];
-    __u64 pid_tgid = bpf_get_current_pid_tgid();
-    struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
+	struct kvm_ioapic *ioapic = (struct kvm_ioapic *)ctx->args[0];
+	__u64 pid_tgid = bpf_get_current_pid_tgid();
+	struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
 
-    if (!vcpu || !ioapic)
-        return 0;
-    return emit_boundary(&events_ioapic_set_irq, *vcpu, NULL, ioapic);
+	if (!vcpu || !ioapic)
+		return 0;
+	return emit_boundary(IO_EVENT_KVM_IOAPIC_SET_IRQ, *vcpu, NULL, ioapic);
 }
 
-/* ---- kvm_eoi / kvm_apic expose the lapic directly ---- */
+/* kvm_eoi and kvm_apic expose the lapic directly but need the vcpu from the association map. */
 SEC("raw_tp/kvm_eoi")
 int kvm_eoi_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-    struct kvm_lapic *apic = (struct kvm_lapic *)ctx->args[0];
-    __u64 pid_tgid = bpf_get_current_pid_tgid();
-    struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
+	struct kvm_lapic *apic = (struct kvm_lapic *)ctx->args[0];
+	__u64 pid_tgid = bpf_get_current_pid_tgid();
+	struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
 
-    if (!vcpu || !apic)
-        return 0;
-    return emit_boundary(&events_eoi, *vcpu, apic, NULL);
+	if (!vcpu || !apic)
+		return 0;
+	return emit_boundary(IO_EVENT_KVM_EOI, *vcpu, apic, NULL);
 }
 
 SEC("raw_tp/kvm_apic")
 int kvm_apic_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-    struct kvm_lapic *apic = (struct kvm_lapic *)ctx->args[0];
-    __u64 pid_tgid = bpf_get_current_pid_tgid();
-    struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
+	struct kvm_lapic *apic = (struct kvm_lapic *)ctx->args[0];
+	__u64 pid_tgid = bpf_get_current_pid_tgid();
+	struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
 
-    if (!vcpu || !apic)
-        return 0;
-    return emit_boundary(&events_apic, *vcpu, apic, NULL);
+	if (!vcpu || !apic)
+		return 0;
+	return emit_boundary(IO_EVENT_KVM_APIC, *vcpu, apic, NULL);
 }
 
-/* ---- uprobe on the VMM's real virtual-DMA entry point ---- */
-SEC("uprobe/device_dma_transfer")
+/* The uprobe below samples the VMM's real virtual-DMA entry point through its normal ABI arguments. */
+SEC("uprobe/build/vmm:device_dma_transfer")
 int BPF_UPROBE(device_dma_transfer, uint8_t *guest_mem_base, uint64_t guest_mem_size, uint32_t dir, uint64_t gpa, uint32_t len)
 {
-    __u64 pid_tgid = bpf_get_current_pid_tgid();
-    struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
-    __u32 zero = 0;
-    struct irq_snapshot *s = bpf_map_lookup_elem(&scratch, &zero);
+	__u64 pid_tgid = bpf_get_current_pid_tgid();
+	struct kvm_vcpu **vcpu = bpf_map_lookup_elem(&current_vcpu, &pid_tgid);
+	__u32 zero = 0;
+	struct vio_event *event = bpf_map_lookup_elem(&scratch, &zero);
 
-    if (!s || !vcpu)
-        return 0;
-    snapshot_base(s, *vcpu);
-    if (!is_vmm_comm(s->comm))
-        return 0;
+	/* The backing base, backing size, and transfer length are run constants that live in the meta record. */
+	(void)guest_mem_base;
+	(void)guest_mem_size;
+	(void)len;
 
-    s->dma_guest_base = (__u64)guest_mem_base;
-    s->dma_gpa = gpa;
-    s->dma_len = len;
-    s->dma_dir = dir;
-    bpf_ringbuf_output(&events_dma, s, sizeof(*s), 0);
-    return 0;
+	if (!event || !vcpu)
+		return 0;
+	snapshot_base(event, *vcpu);
+	if (!is_vmm_comm(event->context.comm))
+		return 0;
+
+	event->event_info.event = (unsigned int)IO_EVENT_DEVICE_DMA_TRANSFER;
+	event->state.dma.gpa = gpa;
+	event->state.dma.dir = dir;
+	bpf_ringbuf_output(&events, event, sizeof(*event), 0);
+	return 0;
 }

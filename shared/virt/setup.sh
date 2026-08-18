@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-TARGET_FILE="${VIRT_TARGET_FILE:-$SCRIPT_DIR/../cloudlab}"
+TARGET_FILE="${VIRT_TARGET_FILE:-$SCRIPT_DIR/cloudlab}"
 SSH_CONNECT_TIMEOUT="${SSH_CONNECT_TIMEOUT:-10}"
 
 die()
@@ -110,15 +110,30 @@ install_deps_if_needed()
     [[ -z "$(missing_deps)" ]] || die "still missing after install:$(missing_deps)"
 }
 
+MIN_UBUNTU="24.04"
+
+verify_ubuntu()
+{
+	local id version
+	id="$(sed -n 's/^ID=//p' /etc/os-release 2>/dev/null || true)"
+	[[ "$id" = "ubuntu" ]] || return 0
+	version="$(sed -n 's/^VERSION_ID="\?\([^"]*\)"\?$/\1/p' /etc/os-release 2>/dev/null || true)"
+	[[ -n "$version" ]] || return 0
+	if [[ "$(printf '%s\n%s\n' "$MIN_UBUNTU" "$version" | sort -V | head -n1)" != "$MIN_UBUNTU" ]]; then
+		die "Ubuntu $version is too old: libbpf-dev there cannot reach 1.2.0 (use Ubuntu $MIN_UBUNTU or newer)"
+	fi
+	echo "Ubuntu: $version (>= $MIN_UBUNTU)"
+}
+
 verify_kvm()
 {
-    grep -qm1 vmx /proc/cpuinfo ||
-        die "Intel VMX: missing; this observer decodes Intel EPT, not AMD NPT"
-    echo "Intel VMX: detected"
-    sudo -n modprobe kvm
-    sudo -n modprobe kvm_intel
-    [[ -e /dev/kvm ]] || die "/dev/kvm: missing"
-    echo "/dev/kvm: available ($(stat -c '%A %U:%G' /dev/kvm))"
+	grep -qm1 vmx /proc/cpuinfo ||
+		die "Intel VMX: missing; this observer decodes Intel EPT, not AMD NPT"
+	echo "Intel VMX: detected"
+	sudo -n modprobe kvm
+	sudo -n modprobe kvm_intel
+	[[ -e /dev/kvm ]] || die "/dev/kvm: missing"
+	echo "/dev/kvm: available ($(stat -c '%A %U:%G' /dev/kvm))"
 }
 
 mount_tracing()
@@ -177,6 +192,7 @@ verify_thp()
 print_basics
 host_line
 install_deps_if_needed
+verify_ubuntu
 verify_kvm
 verify_tracefs
 verify_thp
