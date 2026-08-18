@@ -31,6 +31,14 @@
 #error "This module is x86-64 only."
 #endif
 
+/*
+ * Every event line shares the "KAPI_EVT " prefix that run.sh greps for and the frontend parses.
+ * Routing through these macros keeps that event-line identity in one place.
+ */
+#define KAPI_EVT(...) pr_info("KAPI_EVT " __VA_ARGS__)
+#define KAPI_EVT_WARN(...) pr_warn("KAPI_EVT " __VA_ARGS__)
+#define KAPI_EVT_ERR(...) pr_err("KAPI_EVT " __VA_ARGS__)
+
 #define BUDDY_PAGE_ORDER 3						/* 8 adjacent pages. */
 #define EXACT_PAGE_ALLOC_SIZE (PAGE_SIZE + 100) /* Non-page-exact request. */
 #define SLAB_BUFFER_SIZE 100					/* Shows kmalloc/ksize() rounding. */
@@ -81,17 +89,17 @@ static void print_region(const char *name, unsigned long start, unsigned long en
 {
 	if (end <= start)
 	{
-		pr_warn("KAPI_EVT domain=kapi phase=layout action=region id=%s start=0x%016lx end=0x%016lx kind=%s source=%s\n", name, start, end, kind, source);
+		KAPI_EVT_WARN("domain=kapi phase=layout action=region id=%s start=0x%016lx end=0x%016lx bytes=0 kind=%s source=%s\n", name, start, end, kind, source);
 		return;
 	}
-	pr_info("KAPI_EVT domain=kapi phase=layout action=region id=%s start=0x%016lx end=0x%016lx bytes=%lu kind=%s source=%s\n", name, start, end, end - start, kind, source);
+	KAPI_EVT("domain=kapi phase=layout action=region id=%s start=0x%016lx end=0x%016lx bytes=%lu kind=%s source=%s\n", name, start, end, end - start, kind, source);
 }
 
 static void __init print_global_constants(unsigned long ram_bytes)
 {
 
-	pr_info("KAPI_EVT domain=kapi phase=layout action=begin\n");
-	pr_info("KAPI_EVT domain=kapi phase=layout action=constants page_size=%lu page_shift=%u page_mask=0x%016lx bits_per_long=%u ram_bytes=%lu paging_levels=%u\n",
+	KAPI_EVT("domain=kapi phase=layout action=begin\n");
+	KAPI_EVT("domain=kapi phase=layout action=constants page_size=%lu page_shift=%u page_mask=0x%016lx bits_per_long=%u ram_bytes=%lu paging_levels=%u\n",
 			PAGE_SIZE,
 			(unsigned int)PAGE_SHIFT,
 			(unsigned long)PAGE_MASK,
@@ -146,7 +154,7 @@ static void __init print_global_constants(unsigned long ram_bytes)
 	if (cursor < ULONG_MAX)
 		print_region("reserved_top", cursor, ULONG_MAX, "reserved", "FIXADDR_TOP+ULONG_MAX");
 
-	pr_info("KAPI_EVT domain=kapi phase=layout action=end\n");
+	KAPI_EVT("domain=kapi phase=layout action=end\n");
 }
 
 static void show_idle_thread(void)
@@ -154,7 +162,7 @@ static void show_idle_thread(void)
 	struct task_struct *t = &init_task;
 
 	/* init_task is CPU0's idle task and is not visited by normal traversal. */
-	pr_info("KAPI_EVT domain=kapi phase=tasks action=task tgid=%d pid=%d ppid=0 cpu=0 task=%px stack=%px mm=%px type=idle comm=\"%s\"\n", t->tgid, t->pid, t, t->stack, t->mm, t->comm);
+	KAPI_EVT("domain=kapi phase=tasks action=task tgid=%d pid=%d ppid=0 cpu=0 task=%px stack=%px mm=%px type=idle comm=\"%s\"\n", t->tgid, t->pid, t, t->stack, t->mm, t->comm);
 }
 
 static int show_all_threads(void)
@@ -163,7 +171,7 @@ static int show_all_threads(void)
 	struct task_struct *t;
 	int total = 0;
 
-	pr_info("KAPI_EVT domain=kapi phase=tasks action=begin\n");
+	KAPI_EVT("domain=kapi phase=tasks action=begin\n");
 
 	show_idle_thread();
 	total++;
@@ -187,7 +195,7 @@ static int show_all_threads(void)
 		else
 			type = "user-ST";
 
-		pr_info("KAPI_EVT domain=kapi phase=tasks action=task tgid=%d pid=%d ppid=%d cpu=%d task=%px stack=%px mm=%px type=%s comm=\"%s\"\n",
+		KAPI_EVT("domain=kapi phase=tasks action=task tgid=%d pid=%d ppid=%d cpu=%d task=%px stack=%px mm=%px type=%s comm=\"%s\"\n",
 				t->tgid,
 				t->pid,
 				task_ppid_nr(t),
@@ -220,7 +228,7 @@ static void inspect_direct_map_memory(const char *name, const void *addr, size_t
 	if (!addr || !len)
 		return;
 
-	pr_info("KAPI_EVT domain=kapi phase=memory action=sample id=%s bytes=%d data=%*phN\n", name, sample_len, sample_len, addr);
+	KAPI_EVT("domain=kapi phase=memory action=sample id=%s bytes=%d data=%*phN\n", name, sample_len, sample_len, addr);
 	pages = DIV_ROUND_UP(len, PAGE_SIZE);
 	kva = (unsigned long)addr;
 
@@ -230,7 +238,7 @@ static void inspect_direct_map_memory(const char *name, const void *addr, size_t
 		phys_addr_t pa = virt_to_phys(this_kva);
 		unsigned long pfn = PHYS_PFN(pa);
 
-		pr_info("KAPI_EVT domain=kapi phase=mapping action=page id=%s index=%u kva=%px pa=%pa pfn=%lu\n", name, i, this_kva, &pa, pfn);
+		KAPI_EVT("domain=kapi phase=mapping action=page id=%s index=%u kva=%px pa=%pa pfn=%lu\n", name, i, this_kva, &pa, pfn);
 
 		if (i > 0 && pfn != previous_pfn + 1)
 			physically_contiguous = false;
@@ -238,7 +246,7 @@ static void inspect_direct_map_memory(const char *name, const void *addr, size_t
 		previous_pfn = pfn;
 	}
 
-	pr_info("KAPI_EVT domain=kapi phase=mapping action=summary id=%s kva=%px bytes=%zu pages=%u physical_contiguous=%s\n",
+	KAPI_EVT("domain=kapi phase=mapping action=summary id=%s kva=%px bytes=%zu pages=%u physical_contiguous=%s\n",
 			name, addr, len, pages, physically_contiguous ? "yes" : "no");
 }
 
@@ -246,14 +254,14 @@ static void free_page_memory(void)
 {
 	if (exact_pages)
 	{
-		pr_info("KAPI_EVT domain=kapi phase=cleanup action=free api=free_pages_exact id=exact_pages addr=%px\n", exact_pages);
+		KAPI_EVT("domain=kapi phase=cleanup action=free api=free_pages_exact id=exact_pages addr=%px\n", exact_pages);
 		free_pages_exact(exact_pages, EXACT_PAGE_ALLOC_SIZE);
 		exact_pages = NULL;
 	}
 
 	if (page_desc)
 	{
-		pr_info("KAPI_EVT domain=kapi phase=cleanup action=free api=__free_pages id=page_desc addr=%px order=%u\n", page_desc_addr, BUDDY_PAGE_ORDER);
+		KAPI_EVT("domain=kapi phase=cleanup action=free api=__free_pages id=page_desc addr=%px order=%u\n", page_desc_addr, BUDDY_PAGE_ORDER);
 		__free_pages(page_desc, BUDDY_PAGE_ORDER);
 		page_desc = NULL;
 		page_desc_addr = NULL;
@@ -261,21 +269,21 @@ static void free_page_memory(void)
 
 	if (order_pages)
 	{
-		pr_info("KAPI_EVT domain=kapi phase=cleanup action=free api=free_pages id=order_pages addr=%px order=%u\n", (void *)order_pages, BUDDY_PAGE_ORDER);
+		KAPI_EVT("domain=kapi phase=cleanup action=free api=free_pages id=order_pages addr=%px order=%u\n", (void *)order_pages, BUDDY_PAGE_ORDER);
 		free_pages(order_pages, BUDDY_PAGE_ORDER);
 		order_pages = 0;
 	}
 
 	if (zero_page)
 	{
-		pr_info("KAPI_EVT domain=kapi phase=cleanup action=free api=free_page id=zero_page addr=%px\n", (void *)zero_page);
+		KAPI_EVT("domain=kapi phase=cleanup action=free api=free_page id=zero_page addr=%px\n", (void *)zero_page);
 		free_page(zero_page);
 		zero_page = 0;
 	}
 
 	if (one_page)
 	{
-		pr_info("KAPI_EVT domain=kapi phase=cleanup action=free api=free_page id=one_page addr=%px\n", (void *)one_page);
+		KAPI_EVT("domain=kapi phase=cleanup action=free api=free_page id=one_page addr=%px\n", (void *)one_page);
 		free_page(one_page);
 		one_page = 0;
 	}
@@ -287,25 +295,25 @@ static int allocate_page_memory(void)
 
 	if (BUDDY_PAGE_ORDER > MAX_PAGE_ORDER - 1)
 	{
-		pr_err("KAPI_EVT domain=kapi phase=page_allocator action=error api=order_validation order=%u max_order=%u errno=%d\n", BUDDY_PAGE_ORDER, MAX_PAGE_ORDER - 1, -EINVAL);
+		KAPI_EVT_ERR("domain=kapi phase=page_allocator action=error api=order_validation order=%u max_order=%u errno=%d\n", BUDDY_PAGE_ORDER, MAX_PAGE_ORDER - 1, -EINVAL);
 		return -EINVAL;
 	}
 
-	pr_info("KAPI_EVT domain=kapi phase=page_allocator action=begin\n");
+	KAPI_EVT("domain=kapi phase=page_allocator action=begin\n");
 
 	one_page = __get_free_page(GFP_KERNEL);
 	if (!one_page)
 		return -ENOMEM;
 
 	memset((void *)one_page, 0x11, PAGE_SIZE);
-	pr_info("KAPI_EVT domain=kapi phase=page_allocator action=alloc api=__get_free_page id=one_page addr=%px\n", (void *)one_page);
+	KAPI_EVT("domain=kapi phase=page_allocator action=alloc api=__get_free_page id=one_page addr=%px\n", (void *)one_page);
 	inspect_direct_map_memory("one_page", (void *)one_page, PAGE_SIZE);
 
 	zero_page = get_zeroed_page(GFP_KERNEL);
 	if (!zero_page)
 		goto err_nomem;
 
-	pr_info("KAPI_EVT domain=kapi phase=page_allocator action=alloc api=get_zeroed_page id=zero_page addr=%px\n", (void *)zero_page);
+	KAPI_EVT("domain=kapi phase=page_allocator action=alloc api=get_zeroed_page id=zero_page addr=%px\n", (void *)zero_page);
 	inspect_direct_map_memory("zero_page", (void *)zero_page, PAGE_SIZE);
 
 	order_pages = __get_free_pages(GFP_KERNEL | __GFP_ZERO, BUDDY_PAGE_ORDER);
@@ -313,7 +321,7 @@ static int allocate_page_memory(void)
 		goto err_nomem;
 
 	memset((void *)order_pages, 0x22, order_len);
-	pr_info("KAPI_EVT domain=kapi phase=page_allocator action=alloc api=__get_free_pages id=order_pages addr=%px order=%u\n", (void *)order_pages, BUDDY_PAGE_ORDER);
+	KAPI_EVT("domain=kapi phase=page_allocator action=alloc api=__get_free_pages id=order_pages addr=%px order=%u\n", (void *)order_pages, BUDDY_PAGE_ORDER);
 	inspect_direct_map_memory("order_pages", (void *)order_pages, order_len);
 
 	page_desc = alloc_pages(GFP_KERNEL | __GFP_ZERO, BUDDY_PAGE_ORDER);
@@ -323,13 +331,13 @@ static int allocate_page_memory(void)
 	page_desc_addr = page_address(page_desc);
 	if (!page_desc_addr)
 	{
-		pr_err("KAPI_EVT domain=kapi phase=page_allocator action=error api=page_address id=page_desc reason=no_direct_mapping errno=%d\n", -ENOMEM);
+		KAPI_EVT_ERR("domain=kapi phase=page_allocator action=error api=page_address id=page_desc reason=no_direct_mapping errno=%d\n", -ENOMEM);
 		free_page_memory();
 		return -ENOMEM;
 	}
 
 	memset(page_desc_addr, 0x33, order_len);
-	pr_info("KAPI_EVT domain=kapi phase=page_allocator action=alloc api=alloc_pages id=page_desc struct_page=%px addr=%px order=%u\n", page_desc, page_desc_addr, BUDDY_PAGE_ORDER);
+	KAPI_EVT("domain=kapi phase=page_allocator action=alloc api=alloc_pages id=page_desc struct_page=%px addr=%px order=%u\n", page_desc, page_desc_addr, BUDDY_PAGE_ORDER);
 	inspect_direct_map_memory("page_desc", page_desc_addr, order_len);
 
 	exact_pages = alloc_pages_exact(EXACT_PAGE_ALLOC_SIZE, GFP_KERNEL | __GFP_ZERO);
@@ -337,10 +345,10 @@ static int allocate_page_memory(void)
 		goto err_nomem;
 
 	memset(exact_pages, 0x44, EXACT_PAGE_ALLOC_SIZE);
-	pr_info("KAPI_EVT domain=kapi phase=page_allocator action=alloc api=alloc_pages_exact id=exact_pages addr=%px requested=%lu\n", exact_pages, (unsigned long)EXACT_PAGE_ALLOC_SIZE);
+	KAPI_EVT("domain=kapi phase=page_allocator action=alloc api=alloc_pages_exact id=exact_pages addr=%px requested=%lu\n", exact_pages, (unsigned long)EXACT_PAGE_ALLOC_SIZE);
 	inspect_direct_map_memory("exact_pages", exact_pages, EXACT_PAGE_ALLOC_SIZE);
 
-	pr_info("KAPI_EVT domain=kapi phase=page_allocator action=end\n");
+	KAPI_EVT("domain=kapi phase=page_allocator action=end\n");
 
 	return 0;
 
@@ -353,14 +361,14 @@ static void free_slab_memory(void)
 {
 	if (ctx)
 	{
-		pr_info("KAPI_EVT domain=kapi phase=cleanup action=free api=kfree_sensitive id=slab_context addr=%px\n", ctx);
+		KAPI_EVT("domain=kapi phase=cleanup action=free api=kfree_sensitive id=slab_context addr=%px\n", ctx);
 		kfree_sensitive(ctx);
 		ctx = NULL;
 	}
 
 	if (slab_buf)
 	{
-		pr_info("KAPI_EVT domain=kapi phase=cleanup action=free api=kfree id=slab_buf addr=%px\n", slab_buf);
+		KAPI_EVT("domain=kapi phase=cleanup action=free api=kfree id=slab_buf addr=%px\n", slab_buf);
 		kfree(slab_buf);
 		slab_buf = NULL;
 	}
@@ -370,7 +378,7 @@ static int allocate_slab_memory(void)
 {
 	size_t actual;
 
-	pr_info("KAPI_EVT domain=kapi phase=slab action=begin\n");
+	KAPI_EVT("domain=kapi phase=slab action=begin\n");
 
 	slab_buf = kmalloc(SLAB_BUFFER_SIZE, GFP_KERNEL);
 	if (!slab_buf)
@@ -379,7 +387,7 @@ static int allocate_slab_memory(void)
 	memset(slab_buf, 'K', SLAB_BUFFER_SIZE);
 	actual = ksize(slab_buf);
 
-	pr_info("KAPI_EVT domain=kapi phase=slab action=alloc api=kmalloc id=slab_buf addr=%px requested=%u actual=%zu waste=%zu\n",
+	KAPI_EVT("domain=kapi phase=slab action=alloc api=kmalloc id=slab_buf addr=%px requested=%u actual=%zu waste=%zu\n",
 			slab_buf,
 			SLAB_BUFFER_SIZE,
 			actual,
@@ -399,14 +407,14 @@ static int allocate_slab_memory(void)
 
 	actual = ksize(ctx);
 
-	pr_info("KAPI_EVT domain=kapi phase=slab action=alloc api=kzalloc id=slab_context addr=%px requested=%zu actual=%zu waste=%zu\n",
+	KAPI_EVT("domain=kapi phase=slab action=alloc api=kzalloc id=slab_context addr=%px requested=%zu actual=%zu waste=%zu\n",
 			ctx,
 			sizeof(*ctx),
 			actual,
 			actual >= sizeof(*ctx) ? actual - sizeof(*ctx) : 0);
 	inspect_direct_map_memory("slab_context", ctx, actual);
 
-	pr_info("KAPI_EVT domain=kapi phase=slab action=end\n");
+	KAPI_EVT("domain=kapi phase=slab action=end\n");
 
 	return 0;
 
@@ -432,7 +440,7 @@ static void free_custom_slab_cache(void)
 	{
 		if (custom_objects[i])
 		{
-			pr_info("KAPI_EVT domain=kapi phase=cleanup action=free api=kmem_cache_free id=custom_object_%u addr=%px\n", i, custom_objects[i]);
+			KAPI_EVT("domain=kapi phase=cleanup action=free api=kmem_cache_free id=custom_object_%u addr=%px\n", i, custom_objects[i]);
 			kmem_cache_free(custom_cache, custom_objects[i]);
 			custom_objects[i] = NULL;
 		}
@@ -440,7 +448,7 @@ static void free_custom_slab_cache(void)
 
 	if (custom_cache)
 	{
-		pr_info("KAPI_EVT domain=kapi phase=cleanup action=destroy api=kmem_cache_destroy id=custom_cache\n");
+		KAPI_EVT("domain=kapi phase=cleanup action=destroy api=kmem_cache_destroy id=custom_cache\n");
 		kmem_cache_destroy(custom_cache);
 		custom_cache = NULL;
 	}
@@ -450,7 +458,7 @@ static int create_custom_slab_cache(void)
 {
 	unsigned int i;
 
-	pr_info("KAPI_EVT domain=kapi phase=custom_cache action=begin\n");
+	KAPI_EVT("domain=kapi phase=custom_cache action=begin\n");
 
 	custom_cache = kmem_cache_create(CUSTOM_CACHE_NAME,
 									 sizeof(struct custom_cache_object),
@@ -459,11 +467,11 @@ static int create_custom_slab_cache(void)
 									 custom_cache_ctor);
 	if (!custom_cache)
 	{
-		pr_warn("KAPI_EVT domain=kapi phase=custom_cache action=error api=kmem_cache_create errno=%d\n", -ENOMEM);
+		KAPI_EVT_WARN("domain=kapi phase=custom_cache action=error api=kmem_cache_create errno=%d\n", -ENOMEM);
 		return -ENOMEM;
 	}
 
-	pr_info("KAPI_EVT domain=kapi phase=custom_cache action=create api=kmem_cache_create id=custom_cache object_size=%zu\n",
+	KAPI_EVT("domain=kapi phase=custom_cache action=create api=kmem_cache_create id=custom_cache object_size=%zu\n",
 			sizeof(struct custom_cache_object));
 
 	for (i = 0; i < CUSTOM_CACHE_OBJECTS; i++)
@@ -471,7 +479,7 @@ static int create_custom_slab_cache(void)
 		custom_objects[i] = kmem_cache_alloc(custom_cache, GFP_KERNEL);
 		if (!custom_objects[i])
 		{
-			pr_warn("KAPI_EVT domain=kapi phase=custom_cache action=error api=kmem_cache_alloc index=%u errno=%d\n", i, -ENOMEM);
+			KAPI_EVT_WARN("domain=kapi phase=custom_cache action=error api=kmem_cache_alloc index=%u errno=%d\n", i, -ENOMEM);
 			free_custom_slab_cache();
 			return -ENOMEM;
 		}
@@ -481,12 +489,12 @@ static int create_custom_slab_cache(void)
 		strscpy(custom_objects[i]->name, "active-object", sizeof(custom_objects[i]->name));
 		memset(custom_objects[i]->payload, 0xa0 + i, sizeof(custom_objects[i]->payload));
 
-		pr_info("KAPI_EVT domain=kapi phase=custom_cache action=alloc api=kmem_cache_alloc id=custom_object_%u addr=%px flags=0x%x\n",
+		KAPI_EVT("domain=kapi phase=custom_cache action=alloc api=kmem_cache_alloc id=custom_object_%u addr=%px flags=0x%x\n",
 				i, custom_objects[i], custom_objects[i]->flags);
 	}
 
 	inspect_direct_map_memory("custom_object_0", custom_objects[0], sizeof(*custom_objects[0]));
-	pr_info("KAPI_EVT domain=kapi phase=custom_cache action=end\n");
+	KAPI_EVT("domain=kapi phase=custom_cache action=end\n");
 
 	return 0;
 }
@@ -502,7 +510,7 @@ static void inspect_vmalloc_memory(const char *name, const void *addr, size_t le
 	if (!addr || !len)
 		return;
 
-	pr_info("KAPI_EVT domain=kapi phase=memory action=sample id=%s bytes=%d data=%*phN\n", name, sample_len, sample_len, addr);
+	KAPI_EVT("domain=kapi phase=memory action=sample id=%s bytes=%d data=%*phN\n", name, sample_len, sample_len, addr);
 
 	pages = DIV_ROUND_UP(len, PAGE_SIZE);
 	kva = (unsigned long)addr;
@@ -516,14 +524,14 @@ static void inspect_vmalloc_memory(const char *name, const void *addr, size_t le
 
 		if (!page)
 		{
-			pr_warn("KAPI_EVT domain=kapi phase=mapping action=missing_page id=%s index=%u kva=%px\n", name, i, this_kva);
+			KAPI_EVT_WARN("domain=kapi phase=mapping action=missing_page id=%s index=%u kva=%px\n", name, i, this_kva);
 			continue;
 		}
 
 		pfn = page_to_pfn(page);
 		pa = page_to_phys(page) + offset_in_page(this_kva);
 
-		pr_info("KAPI_EVT domain=kapi phase=mapping action=page id=%s index=%u kva=%px struct_page=%px pa=%pa pfn=%lu\n", name, i, this_kva, page, &pa, pfn);
+		KAPI_EVT("domain=kapi phase=mapping action=page id=%s index=%u kva=%px struct_page=%px pa=%pa pfn=%lu\n", name, i, this_kva, page, &pa, pfn);
 
 		if (i > 0 && pfn != previous_pfn + 1)
 			physically_contiguous = false;
@@ -531,7 +539,7 @@ static void inspect_vmalloc_memory(const char *name, const void *addr, size_t le
 		previous_pfn = pfn;
 	}
 
-	pr_info("KAPI_EVT domain=kapi phase=mapping action=summary id=%s kva=%px bytes=%zu pages=%u physical_contiguous=%s\n",
+	KAPI_EVT("domain=kapi phase=mapping action=summary id=%s kva=%px bytes=%zu pages=%u physical_contiguous=%s\n",
 			name, addr, len, pages, physically_contiguous ? "yes" : "no");
 }
 
@@ -539,14 +547,14 @@ static void free_vmalloc_memory(void)
 {
 	if (vzbuf)
 	{
-		pr_info("KAPI_EVT domain=kapi phase=cleanup action=free api=vfree id=vzbuf addr=%px\n", vzbuf);
+		KAPI_EVT("domain=kapi phase=cleanup action=free api=vfree id=vzbuf addr=%px\n", vzbuf);
 		vfree(vzbuf);
 		vzbuf = NULL;
 	}
 
 	if (vbuf)
 	{
-		pr_info("KAPI_EVT domain=kapi phase=cleanup action=free api=vfree id=vbuf addr=%px\n", vbuf);
+		KAPI_EVT("domain=kapi phase=cleanup action=free api=vfree id=vbuf addr=%px\n", vbuf);
 		vfree(vbuf);
 		vbuf = NULL;
 	}
@@ -554,31 +562,31 @@ static void free_vmalloc_memory(void)
 
 static int allocate_vmalloc_memory(void)
 {
-	pr_info("KAPI_EVT domain=kapi phase=vmalloc action=begin\n");
+	KAPI_EVT("domain=kapi phase=vmalloc action=begin\n");
 
 	vbuf = vmalloc(VMALLOC_BUFFER_SIZE);
 	if (!vbuf)
 	{
-		pr_warn("KAPI_EVT domain=kapi phase=vmalloc action=error api=vmalloc requested=%lu errno=%d\n", (unsigned long)VMALLOC_BUFFER_SIZE, -ENOMEM);
+		KAPI_EVT_WARN("domain=kapi phase=vmalloc action=error api=vmalloc requested=%lu errno=%d\n", (unsigned long)VMALLOC_BUFFER_SIZE, -ENOMEM);
 		return -ENOMEM;
 	}
 
 	memset(vbuf, 0x5a, VMALLOC_BUFFER_SIZE);
-	pr_info("KAPI_EVT domain=kapi phase=vmalloc action=alloc api=vmalloc id=vbuf addr=%px\n", vbuf);
+	KAPI_EVT("domain=kapi phase=vmalloc action=alloc api=vmalloc id=vbuf addr=%px\n", vbuf);
 	inspect_vmalloc_memory("vbuf", vbuf, VMALLOC_BUFFER_SIZE);
 
 	vzbuf = vzalloc(VMALLOC_BUFFER_SIZE);
 	if (!vzbuf)
 	{
-		pr_warn("KAPI_EVT domain=kapi phase=vmalloc action=error api=vzalloc requested=%lu errno=%d\n", (unsigned long)VMALLOC_BUFFER_SIZE, -ENOMEM);
+		KAPI_EVT_WARN("domain=kapi phase=vmalloc action=error api=vzalloc requested=%lu errno=%d\n", (unsigned long)VMALLOC_BUFFER_SIZE, -ENOMEM);
 		free_vmalloc_memory();
 		return -ENOMEM;
 	}
 
-	pr_info("KAPI_EVT domain=kapi phase=vmalloc action=alloc api=vzalloc id=vzbuf addr=%px\n", vzbuf);
+	KAPI_EVT("domain=kapi phase=vmalloc action=alloc api=vzalloc id=vzbuf addr=%px\n", vzbuf);
 	inspect_vmalloc_memory("vzbuf", vzbuf, VMALLOC_BUFFER_SIZE);
 
-	pr_info("KAPI_EVT domain=kapi phase=vmalloc action=end\n");
+	KAPI_EVT("domain=kapi phase=vmalloc action=end\n");
 
 	return 0;
 }
@@ -588,10 +596,10 @@ static int __init kapi_init(void)
 	int ret;
 	unsigned long ram_bytes = totalram_pages() << PAGE_SHIFT;
 
-	pr_info("KAPI_EVT domain=module phase=lifecycle action=run_begin schema=1\n");
+	KAPI_EVT("domain=module phase=lifecycle action=run_begin schema=1\n");
 	print_global_constants(ram_bytes);
 	show_all_threads();
-	pr_info("KAPI_EVT domain=kapi phase=tasks action=end\n");
+	KAPI_EVT("domain=kapi phase=tasks action=end\n");
 
 	ret = allocate_page_memory();
 	if (ret)
@@ -621,23 +629,23 @@ static int __init kapi_init(void)
 		goto fail;
 	}
 
-	pr_info("KAPI_EVT domain=module phase=lifecycle action=ready\n");
+	KAPI_EVT("domain=module phase=lifecycle action=ready\n");
 	return 0;
 
 fail:
-	pr_err("KAPI_EVT domain=module phase=lifecycle action=run_end status=error stage=init errno=%d\n", ret);
+	KAPI_EVT_ERR("domain=module phase=lifecycle action=run_end status=error stage=init errno=%d\n", ret);
 	return ret;
 }
 
 static void __exit kapi_exit(void)
 {
-	pr_info("KAPI_EVT domain=kapi phase=cleanup action=begin\n");
+	KAPI_EVT("domain=kapi phase=cleanup action=begin\n");
 	free_vmalloc_memory();
 	free_custom_slab_cache();
 	free_slab_memory();
 	free_page_memory();
-	pr_info("KAPI_EVT domain=kapi phase=cleanup action=end\n");
-	pr_info("KAPI_EVT domain=module phase=lifecycle action=run_end\n");
+	KAPI_EVT("domain=kapi phase=cleanup action=end\n");
+	KAPI_EVT("domain=module phase=lifecycle action=run_end\n");
 }
 
 module_init(kapi_init);

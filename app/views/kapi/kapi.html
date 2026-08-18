@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KAPI</title>
+<link rel="stylesheet" href="../../theme.css?v=7">
+<link rel="stylesheet" href="kapi.css?v=2">
+
+</head>
+<body>
+<div class="module-lab">
+<header class="head"><div><div class="eyebrow">MODULE / KERNEL API LABORATORY</div><h1>Kernel API <span>map</span></h1><p>Inspect task topology, canonical address regions, allocator return addresses, and physical backing.</p></div><div id="status" role="status"><i class="trace-dot"></i><span>building kernel object map…</span></div></header>
+<main class="workbench">
+<section class="visual panel"><header class="panel-head"><h2 id="stage-title">Module experiment</h2><p id="stage-description"></p><span id="stage-stat" class="panel-stat"></span></header><div class="stage-wrap">
+<div class="vas-map"><header class="vas-head"><b>x86-64 ADDRESS SPACE</b><span>not to scale</span></header><div id="vas-stack" class="vas-stack"></div><footer class="vas-foot"><span>↓ low</span><span>high ↑</span></footer></div>
+<aside id="allocator-links" class="allocator-links"></aside>
+<section id="task-stage" class="stage task-stage"><div id="task-summary" class="summary-row"></div><div id="task-list" class="task-list"></div></section>
+</div></section>
+</main>
+</div>
+
+<script src="kapi.js?v=1"></script>
+</body>
+</html>
