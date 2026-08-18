@@ -2,9 +2,17 @@
 /*
  * Ring-buffer ABI shared between the BPF side (cfs.bpf.c) and the userspace loader (cfs.c).
  * This is the binary format only: the loader serializes it into the canonical NDJSON envelope.
- * The loader also normalizes representation details such as RB colors (0/1 here becomes "red"/"black" there).
  *
- * The header intentionally contains no JSON vocabulary.
+ * One post-__enqueue_entity snapshot, grouped into three semantic facts:
+ *
+ *   time_ns    CLOCK_MONOTONIC (bpf_ktime_get_ns()), identical to the tracefs instance clock (mono)
+ *   event_info what caused this snapshot (the entity being enqueued)
+ *   context    where and as whom the probe executed, which is not necessarily the enqueued task
+ *   state      the actual CFS runqueue state observed after insertion
+ *
+ * The header intentionally contains no JSON vocabulary and no JSON representation choices.
+ * Colors are 0/1 here, pointers are raw u64 here, and truncated is an integer here.
+ * The loader converts those into "red"/"black", "0x..."/null, and true/false for the public schema.
  * It must compile in both BPF (-target bpf) and normal userspace builds.
  */
 #ifndef CFS_EVENT_H
@@ -25,30 +33,37 @@ struct tree_node
 	char comm[16];
 };
 
-/*
- * One post-__enqueue_entity snapshot.
- * Time is CLOCK_MONOTONIC (bpf_ktime_get_ns()), identical to the tracefs instance clock (mono).
- * The frontend can therefore compare time_ns directly with tracefs seconds * 1e9.
- *
- * pid/tid/comm describe the task context the probes ran in.
- * They are not necessarily the task represented by the enqueued sched_entity.
- */
-struct cfs_event
+struct cfs_event_info
 {
-	unsigned long long time_ns;
-	unsigned int pid; /* tgid of the probing task */
-	unsigned int tid; /* tid of the probing task */
-	unsigned int cpu; /* CPU the probe ran on */
+	unsigned long long enqueued_entity; /* the enqueued sched_entity */
+	unsigned long long enqueued_rb_node; /* the enqueued entity's embedded rb_node */
+};
+
+struct cfs_context
+{
+	unsigned int cpu; /* CPU on which this probe callback executed */
+	unsigned int pid; /* TGID of the probing task */
+	unsigned int tid; /* TID of the probing task */
 	char comm[16];    /* task name of the probing task */
+};
+
+struct cfs_state
+{
 	unsigned long long cfs_rq;
-	unsigned long long se; /* enqueued sched_entity */
-	unsigned long long run_node; /* enqueued se's embedded rb_node */
 	unsigned long long nr_running;
 	unsigned long long root; /* cfs_rq->tasks_timeline.rb_root.rb_node */
 	unsigned long long leftmost; /* cfs_rq->tasks_timeline.rb_leftmost */
 	unsigned int node_count;
 	unsigned int truncated;
 	struct tree_node nodes[MAX_TREE_NODES];
+};
+
+struct cfs_event
+{
+	unsigned long long time_ns;
+	struct cfs_event_info event_info;
+	struct cfs_context context;
+	struct cfs_state state;
 };
 
 #endif /* CFS_EVENT_H */

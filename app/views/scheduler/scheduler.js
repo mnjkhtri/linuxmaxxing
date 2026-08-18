@@ -107,14 +107,14 @@
     });
     if (!Object.keys(map).length) return null;
 
-    var trigger = record.trigger || {};
+    var eventInfo = record.event_info || {};
     var enqueued = rq.enqueued_entity || {};
 
     return {
       key: rq.address,
       cpu: +ctx.cpu,
       rq: rq.address,
-      op: trigger.name || 'enqueue',
+      op: eventInfo.name || 'enqueue',
       timeNs: Number(record.time_ns || 0),
       seq: Number(record.seq || 0),
       tid: ctx.tid == null ? 0 : +ctx.tid,

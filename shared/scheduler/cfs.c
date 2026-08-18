@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <bpf/libbpf.h>
 #include "cfs_event.h"
+#include "json_writer.h"
 #include "cfs.skel.h"
 
 /*
@@ -15,12 +16,12 @@
  * Stderr carries machine-readable lifecycle lines (LX_READY / LX_DONE) plus human diagnostics.
  * run.sh can therefore gate the workload on a successful attachment without parsing capture records.
  *
- * Kernel pointers are printed as "0x..." strings.
- * They are identities used to connect nodes in the visualization, never addresses userspace should dereference.
- * Null pointers are emitted as JSON null.
- *
- * The binary event color (CFS_RB_RED/CFS_RB_BLACK) is normalized here to "red"/"black".
- * The frontend never sees the numeric value.
+ * The binary event is grouped into event_info/context/state, but the public schema keeps its own layout.
+ * In particular the enqueued entity facts travel from event.event_info into state.runqueue.enqueued_entity.
+ * Serialization is owned here.
+ * schema_version, experiment, kind, source, and seq come from the loader.
+ * Representation choices such as "red"/"black", "0x..."/null, and true/false are normalized here.
+ * Kernel pointers are identities used to connect nodes in the visualization, never addresses to dereference.
  */
 
 static unsigned int record_count;
@@ -34,100 +35,104 @@ static void on_signal(int signo)
 	exiting = 1;
 }
 
-static void json_comma(int *first)
-{
-	if (*first)
-	{
-		*first = 0;
-		return;
-	}
-	putchar(',');
-}
-
-static void json_string_value(const char *value, size_t max_len)
-{
-	putchar('"');
-	for (size_t i = 0; i < max_len && value[i]; i++)
-	{
-		unsigned char c = value[i];
-
-		if (c == '"' || c == '\\')
-			printf("\\%c", c);
-		else if (c < 0x20)
-			printf("\\u%04x", c);
-		else
-			putchar(c);
-	}
-	putchar('"');
-}
-
-static void json_string(int *first, const char *name, const char *value, size_t max_len)
-{
-	json_comma(first);
-	printf("\"%s\":", name);
-	json_string_value(value, max_len);
-}
-
-static void json_uint(int *first, const char *name, unsigned int value)
-{
-	json_comma(first);
-	printf("\"%s\":%u", name, value);
-}
-
-static void json_u64(int *first, const char *name, unsigned long long value)
-{
-	json_comma(first);
-	printf("\"%s\":%llu", name, value);
-}
-
-static void json_bool(int *first, const char *name, int value)
-{
-	json_comma(first);
-	printf("\"%s\":%s", name, value ? "true" : "false");
-}
-
-/* Kernel pointers: "0x..." when present, JSON null otherwise. */
-static void json_hex_ptr(int *first, const char *name, unsigned long long value)
-{
-	json_comma(first);
-	if (value)
-		printf("\"%s\":\"0x%016llx\"", name, value);
-	else
-		printf("\"%s\":null", name);
-}
-
-static void print_node(const struct tree_node *node)
-{
-	int first = 1;
-
-	putchar('{');
-	json_hex_ptr(&first, "address", node->node);
-	json_hex_ptr(&first, "left", node->left);
-	json_hex_ptr(&first, "right", node->right);
-	json_comma(&first);
-	printf("\"color\":\"%s\"", node->color == CFS_RB_RED ? "red" : "black");
-	json_string(&first, "comm", node->comm, 16);
-	putchar('}');
-}
-
 /*
  * First NDJSON record.
  * The frontend recognizes kind=meta and does not treat it as a playback frame.
  * Static facts live here once instead of on every record.
  */
-static void print_meta(void)
+static void write_meta(struct json_writer *jw)
 {
-	int first = 1;
+	json_object_begin(jw);
+	json_u32(jw, "schema_version", 1);
+	json_string(jw, "experiment", "scheduler");
+	json_string(jw, "kind", "meta");
+	json_string(jw, "source", "ebpf");
+	json_string(jw, "clock", "monotonic");
+	json_string(jw, "capture", "cfs_runqueue");
+	json_u32(jw, "max_nodes", MAX_TREE_NODES);
+	json_object_end(jw);
+	json_newline(jw);
+}
 
-	putchar('{');
-	json_uint(&first, "schema_version", 1);
-	json_string(&first, "experiment", "scheduler", 32);
-	json_string(&first, "kind", "meta", 16);
-	json_string(&first, "source", "ebpf", 16);
-	json_string(&first, "clock", "monotonic", 16);
-	json_string(&first, "capture", "cfs_runqueue", 32);
-	json_uint(&first, "max_nodes", MAX_TREE_NODES);
-	puts("}");
+/*
+ * The loader attaches exactly one probe contract, so the event_info facts are constants.
+ * The enqueued entity belongs to the public runqueue shape and is written by write_state().
+ */
+static void write_event_info(struct json_writer *jw, const struct cfs_event_info *event_info)
+{
+	(void)event_info;
+	json_string(jw, "name", "enqueue_entity");
+	json_string(jw, "phase", "after");
+	json_string(jw, "probe", "kretprobe/__enqueue_entity");
+}
+
+static void write_context(struct json_writer *jw, const struct cfs_context *context)
+{
+	json_u32(jw, "cpu", context->cpu);
+	json_u32(jw, "pid", context->pid);
+	json_u32(jw, "tid", context->tid);
+	json_string_n(jw, "comm", context->comm, sizeof(context->comm));
+}
+
+static void write_node(struct json_writer *jw, const struct tree_node *node)
+{
+	json_object_begin(jw);
+	json_ptr(jw, "address", node->node);
+	json_ptr(jw, "left", node->left);
+	json_ptr(jw, "right", node->right);
+	json_string(jw, "color", node->color == CFS_RB_RED ? "red" : "black");
+	json_string_n(jw, "comm", node->comm, sizeof(node->comm));
+	json_object_end(jw);
+}
+
+static void write_state(struct json_writer *jw, const struct cfs_state *state, const struct cfs_event_info *event_info)
+{
+	json_object_begin_field(jw, "runqueue");
+	json_ptr(jw, "address", state->cfs_rq);
+	json_u32(jw, "nr_running", (uint32_t)state->nr_running);
+	json_ptr(jw, "root", state->root);
+	json_ptr(jw, "leftmost", state->leftmost);
+
+	json_object_begin_field(jw, "enqueued_entity");
+	json_ptr(jw, "address", event_info->enqueued_entity);
+	json_ptr(jw, "rb_node", event_info->enqueued_rb_node);
+	json_object_end(jw);
+
+	json_u32(jw, "node_count", state->node_count);
+	json_bool(jw, "truncated", state->truncated != 0);
+
+	json_array_begin_field(jw, "nodes");
+	for (unsigned int i = 0; i < state->node_count; i++)
+		write_node(jw, &state->nodes[i]);
+	json_array_end(jw);
+
+	json_object_end(jw);
+}
+
+static void write_snapshot(struct json_writer *jw, const struct cfs_event *event, unsigned int seq)
+{
+	json_object_begin(jw);
+	json_u32(jw, "schema_version", 1);
+	json_string(jw, "experiment", "scheduler");
+	json_string(jw, "kind", "snapshot");
+	json_string(jw, "source", "ebpf");
+	json_u32(jw, "seq", seq);
+	json_u64(jw, "time_ns", event->time_ns);
+
+	json_object_begin_field(jw, "event_info");
+	write_event_info(jw, &event->event_info);
+	json_object_end(jw);
+
+	json_object_begin_field(jw, "context");
+	write_context(jw, &event->context);
+	json_object_end(jw);
+
+	json_object_begin_field(jw, "state");
+	write_state(jw, &event->state, &event->event_info);
+	json_object_end(jw);
+
+	json_object_end(jw);
+	json_newline(jw);
 }
 
 /*
@@ -138,6 +143,8 @@ static void print_meta(void)
 static int handle_event(void *ctx, void *data, size_t len)
 {
 	const struct cfs_event *event = data;
+	struct json_writer jw;
+
 	(void)ctx;
 
 	if (len < sizeof(*event))
@@ -146,56 +153,8 @@ static int handle_event(void *ctx, void *data, size_t len)
 	seq_counter++;
 	record_count++;
 
-	int first = 1;
-	putchar('{');
-	json_uint(&first, "schema_version", 1);
-	json_string(&first, "experiment", "scheduler", 32);
-	json_string(&first, "kind", "snapshot", 16);
-	json_string(&first, "source", "ebpf", 16);
-	json_uint(&first, "seq", seq_counter);
-	json_u64(&first, "time_ns", event->time_ns);
-
-	json_comma(&first);
-	printf("\"trigger\":{");
-	int t = 1;
-	json_string(&t, "name", "enqueue_entity", 32);
-	json_string(&t, "phase", "after", 16);
-	json_string(&t, "probe", "kretprobe/__enqueue_entity", 32);
-	printf("}");
-
-	json_comma(&first);
-	printf("\"context\":{");
-	int c = 1;
-	json_uint(&c, "cpu", event->cpu);
-	json_uint(&c, "pid", event->pid);
-	json_uint(&c, "tid", event->tid);
-	json_string(&c, "comm", event->comm, 16);
-	printf("}");
-
-	json_comma(&first);
-	printf("\"state\":{\"runqueue\":{");
-	int s = 1;
-	json_hex_ptr(&s, "address", event->cfs_rq);
-	json_uint(&s, "nr_running", event->nr_running);
-	json_hex_ptr(&s, "root", event->root);
-	json_hex_ptr(&s, "leftmost", event->leftmost);
-	json_comma(&s);
-	printf("\"enqueued_entity\":{");
-	int e = 1;
-	json_hex_ptr(&e, "address", event->se);
-	json_hex_ptr(&e, "rb_node", event->run_node);
-	printf("}");
-	json_uint(&s, "node_count", event->node_count);
-	json_bool(&s, "truncated", event->truncated);
-	json_comma(&s);
-	printf("\"nodes\":[");
-	for (unsigned int i = 0; i < event->node_count; i++)
-	{
-		if (i)
-			putchar(',');
-		print_node(&event->nodes[i]);
-	}
-	puts("]}}}");
+	json_writer_init(&jw, stdout);
+	write_snapshot(&jw, event, seq_counter);
 	return 0;
 }
 
@@ -229,7 +188,9 @@ int main(void)
 	}
 
 	/* Metadata first: static capture facts, not a playback frame. */
-	print_meta();
+	struct json_writer jw;
+	json_writer_init(&jw, stdout);
+	write_meta(&jw);
 	fflush(stdout);
 
 	fprintf(stderr, "LX_READY experiment=scheduler observer=cfs\n");

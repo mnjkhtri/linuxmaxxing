@@ -89,8 +89,8 @@ setup_trace()
 	echo 0 > "$INSTANCE/tracing_on"
 	echo > "$INSTANCE/trace"
 	# The trace_clock file lists every available clock and marks the selected one with brackets, e.g. "local [mono] global counter".
-	# Test that mono is present and selected after writing it.
-	if ! echo mono > "$INSTANCE/trace_clock" 2>/dev/null || ! grep -Eq '(^|[^[:alnum:]_])mono([^[:alnum:]_]|$)' "$INSTANCE/trace_clock"; then
+	# Test that mono is the selected clock after writing it.
+	if ! echo mono > "$INSTANCE/trace_clock" 2>/dev/null || ! grep -q '\[mono\]' "$INSTANCE/trace_clock"; then
 		fail "monotonic trace clock cannot be configured on instance $INSTANCE_NAME"
 	fi
 

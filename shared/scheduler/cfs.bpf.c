@@ -96,22 +96,22 @@ static long walk_one_node(u64 index, void *ctx)
 
 	struct cfs_event *event = &scratch_state_ptr->event;
 	struct rb_node *node = scratch_state_ptr->traversal_worklist[scratch_state_ptr->head++];
-	fill_node(&event->nodes[index], node);
-	if (event->nodes[index].left)
+	fill_node(&event->state.nodes[index], node);
+	if (event->state.nodes[index].left)
 	{
 		if (scratch_state_ptr->tail < MAX_TREE_NODES)
 			scratch_state_ptr->traversal_worklist[scratch_state_ptr->tail++] =
-				(struct rb_node *)event->nodes[index].left;
+				(struct rb_node *)event->state.nodes[index].left;
 		else
-			event->truncated = 1;
+			event->state.truncated = 1;
 	}
-	if (event->nodes[index].right)
+	if (event->state.nodes[index].right)
 	{
 		if (scratch_state_ptr->tail < MAX_TREE_NODES)
 			scratch_state_ptr->traversal_worklist[scratch_state_ptr->tail++] =
-				(struct rb_node *)event->nodes[index].right;
+				(struct rb_node *)event->state.nodes[index].right;
 		else
-			event->truncated = 1;
+			event->state.truncated = 1;
 	}
 	return 0;
 }
@@ -157,18 +157,18 @@ int BPF_KRETPROBE(kretprobe_enqueue_entity)
 
 	struct cfs_event *event = &scratch_state_ptr->event;
 	event->time_ns = bpf_ktime_get_ns();
-	event->pid = (u32)(id >> 32);
-	event->tid = (u32)id;
-	event->cpu = bpf_get_smp_processor_id();
-	bpf_get_current_comm(event->comm, sizeof(event->comm));
-	event->cfs_rq = (u64)cfs_rq;
-	event->se = (u64)args->se;
-	event->run_node = (u64)((char *)args->se + bpf_core_field_offset(struct sched_entity, run_node));
-	event->nr_running = BPF_CORE_READ(cfs_rq, rq, nr_running);
-	event->root = (u64)BPF_CORE_READ(cfs_rq, tasks_timeline.rb_root.rb_node);
-	event->leftmost = (u64)BPF_CORE_READ(cfs_rq, tasks_timeline.rb_leftmost);
-	event->node_count = 0;
-	event->truncated = 0;
+	event->context.pid = (u32)(id >> 32);
+	event->context.tid = (u32)id;
+	event->context.cpu = bpf_get_smp_processor_id();
+	bpf_get_current_comm(event->context.comm, sizeof(event->context.comm));
+	event->event_info.enqueued_entity = (u64)args->se;
+	event->event_info.enqueued_rb_node = (u64)((char *)args->se + bpf_core_field_offset(struct sched_entity, run_node));
+	event->state.cfs_rq = (u64)cfs_rq;
+	event->state.nr_running = BPF_CORE_READ(cfs_rq, rq, nr_running);
+	event->state.root = (u64)BPF_CORE_READ(cfs_rq, tasks_timeline.rb_root.rb_node);
+	event->state.leftmost = (u64)BPF_CORE_READ(cfs_rq, tasks_timeline.rb_leftmost);
+	event->state.node_count = 0;
+	event->state.truncated = 0;
 	scratch_state_ptr->head = 0;
 	scratch_state_ptr->tail = 1;
 	scratch_state_ptr->traversal_worklist[0] = BPF_CORE_READ(cfs_rq, tasks_timeline.rb_root.rb_node);
@@ -176,9 +176,9 @@ int BPF_KRETPROBE(kretprobe_enqueue_entity)
 
 	/* The helper provides a verifier-visible bound for the BFS. */
 	bpf_loop(MAX_TREE_NODES, walk_one_node, &traversal_key, 0);
-	event->node_count = scratch_state_ptr->head;
+	event->state.node_count = scratch_state_ptr->head;
 	if (scratch_state_ptr->head < scratch_state_ptr->tail)
-		event->truncated = 1;
+		event->state.truncated = 1;
 	bpf_ringbuf_output(&events, event, sizeof(*event), 0);
 	bpf_map_delete_elem(&active_args, &id);
 	return 0;
