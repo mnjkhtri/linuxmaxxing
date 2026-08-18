@@ -12,6 +12,7 @@
  *   0x0000  code + GDT + IDT
  *   0x4000  irq_count
  *   0x6000  DMA source buffer (pre-filled 0..63)
+ *   0x6800  DMA expected device pattern (pre-filled 0x40..0x7f)
  *   0x7000  DMA destination buffer
  *
  * Phases:
@@ -19,6 +20,9 @@
  *   B  normal IRQ  -- CMD_IRQ_ONLY, full IOAPIC -> LAPIC -> inject -> ISR -> EOI
  *   C  pending while IF=0 -- cli, CMD_IRQ_ONLY, sync marker, sti;nop, deliver
  *   D  DMA_TO_DEVICE / DMA_FROM_DEVICE
+ *   D verifies every DMA byte: DMA_TO reads the device buffer back, DMA_FROM compares the destination.
+ *   Any verification failure halts permanently, and the VMM reports that halt as a failed run.
+ *   Only byte-exact DMA reaches port 0x82, the VMM's sole success signal.
  *
  * Constants must stay in sync with device.h.
  */
@@ -30,6 +34,9 @@
 .set REG_DMA_GPA,   0x08              /* DMA target guest physical address */
 .set REG_RESULT,    0x10              /* device result/checksum */
 .set REG_IRQ_ACK,   0x14              /* optional device acknowledgment */
+.set REG_BUFFER,    0x18              /* readback window into the device buffer */
+
+.set DEVICE_PATTERN_BASE, 0x40        /* device's own buffer fill; distinct from guest source 0..63 */
 
 .set CMD_IRQ_ONLY,        1           /* no I/O data; proves pure interrupt delivery */
 .set CMD_DMA_TO_DEVICE,   2           /* guest RAM -> device internal buffer */
@@ -59,6 +66,7 @@
 .set STACK_TOP, 0x0e00                /* stack top; grows down, stays below IDT */
 .set IRQ_COUNT, 0x4000                /* u32 bumped by the ISR; phases key off it */
 .set DMA_SRC,   0x6000                /* DMA_TO source buffer */
+.set DMA_EXPECT, 0x6800               /* expected device pattern for DMA_FROM verification */
 .set DMA_DST,   0x7000                /* DMA_FROM destination buffer */
 
 .set KERNEL_CS, 0x08                  /* GDT index 1: flat ring-0 32-bit code */
@@ -164,13 +172,39 @@ protected_mode:
 	movl $CMD_DMA_TO_DEVICE, DEVICE_MMIO_BASE + REG_COMMAND
 	WAIT_IRQ_COUNT 3                                       /* guest saw completion IRQ */
 
+	/* The device buffer must now read back the guest source exactly; a no-op copy fails here. */
+	movl $0, %ecx
+	movl $DMA_SRC, %esi
+1:	movl (%esi), %ebx                              /* expected 32-bit slice of the source */
+	movl $0, %eax
+	movl DEVICE_MMIO_BASE + REG_BUFFER(,%ecx,4), %eax /* readback of the matching device slice */
+	cmpl %ebx, %eax
+	jne dma_failed
+	addl $4, %esi
+	incl %ecx
+	cmpl $16, %ecx
+	jb 1b
+
 	movl $DMA_DST, DEVICE_MMIO_BASE + REG_DMA_GPA        /* dest: guest RAM 0x7000 */
 	movl $CMD_DMA_FROM_DEVICE, DEVICE_MMIO_BASE + REG_COMMAND
 	WAIT_IRQ_COUNT 4
 
-	/* ---- terminate the VMM run ---- */
+	/* The destination must equal the expected device pattern byte for byte. */
+	cld
+	movl $DMA_EXPECT, %esi
+	movl $DMA_DST, %edi
+	movl $DMA_XFER_SIZE, %ecx
+	repe cmpsb
+	jne dma_failed
+
+	/* ---- terminate the VMM run only after every DMA byte was verified ---- */
 	movb $0, %al
 	outb %al, $DONE_PORT
+	hlt
+
+/* A failed DMA proof halts forever; the VMM treats the unexpected HLT as a failed run. */
+dma_failed:
+	cli
 	hlt
 
 /*
@@ -242,6 +276,15 @@ dma_src:
 	.rept DMA_XFER_SIZE
 		.byte fill_i
 		.set fill_i, fill_i + 1
+	.endr
+
+/* Expected device pattern for DMA_FROM verification (mirrors DEVICE_PATTERN_BASE + i). */
+.org DMA_EXPECT
+dma_expect:
+	.set fill_j, DEVICE_PATTERN_BASE
+	.rept DMA_XFER_SIZE
+		.byte fill_j
+		.set fill_j, fill_j + 1
 	.endr
 
 /* DMA destination: filled by the VMM during DMA_FROM. */

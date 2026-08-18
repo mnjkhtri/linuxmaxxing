@@ -72,6 +72,13 @@ static uint32_t bytesum(const uint8_t *data, size_t len)
 	return sum;
 }
 
+/* Fill the device buffer with the deterministic device pattern the guest expects. */
+static void refill_device_pattern(struct toy_device *dev)
+{
+	for (size_t i = 0; i < DEVICE_BUFFER_SIZE; i++)
+		dev->buffer[i] = (uint8_t)(DEVICE_PATTERN_BASE + i);
+}
+
 /*
  * The real DMA operation.  __attribute__((noinline)) and kept unstripped so the eBPF observer's uprobe can attach here and see the transfer parameters as normal ABI arguments.
  * This is an actual part of the device implementation, not a synthetic instrumentation shim.
@@ -120,7 +127,11 @@ static void device_execute_command(int vm, struct toy_device *dev, uint8_t *gues
 		ret = 0; /* pure interrupt delivery; no I/O data changes */
 		break;
 	case CMD_DMA_TO_DEVICE:
+		ret = device_dma_transfer(dev, guest_mem, guest_mem_size, dev->command, dev->dma_gpa, DMA_XFER_SIZE);
+		break;
 	case CMD_DMA_FROM_DEVICE:
+		/* Re-seed the buffer so the guest can verify the exact bytes it receives. */
+		refill_device_pattern(dev);
 		ret = device_dma_transfer(dev, guest_mem, guest_mem_size, dev->command, dev->dma_gpa, DMA_XFER_SIZE);
 		break;
 	default:
@@ -128,6 +139,10 @@ static void device_execute_command(int vm, struct toy_device *dev, uint8_t *gues
 	}
 
 	dev->status = ret == 0 ? STATUS_DONE : STATUS_ERROR;
+
+	/* Only a successful operation raises the completion interrupt; a failed copy must not look done. */
+	if (ret != 0)
+		return;
 	if (ioctl(vm, KVM_IRQ_LINE, &level) < 0)
 		perror("KVM_IRQ_LINE assert");
 	level.level = 0;
@@ -155,6 +170,12 @@ static void device_mmio_read(struct toy_device *dev, uint32_t offset, uint8_t *d
 		value = dev->result;
 		break;
 	default:
+		if (offset >= REG_BUFFER && offset < REG_BUFFER + DEVICE_BUFFER_SIZE)
+		{
+			/* The readback window exposes the device buffer so the guest can verify DMA_TO bytes. */
+			memcpy(data, &dev->buffer[offset - REG_BUFFER], sizeof(value));
+			return;
+		}
 		break;
 	}
 	memcpy(data, &value, sizeof(value));
@@ -187,9 +208,8 @@ int main(void)
 {
 	struct toy_device dev = {0};
 
-	/* Pre-fill the device buffer so DMA_FROM has a deterministic pattern (i == i). */
-	for (size_t i = 0; i < DEVICE_BUFFER_SIZE; i++)
-		dev.buffer[i] = (uint8_t)i;
+	/* Pre-fill the device buffer with the distinct device pattern so DMA_TO readback proves the copy. */
+	refill_device_pattern(&dev);
 
 	int kvm = open("/dev/kvm", O_RDWR | O_CLOEXEC);
 	if (kvm < 0)
@@ -324,7 +344,7 @@ int main(void)
 			uint64_t base = (uint64_t)run->mmio.phys_addr;
 			uint8_t *data = run->mmio.data;
 
-			if (base >= DEVICE_MMIO_BASE && base < DEVICE_MMIO_BASE + 0x18)
+			if (base >= DEVICE_MMIO_BASE && base < DEVICE_MMIO_BASE + DEVICE_MMIO_SIZE)
 			{
 				uint32_t offset = (uint32_t)(base - DEVICE_MMIO_BASE);
 
@@ -344,15 +364,17 @@ int main(void)
 			continue;
 		}
 
-		/* HLT is the guest's intentional completion signal for this experiment. */
+		/* HLT is the guest's timeout fallback when an interrupt is never delivered, never a success signal. */
 		if (run->exit_reason == KVM_EXIT_HLT)
 		{
-			break;
+			fprintf(stderr, "guest halted unexpectedly; interrupt delivery likely failed\n");
+			return 1;
 		}
 
 		fprintf(stderr, "unexpected KVM exit reason: %u\n", run->exit_reason);
 		return 1;
 	}
 
+	fprintf(stderr, "guest finished via DONE_PORT\n");
 	return 0;
 }

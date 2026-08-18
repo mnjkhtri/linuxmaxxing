@@ -16,14 +16,13 @@
  *
  * The kvm_entry tracepoint records the vmm thread to its vcpu in the pid_tgid association map.
  * Later callbacks recover the vcpu from that map.
- * Events that already expose a stronger pointer use it instead.
+ * Every callback derives the vcpu's lapic through the KVM BTF relationship and samples IRR/ISR from it.
  * The kvm_ioapic_set_irq tracepoint samples its RTE bits from its first argument.
  *
  * The argument order was verified on CloudLab kernel 6.8 from /sys/kernel/tracing/events/kvm/<event>/format.
- * Only kvm_entry, kvm_exit, and kvm_eoi expose controller pointers directly.
- * The remaining intercepts carry scalars only, so their vcpu comes from the association map.
+ * Only kvm_entry and kvm_exit expose the vcpu directly; the remaining intercepts recover it from the map.
  * On this kernel kvm_inj_virq and kvm_eoi never fire for this guest, so only the events above appear in the capture.
- * The IRR/ISR reads are gated by the BTF readers the Makefile confirms.
+ * The lapic derivation and the IRR/ISR reads are gated by the BTF readers the Makefile confirms.
  * Until a kernel exposes a reader, the affected fields stay zero and the UI shows them as "not sampled" -- never fake.
  *
  * The shared ABI in io_event.h owns the record layout.
@@ -100,7 +99,14 @@ static __always_inline struct kvm_vcpu *vcpu_from_map(void)
 /* Fixed metadata for a snapshot taken from the owning vcpu. */
 static __always_inline void snapshot_base(struct vio_event *event, struct kvm_vcpu *vcpu)
 {
+	unsigned char *bytes = (unsigned char *)event;
 	__u64 pid_tgid = bpf_get_current_pid_tgid();
+
+	/* Clear the shared scratch so stale fields from another event type never leak into this record. */
+	/* Every callback then populates only the facts it actually observed for its boundary. */
+#pragma unroll
+	for (unsigned int i = 0; i < sizeof(*event); i++)
+		bytes[i] = 0;
 
 	bpf_get_current_comm(event->context.comm, sizeof(event->context.comm));
 	if (!is_vmm_comm(event->context.comm))
@@ -127,8 +133,21 @@ static __always_inline __u8 lapic_pending_bit(const struct kvm_lapic *apic, __u3
 	return !!(value & bit);
 }
 
+/* Sample the LAPIC IRR/ISR bits through the vcpu's own lapic relationship. */
+static __always_inline void sample_lapic(struct vio_event *event, struct kvm_vcpu *vcpu)
+{
+	struct kvm_lapic *apic = vcpu ? BPF_CORE_READ(vcpu, arch.apic) : NULL;
+
+	event->state.apic = (__u64)apic;
+	if (apic)
+	{
+		event->state.controller.irr = lapic_pending_bit(apic, 0x200u); /* The 0x200 offset is the LAPIC IRR base. */
+		event->state.controller.isr = lapic_pending_bit(apic, 0x100u); /* The 0x100 offset is the LAPIC ISR base. */
+	}
+}
+
 /* Emit one record into the shared ring buffer, sampling controller state. */
-static __always_inline int emit_boundary(enum io_event_type event_type, struct kvm_vcpu *vcpu, const struct kvm_lapic *lapic, const struct kvm_ioapic *ioapic)
+static __always_inline int emit_boundary(enum io_event_type event_type, struct kvm_vcpu *vcpu)
 {
 	__u32 zero = 0;
 	struct vio_event *event = bpf_map_lookup_elem(&scratch, &zero);
@@ -140,18 +159,7 @@ static __always_inline int emit_boundary(enum io_event_type event_type, struct k
 		return 0;
 
 	event->event_info.event = (unsigned int)event_type;
-	event->state.apic = (__u64)lapic;
-	event->state.ioapic = (__u64)ioapic;
-
-	/* Controller state is surfaced only when the target exposes the readers. */
-	if (ioapic && READ_KVM_IOAPIC_RTE_AVAILABLE)
-		event->state.controller.rte = READ_KVM_IOAPIC_RTE(ioapic, DEVICE_GSI);
-	if (lapic)
-	{
-		event->state.controller.irr = lapic_pending_bit(lapic, 0x200u); /* The 0x200 offset is the LAPIC IRR base. */
-		event->state.controller.isr = lapic_pending_bit(lapic, 0x100u); /* The 0x100 offset is the LAPIC ISR base. */
-	}
-
+	sample_lapic(event, vcpu);
 	bpf_ringbuf_output(&events, event, sizeof(*event), 0);
 	return 0;
 }
@@ -163,35 +171,35 @@ int kvm_entry_snapshot(struct bpf_raw_tracepoint_args *ctx)
 	struct kvm_vcpu *vcpu = (struct kvm_vcpu *)ctx->args[0];
 
 	remember_vcpu(vcpu);
-	return emit_boundary(IO_EVENT_KVM_ENTRY, vcpu, NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_ENTRY, vcpu);
 }
 
 /* kvm_exit exposes the vcpu as its first raw-tracepoint argument. */
 SEC("raw_tp/kvm_exit")
 int kvm_exit_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-	return emit_boundary(IO_EVENT_KVM_EXIT, (struct kvm_vcpu *)ctx->args[0], NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_EXIT, (struct kvm_vcpu *)ctx->args[0]);
 }
 
 /* kvm_userspace_exit carries only a reason and errno, so the vcpu comes from the association map. */
 SEC("raw_tp/kvm_userspace_exit")
 int kvm_userspace_exit_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-	return emit_boundary(IO_EVENT_KVM_USERSPACE_EXIT, vcpu_from_map(), NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_USERSPACE_EXIT, vcpu_from_map());
 }
 
 /* kvm_apic_accept_irq carries only apicid/delivery/vector, so the vcpu comes from the association map. */
 SEC("raw_tp/kvm_apic_accept_irq")
 int kvm_apic_accept_irq_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-	return emit_boundary(IO_EVENT_KVM_APIC_ACCEPT_IRQ, vcpu_from_map(), NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_APIC_ACCEPT_IRQ, vcpu_from_map());
 }
 
 /* kvm_inj_virq carries only a vector, so the vcpu comes from the association map. */
 SEC("raw_tp/kvm_inj_virq")
 int kvm_inj_virq_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-	return emit_boundary(IO_EVENT_KVM_INJ_VIRQ, vcpu_from_map(), NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_INJ_VIRQ, vcpu_from_map());
 }
 
 /* kvm_ioapic_set_irq carries the RTE bits in its first argument, and the vcpu comes from the map. */
@@ -209,27 +217,24 @@ int kvm_ioapic_set_irq_snapshot(struct bpf_raw_tracepoint_args *ctx)
 		return 0;
 
 	event->event_info.event = (unsigned int)IO_EVENT_KVM_IOAPIC_SET_IRQ;
+	sample_lapic(event, vcpu);
 	event->state.controller.rte = ctx->args[0];
 	bpf_ringbuf_output(&events, event, sizeof(*event), 0);
 	return 0;
 }
 
-/* kvm_eoi exposes the lapic as its first raw-tracepoint argument, and the vcpu comes from the map. */
+/* kvm_eoi carries a vector with the vcpu from the association map. */
 SEC("raw_tp/kvm_eoi")
 int kvm_eoi_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-	struct kvm_lapic *apic = (struct kvm_lapic *)ctx->args[0];
-
-	if (!apic)
-		return 0;
-	return emit_boundary(IO_EVENT_KVM_EOI, vcpu_from_map(), apic, NULL);
+	return emit_boundary(IO_EVENT_KVM_EOI, vcpu_from_map());
 }
 
 /* kvm_apic carries register access details without any controller pointer, so the vcpu comes from the map. */
 SEC("raw_tp/kvm_apic")
 int kvm_apic_snapshot(struct bpf_raw_tracepoint_args *ctx)
 {
-	return emit_boundary(IO_EVENT_KVM_APIC, vcpu_from_map(), NULL, NULL);
+	return emit_boundary(IO_EVENT_KVM_APIC, vcpu_from_map());
 }
 
 /* The uprobe below samples the VMM's real virtual-DMA entry point through its normal ABI arguments. */
@@ -253,6 +258,7 @@ int BPF_UPROBE(device_dma_transfer, void *dev, uint8_t *guest_mem_base, uint64_t
 		return 0;
 
 	event->event_info.event = (unsigned int)IO_EVENT_DEVICE_DMA_TRANSFER;
+	sample_lapic(event, vcpu);
 	event->state.dma.gpa = gpa;
 	event->state.dma.dir = dir;
 	bpf_ringbuf_output(&events, event, sizeof(*event), 0);

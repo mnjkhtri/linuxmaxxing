@@ -55,7 +55,9 @@ $(KVM_TYPES): $(VMLINUX) | $(BUILD_DIR)
 	echo '/* Only the fields the observer reads are declared; CO-RE relocates their true offsets. */' >> $@; \
 	if ! grep -q "^struct kvm_vcpu {" $(VMLINUX); then \
 		echo 'struct kvm;' >> $@; \
-		echo 'struct kvm_vcpu { struct kvm *kvm; } __attribute__((preserve_access_index));' >> $@; \
+		echo 'struct kvm_lapic;' >> $@; \
+		echo 'struct kvm_vcpu_arch { struct kvm_lapic *apic; } __attribute__((preserve_access_index));' >> $@; \
+		echo 'struct kvm_vcpu { struct kvm *kvm; struct kvm_vcpu_arch arch; } __attribute__((preserve_access_index));' >> $@; \
 	fi; \
 	if ! grep -q "^struct kvm_lapic {" $(VMLINUX); then \
 		echo 'struct kvm_lapic { void *regs; } __attribute__((preserve_access_index));' >> $@; \

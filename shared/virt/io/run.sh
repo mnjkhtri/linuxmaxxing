@@ -14,9 +14,6 @@ fetch_captures()
 {
 	scp -p "${ssh_opts[@]}" "$TARGET:$IO_DIR/captures/virt-io-Trace.txt" "$CAPTURE_ROOT/virt-io-Trace.txt"
 	scp -p "${ssh_opts[@]}" "$TARGET:$IO_DIR/captures/virt-io.eBPF.ndjson" "$CAPTURE_ROOT/virt-io.eBPF.ndjson"
-	# The observer log only exists for runs made after the fetch started including it.
-	# A missing log must never abort the fetch of the two primary captures.
-	scp -p "${ssh_opts[@]}" "$TARGET:$IO_DIR/captures/virt-io-observer.log" "$CAPTURE_ROOT/virt-io-observer.log" 2>/dev/null || true
 }
 if [ "${VIRT_FETCH_ONLY:-0}" = 1 ]; then
 	fetch_captures

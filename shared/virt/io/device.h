@@ -22,6 +22,13 @@
 #define REG_DMA_GPA   0x08u
 #define REG_RESULT    0x10u
 #define REG_IRQ_ACK   0x14u
+#define REG_BUFFER    0x18u /* Readback window into the device buffer; proves DMA_TO really landed. */
+
+/* The device buffer's own fill byte; distinct from the guest's 0..63 source so DMA changes readback. */
+#define DEVICE_PATTERN_BASE 0x40u
+
+/* Total MMIO address window, registers plus the device-buffer readback. */
+#define DEVICE_MMIO_SIZE (REG_BUFFER + DEVICE_BUFFER_SIZE)
 
 /* Device commands written to REG_COMMAND. */
 #define CMD_IRQ_ONLY 1u

@@ -284,10 +284,11 @@ int main(void)
 			continue;
 		}
 
-		/* HLT is the guest's intentional completion signal for this experiment. */
+		/* HLT is the guest's timeout fallback when a wait never completes, never a success signal. */
 		if (run->exit_reason == KVM_EXIT_HLT)
 		{
-			break;
+			fprintf(stderr, "guest halted unexpectedly; a wait timed out\n");
+			return 1;
 		}
 
 		/* Any unhandled exit means the toy VMM cannot safely resume the guest. */
@@ -295,5 +296,6 @@ int main(void)
 		return 1;
 	}
 
+	fprintf(stderr, "guest finished via port 0x82\n");
 	return 0;
 }
