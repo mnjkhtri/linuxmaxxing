@@ -207,6 +207,13 @@ function traceLane(event){
 	if(event.workqueue)return'workqueue';
 	return'exception'
 }
+function fitLabel(type,body){
+	var text=type+(body?' · '+body:'');
+	var width=126,mono=4.9,dots=11;
+	if(text.length*mono<=width)return text;
+	var keep=Math.max(1,Math.floor((width-dots)/mono));
+	return short(text,keep)
+}
 function renderTimeline(){
 	var root=$('timeline'),phase=phases[selectedPhase],records=localPhaseEvents(phase),visible=Math.max(240,root.parentElement.clientHeight-16),viewWidth=Math.max(900,Math.round(visible*root.parentElement.clientWidth/Math.max(1,root.parentElement.clientHeight))),side=96,laneGap=(viewWidth-side*2)/4,lanes=[
 		{key:'syscall',x:side,title:'SYSCALL',note:'sys_enter / sys_exit'},
@@ -233,13 +240,9 @@ function renderTimeline(){
 		}
 		var laneKey=traceLane(event),cpuClass='cpu-'+event.cpu,nodeClass='activity-node '+laneKey+' '+cpuClass+(selectedEvent&&selectedEvent.index===event.index?' selected':'');
 		var activity=svg('g',{class:'activity-event','data-event':event.index});
-		var clipId='clip'+event.index;
-		var defs2=svg('clipPath',{id:clipId});defs2.appendChild(svg('rect',{x:lane.x-84,y:y-10,width:130,height:20,rx:4}));
-		activity.appendChild(defs2);
 		activity.appendChild(svg('rect',{x:lane.x-90,y:y-13,width:180,height:26,rx:5,class:'activity-hit'}));
 		activity.appendChild(svg('rect',{x:lane.x-86,y:y-10,width:172,height:20,rx:4,class:nodeClass}));
-		var label=svg('text',{x:lane.x-19,y:y+2.5,'text-anchor':'middle','clip-path':'url(#'+clipId+')',class:'activity-line'},event.type+short(' · '+event.body,24));
-		activity.appendChild(label);
+		activity.appendChild(svg('text',{x:lane.x-80,y:y+2.5,'text-anchor':'start',class:'activity-line'},fitLabel(event.type,event.body)));
 		activity.appendChild(svg('rect',{x:lane.x+55,y:y-7,width:24,height:14,rx:3,class:'cpu-badge '+cpuClass}));
 		activity.appendChild(svg('text',{x:lane.x+67,y:y+2.5,'text-anchor':'middle',class:'cpu-badge-text'},'C'+event.cpu));
 		activity.appendChild(svg('text',{x:lane.x-94,y:y+2.5,'text-anchor':'end',class:'activity-time'},'+'+durNs(event.time_ns-phase.start)));
