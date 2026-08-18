@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QEDU PCI I/O flight recorder</title>
+<link rel="stylesheet" href="../../theme.css?v=21">
+<link rel="stylesheet" href="io.css?v=1">
+</head>
+<body>
+<main class="irq-lab">
+<header class="head">
+<div><div class="eyebrow">QEDU / PCI / MMIO · DMA · IRQ</div><h1>I/O <span>flight recorder</span></h1><p>MMIO BAR registers, coherent DMA, and shared INTx delivery — one qedu PCI device (QEMU EDU) traced end to end</p></div>
+<div id="status" role="status"><i class="trace-dot"></i><span>following QEDU execution…</span></div>
+</header>
+<section class="workbench">
+<section class="panel stage">
+<header class="panel-head"><h2>Kernel execution path</h2><div class="irq-strip"><span>PCI <b id="m-device">—</b> <small id="m-device-sub">QEMU EDU</small></span><i>|</i><span>APIC <b id="m-vector">—</b> <small id="m-vector-sub">vector allocation</small></span><i>|</i><span>IRQ <b id="m-irq">—</b> <small id="m-irq-sub">runtime entries</small></span><i>|</i><span class="cat-m">MMIO <b id="m-mmio">—</b></span><i>|</i><span class="cat-d">DMA <b id="m-dma">—</b></span><i>|</i><span class="cat-i">IRQ <b id="m-irqcat">—</b></span><i>|</i><span class="cat-s">SYSCALL <b id="m-sys">—</b></span><i>|</i><span>syscalls <b id="m-syscalls">—</b></span><i>|</i><span>sleeps <b id="m-sleeps">—</b></span><i>|</i><span>faults <b id="m-faults">—</b></span></div></header>
+<div class="overview"><svg id="timeline" viewBox="0 0 900 520" role="img" aria-label="Kernel execution events grouped by context in timestamp order"></svg></div>
+<section class="irq-evidence"><h3>I/O delivery evidence</h3><div class="irq-evidence-flow"><span class="irq-gap">MMIO · factorial</span><i>→</i><span class="irq-gap">DMA · coherent echo</span><i>→</i><b id="evidence-vector">vector —</b><i>→</i><span class="irq-gap">APIC / IDT not directly traced</span></div></section>
+</section>
+<aside class="panel notebook">
+<section class="inspect"><div class="inspect-type"><i class="trace-dot"></i><span id="inspect-type">event</span></div><h3 id="inspect-title">Select a trace event</h3><dl class="fields" id="fields"><dt>status</dt><dd>waiting</dd></dl></section>
+<header class="panel-head"><h2>Activities</h2><span class="sub" id="phase-summary">—</span></header>
+<div id="phase-list" class="phase-list"></div>
+<section class="device-state"><h3>Final device state</h3><div class="state-grid" id="state-grid"></div><div class="bits"><span class="bit" id="bit-factorial">bit 0 · factorial</span><span class="bit" id="bit-dma">bit 1 · DMA</span></div></section>
+</aside>
+</section>
+</main>
+<script src="io.js?v=1"></script>
+</body>
+</html>
