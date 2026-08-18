@@ -8,7 +8,7 @@
  *
  * Sources: the eBPF canonical NDJSON (controller + DMA observations) and the
  * kvm trace (raw chronology: exit reasons, rip, ports).  There is no separate
- * phases file for virt-io, so the four phases are derived from the captured
+ * phases file for virt-io, so the phases (A-E) are derived from the captured
  * accept/delivery/DMA boundaries instead of being invented.
  *
  * Machine-state explorer in the memory-view spirit: dense, technical, raw
@@ -57,7 +57,7 @@ function parseTrace(text){
     text.split(/\r?\n/).forEach(function(raw){
         var m=raw.match(/^\s*(.+?)-(\d+)\s+\[(\d+)\]\s+(\S+)\s+([0-9]+\.[0-9]+):\s+([a-zA-Z0-9_]+):\s+(.+)$/);
         if(!m)return;
-        var e={type:m[6],time:+m[5],body:m[7]};
+        var e={type:m[6],time:+m[5],body:m[7],raw:raw.trim()};
         if(e.type==='kvm_exit'){
             var x=e.body.match(/vcpu\s+(\d+)\s+reason\s+([^\s]+)\s+rip\s+(0x[0-9a-f]+)/i);
             if(x){e.vcpu=x[1];e.reason=x[2];e.rip=x[3]}
@@ -227,6 +227,12 @@ function renderPath(f){
     html+='<div class="irq-state"><div class="irq-cell'+(f.irr?' on':'')+'"><small>IRR[0x40]</small><b>'+esc(f.irr?'set':'clear')+'</b></div>'+
         '<div class="irq-cell'+(f.isr?' on':'')+'"><small>ISR[0x40]</small><b>'+esc(f.isr?'active':'clear')+'</b></div>'+
         '<div class="irq-cell win"><small>delivery</small><b>'+esc(f.irr&&!f.isr?'pending (IF=0)':(f.isr?'in service':'idle'))+'</b></div></div>';
+    /* The VM execution boundary the selected observation reports: guest run, exit reason, userspace hand-off, resume. */
+    var exitMode=f.tr&&f.tr.reason?f.tr.reason:(f.exitReason||'KVM run');
+    html+='<div class="vmbound"><span>guest <b>runs</b></span><i class="x">→</i>'+
+        '<span>exit <b>'+esc(exitMode)+'</b></span><i class="x">→</i>'+
+        '<span><b>'+(f.name==='device_dma_transfer'?'VMM work':'hand-off')+'</b></span><i class="x">→</i>'+
+        '<span><b>KVM_RUN</b> resumes guest</span></div>';
     return html;
 }
 
@@ -324,7 +330,7 @@ function renderPhases(){
     var cur=phaseOf(selected);
     $('phases').innerHTML=phases.map(function(p,i){
         return'<button type="button" class="phase'+(i===cur?' active':'')+'" data-ph="'+i+'">'+
-            '<b>'+p.id+'</b><span>'+esc(p.label)+'</span><small>'+p.count+'</small></button>';
+            '<b>'+p.id+'</b><span>'+esc(p.label)+'</span><small>'+p.count+'</small><i>'+esc(p.note)+'</i></button>';
     }).join('');
     $('phases').querySelectorAll('[data-ph]').forEach(function(b){
         b.onclick=function(){select(phases[+b.dataset.ph].range[0])};
@@ -356,20 +362,28 @@ function renderInspector(f){
     if(f.isr)fields.isr='active';
     if(f.dpresent){fields.dma=f.ddir+' @ '+f.dgpa}
     $('fields').innerHTML=Object.keys(fields).map(function(k){
-        return'<dt>'+esc(k)+'</dt><dd title="'+esc(fields[k])+'">'+esc(fields[k])+'</dd>';
+        return'<div class="field"><dt>'+esc(k)+'</dt><dd title="'+esc(fields[k])+'">'+esc(fields[k])+'</dd></div>';
     }).join('');
+    /* The closest same-type kvm trace record that enriched this snapshot, shown raw so nothing is hidden. */
+    if(f.tr){
+        $('trace-pair').innerHTML='<span class="tp-label">paired kvm trace</span><code>'+esc((f.tr.raw||[f.tr.type, f.tr.body].join(': ')).trim())+'</code>';
+    }else{
+        $('trace-pair').innerHTML='<span class="tp-label">paired kvm trace</span><code>— no same-type trace record in window —</code>';
+    }
 }
 
 function renderAll(){
     var f=frames[selected];
     $('meta-vec').innerHTML=
         '<span>GSI <b>'+meta.device_gsi+'</b></span><i>|</i>'+
-        '<span>vector <b>'+meta.device_vector+'</b></span><i>|</i>'+
+        '<span>vector <b>'+meta.device_vector+'</b> (0x'+Number(meta.device_vector).toString(16)+')</span><i>|</i>'+
         '<span>RTE <b>'+(f&&f.rte?'0x'+Number(f.rte).toString(16):'0x0')+'</b></span><i>|</i>'+
-        '<span>DMA <b>'+meta.dma_xfer_size+' B</b></span><i>|</i>'+
-        '<span class="cap'+(meta.lapic_available?' ok':' off')+'">lapic reader '+(meta.lapic_available?'ok':'n/a')+'</span><i>|</i>'+
-        '<span class="cap'+(meta.ioapic_available?' ok':' off')+'">ioapic reader '+(meta.ioapic_available?'ok':'n/a')+'</span>';
+        '<span>DMA <b>'+meta.dma_xfer_size+' B</b> · '+(meta.device_buffer_size||'256')+' buf</span><i>|</i>'+
+        '<span>capture <b>'+frames.length+'</b> snaps</span><i>|</i>'+
+        '<span class="cap'+(meta.lapic_available?' ok':' off')+'">LAPIC '+(meta.lapic_available?'sampled':'n/a')+'</span><i>|</i>'+
+        '<span class="cap'+(meta.ioapic_available?' ok':' off')+'">IOAPIC-RTE '+(meta.ioapic_available?'read':'trace-only')+'</span>';
     $('phase-now').textContent='phase '+phases[phaseOf(selected)].id+' · '+phases[phaseOf(selected)].label;
+    $('path-desc').textContent='seq '+f.seq+' · '+f.name+' · phase '+phases[phaseOf(selected)].id;
     $('path').innerHTML=renderPath(f);
     $('rte').innerHTML=renderRte(f);
     $('irqmat').innerHTML=renderIrqState(f);

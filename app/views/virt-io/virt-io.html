@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Virt I/O</title>
 <link rel="stylesheet" href="../../theme.css?v=7">
-<link rel="stylesheet" href="virt-io.css?v=1">
+<link rel="stylesheet" href="virt-io.css?v=2">
 </head>
 <body>
 <main class="vio">
@@ -16,28 +16,28 @@
 <p>guest → device MMIO → VMM model → virtual DMA → IOAPIC → LAPIC → guest ISR → EOI</p>
 </div><div id="status" role="status"><i class="trace-dot"></i><span>loading virt-io capture…</span></div></header>
 
-<div class="strip panel"><div id="meta-vec" class="mm-strip"></div><div id="phase-now" class="phase-now">phase —</div></div>
+<div class="strip panel">
+<div class="mm-strip" id="meta-vec"></div>
+<div id="phase-now" class="phase-now">phase —</div>
+</div>
 
 <section class="workbench">
 <aside class="roadmap panel" id="phases" aria-label="interrupt and DMA phases"></aside>
 
 <section class="stage">
 <section class="panel path-panel">
-<header class="panel-head"><h2>Interrupt + DMA path</h2><span id="path-desc">one selected observation drives the page</span></header>
+<header class="panel-head"><h2>Interrupt + DMA path</h2><span id="path-desc">select an observation</span></header>
 <div id="path"></div>
 </section>
 
-<section class="panel regs">
-<div id="rte"></div>
-<div id="irqmat"></div>
-</section>
-
-<section class="panel dma-panel">
-<div id="dma"></div>
+<section class="cols3">
+<section class="panel reg-panel-slot"><div id="rte"></div></section>
+<section class="panel"><div id="irqmat"></div></section>
+<section class="panel dma-panel"><div id="dma" class="dma-body"></div></section>
 </section>
 
 <section class="panel tl-panel">
-<header class="panel-head"><h2>Raw chronology</h2><span>eBPF snapshots enriched by the kvm trace · click any row</span></header>
+<header class="panel-head"><h2>Raw chronology</h2><span>eBPF snapshots ⇢ kvm trace · click any row</span></header>
 <div id="timeline"></div>
 </section>
 </section>
@@ -45,10 +45,11 @@
 <aside class="notebook panel">
 <header class="panel-head"><h2>Observation</h2><span id="inspect-type">eBPF snapshot</span></header>
 <div class="inspector-head"><h3 id="inspect-title">—</h3></div>
+<div id="trace-pair" class="trace-pair"></div>
 <dl class="fields" id="fields"><dt>state</dt><dd>loading</dd></dl>
 </aside>
 </section>
 </main>
-<script src="virt-io.js?v=1"></script>
+<script src="virt-io.js?v=2"></script>
 </body>
 </html>
