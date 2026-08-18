@@ -167,6 +167,16 @@ void json_u64(struct json_writer *jw, const char *name, uint64_t value)
 	jw_puts(jw, buf);
 }
 
+void json_i64(struct json_writer *jw, const char *name, int64_t value)
+{
+	jw_comma(jw);
+	jw_name(jw, name);
+	char buf[24];
+
+	snprintf(buf, sizeof(buf), "%lld", (long long)value);
+	jw_puts(jw, buf);
+}
+
 void json_bool(struct json_writer *jw, const char *name, bool value)
 {
 	jw_comma(jw);
@@ -179,6 +189,16 @@ void json_null(struct json_writer *jw, const char *name)
 	jw_comma(jw);
 	jw_name(jw, name);
 	jw_puts(jw, "null");
+}
+
+void json_hex(struct json_writer *jw, const char *name, uint64_t value)
+{
+	jw_comma(jw);
+	jw_name(jw, name);
+	char buf[32];
+
+	snprintf(buf, sizeof(buf), "\"0x%llx\"", (unsigned long long)value);
+	jw_puts(jw, buf);
 }
 
 void json_ptr(struct json_writer *jw, const char *name, uint64_t value)
@@ -196,6 +216,57 @@ void json_ptr(struct json_writer *jw, const char *name, uint64_t value)
 	{
 		jw_puts(jw, "null");
 	}
+}
+
+void json_u32_value(struct json_writer *jw, uint32_t value)
+{
+	jw_comma(jw);
+	char buf[16];
+
+	snprintf(buf, sizeof(buf), "%u", value);
+	jw_puts(jw, buf);
+}
+
+void json_u64_value(struct json_writer *jw, uint64_t value)
+{
+	jw_comma(jw);
+	char buf[24];
+
+	snprintf(buf, sizeof(buf), "%llu", (unsigned long long)value);
+	jw_puts(jw, buf);
+}
+
+void json_i64_value(struct json_writer *jw, int64_t value)
+{
+	jw_comma(jw);
+	char buf[24];
+
+	snprintf(buf, sizeof(buf), "%lld", (long long)value);
+	jw_puts(jw, buf);
+}
+
+void json_string_value(struct json_writer *jw, const char *value)
+{
+	jw_comma(jw);
+	jw_put_escaped(jw, value, SIZE_MAX);
+}
+
+void json_string_n_value(struct json_writer *jw, const char *value, size_t max_len)
+{
+	jw_comma(jw);
+	jw_put_escaped(jw, value, max_len);
+}
+
+void json_bool_value(struct json_writer *jw, bool value)
+{
+	jw_comma(jw);
+	jw_puts(jw, value ? "true" : "false");
+}
+
+void json_null_value(struct json_writer *jw)
+{
+	jw_comma(jw);
+	jw_puts(jw, "null");
 }
 
 void json_newline(struct json_writer *jw)

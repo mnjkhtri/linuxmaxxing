@@ -2,6 +2,9 @@
 #ifndef LX_MM_XARRAY_WALK_BPF_H
 #define LX_MM_XARRAY_WALK_BPF_H
 
+#define XA_CHUNK_MASK 0x3fULL
+#define XA_CHUNK_SIZE 64
+
 /*
  * Best-effort bounded XArray slot scan for page-cache accounting.
  *
@@ -35,7 +38,7 @@ struct cache_walk
     u32 vma_index;
 };
 
-static __always_inline void count_cache_folio(struct mm_snapshot *event, u32 vma_index, struct folio *folio)
+static __always_inline void count_cache_folio(struct mm_event *event, u32 vma_index, struct folio *folio)
 {
     u64 flags = BPF_CORE_READ(folio, flags.f);
     u8 dirty = !!(flags & (1ULL << PG_dirty));
@@ -52,7 +55,7 @@ static __always_inline void count_cache_folio(struct mm_snapshot *event, u32 vma
     if (order > MAX_CACHE_ORDERS - 1)
         order = MAX_CACHE_ORDERS - 1;
 
-    struct vma_record *record = &event->vmas[vma_index];
+    struct mm_vma_record *record = &event->state.vmas[vma_index];
 
     record->cache_folios++;
     record->cache_order_folios[order]++;
@@ -153,7 +156,7 @@ static long walk_xarray(u32 slot, void *data)
         return 0;
 
     u32 zero = 0;
-    struct mm_snapshot *event = bpf_map_lookup_elem(&scratch, &zero);
+    struct mm_event *event = bpf_map_lookup_elem(&scratch, &zero);
     if (!event)
         return 1;
 

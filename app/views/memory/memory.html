@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MM state observer</title>
+<link rel="stylesheet" href="../../theme.css?v=21">
+<link rel="stylesheet" href="memory.css?v=1">
+</head>
+<body>
+<main class="mm">
+<header class="head"><div><span class="eyebrow">PHASE BOUNDARY → UPROBE → MM STATE</span><h1>Memory <span>address space</span></h1><p>mm_struct and VMA state observed directly by eBPF at each phase boundary</p></div><div id="status"><i class="trace-dot"></i><span>building address-space model…</span></div></header>
+<nav id="roadmap" class="roadmap panel" aria-label="Memory exercise phases"></nav>
+<section class="workbench">
+<section class="topology panel">
+<header class="panel-head"><h2>Process virtual address space</h2><div class="mm-strip"><span>mm <b id="mm-address">—</b></span><i>|</i><span>VMAs <b id="mm-vmas">—</b></span><i>|</i><span>mapped <b id="mm-total">—</b></span><i>|</i><span>pgtables <b id="mm-pgtables">—</b></span><i>|</i><span>base <b id="mm-base">—</b></span><i>|</i><span>task <b id="mm-task">—</b></span><i>|</i><span class="rss-chip"><small>anon</small> <b id="rss-anon">—</b><em id="rss-anon-bar"></em></span><i>|</i><span class="rss-chip"><small>file</small> <b id="rss-file">—</b><em id="rss-file-bar"></em></span><i>|</i><span class="rss-chip"><small>shmem</small> <b id="rss-shmem">—</b><em id="rss-shmem-bar"></em></span><i>|</i><span class="rss-chip"><small>swap</small> <b id="rss-swap">—</b><em id="rss-swap-bar"></em></span><i id="duration-sep">|</i><span id="phase-duration"></span></div></header>
+<div class="scope"><span class="micro">MM / VMA</span><strong class="task">workload_mm</strong><span id="phase-name">memory phase</span></div>
+<div class="stage">
+<div class="spaces">
+<svg id="cache-links" class="cache-links" aria-hidden="true"></svg>
+<section class="vas">
+<header class="region-title"><div><b>PROCESS VMAs</b><span>every vm_area_struct returned by the kernel iterator</span></div><code class="address">HIGH ↓ LOW</code></header>
+<div class="address-space"><div class="address-bound"><span>0x0000800000000000</span><span>USER LIMIT</span></div><div id="segments" class="segments"></div><div class="address-bound"><span>0x0000000000000000</span><span>NULL / LOW</span></div></div>
+<footer class="region-foot"><strong id="mapped-total">—</strong><span>· VMA solid · hole striped</span></footer>
+</section>
+<section class="residency"><header class="region-title"><div><b>BACKING OBJECTS</b></div><code class="sample-badge" title="Best-effort bounded XArray scan over address_space->i_pages">XArray scan ≤ 4096 slots</code></header><div class="cache"><div class="cache-title object-title"><span>ADDRESS_SPACE</span><span>ANON_VMA</span></div><div id="page-cache" class="cache-list"></div></div></section>
+<section class="page-tables"><header class="region-title"><div><b>PAGE TABLES</b><span>PTE state, dirty bit, and PFN identity for workload VMAs</span></div><code id="pt-scope" class="sample-badge" title="Best-effort eBPF page-table walk; capped per VMA">PT sample ≤ 512 pages/VMA</code></header><div class="pt-body"><div class="pt-space"><div class="address-bound"><span>same VMA coordinates</span><span>HIGH</span></div><div id="pt-map" class="pt-map"></div><div class="address-bound"><span>aligned with address space</span><span>LOW</span></div></div><div class="pt-target-rail"><header>PFN TARGETS</header><div id="pt-targets"></div></div></div><footer class="pt-legend"><span><i class="pte"></i>PTE</span><span><i class="pmd-huge"></i>HUGE PMD</span><span><i class="pud-huge"></i>HUGE PUD</span><span><i class="none"></i>ABSENT</span><span><i class="swap"></i>NONPRESENT (~SWAP)</span></footer></section>
+
+</div>
+
+</div>
+</section>
+<aside class="notebook panel"><header class="panel-head"><h2>Tracepoints</h2><span>phase activity</span></header><aside class="mm-column"><div id="trace-events" class="trace-events"><div class="trace-empty">—</div></div>
+</aside><section class="toolbar"><button id="prev">←</button><button id="next">→</button><input id="scrub" type="range" min="0" max="0" value="0"><span id="counter">0 / 0</span></section></aside>
+</section>
+</main>
+<script src="memory.js?v=1"></script>
+</body>
+</html>

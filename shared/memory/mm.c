@@ -3,74 +3,36 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <stdio.h>
-#include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <bpf/libbpf.h>
 #include <gelf.h>
 #include <libelf.h>
+#include "mm_event.h"
+#include "json_writer.h"
 #include "mm.skel.h"
 
-#define MAX_VMAS 16
-#define MAX_PAGES_PER_VMA 512
-#define PT_DIRTY_WORDS ((MAX_PAGES_PER_VMA + 63) / 64)
-#define MAX_CACHE_ORDERS 10
+/*
+ * libbpf loads and verifies mm.bpf.o, attaches the phase_boundary entry/return probes, and polls the ring buffer.
+ * Each callback serializes one post-phase MM snapshot as a single NDJSON record for the frontend.
+ *
+ * Stdout carries NDJSON only.
+ * Stderr carries machine-readable lifecycle lines (LX_READY / LX_DONE) plus human diagnostics.
+ * run.sh can therefore gate the workload on a successful attachment without parsing capture records.
+ *
+ * The binary event is grouped into event_info/context/state, and the public schema keeps that grouping.
+ * event_info.phase_seq authoritatively identifies the workload phase whose boundary produced this snapshot.
+ * context describes the workload task the probe ran as; state holds the captured mm_struct/RSS/VMA facts.
+ * Serialization is owned here.
+ * schema_version, experiment, kind, source, and seq come from the loader.
+ * Representation choices such as "0x..."/null and derived page-table summaries are normalized here.
+ * Kernel pointers are identities used to connect objects in the visualization, never addresses to dereference.
+ * The page-table and XArray observations are bounded and best-effort; the derived counts summarize those bounds.
+ */
+
 #define WORKLOAD_PATH "/mnt/host/memory/workload_mm"
-#define CAPTURE_DIR "/mnt/host/_captures"
-#define CAPTURE_PATH CAPTURE_DIR "/memory.eBPF.ndjson"
 
-struct vma_record
-{
-	unsigned long long start;
-	unsigned long long end;
-	unsigned long long flags;
-	unsigned long long pgoff;
-	unsigned int struct_file;
-	unsigned long long anon_vma;
-	unsigned long long anon_vma_root;
-	unsigned long long anon_vma_parent;
-	unsigned long long inode;
-	unsigned int device;
-	char file_name[64];
-	unsigned long long mapping;
-	unsigned long long cache_pages;
-	unsigned int cache_folios;
-	unsigned short cache_order_folios[MAX_CACHE_ORDERS];
-	unsigned short cache_order_dirty[MAX_CACHE_ORDERS];
-	unsigned int cache_clean_folios;
-	unsigned int cache_dirty_folios;
-	unsigned int cache_writeback_folios;
-	unsigned int cache_lru_folios;
-	unsigned int cache_active_folios;
-	unsigned int cache_referenced_folios;
-	unsigned int cache_workingset_folios;
-	unsigned int cache_unevictable_folios;
-	unsigned int pt_scanned_pages;
-	unsigned char pt_states[MAX_PAGES_PER_VMA];
-	unsigned long long pt_dirty[PT_DIRTY_WORDS];
-	unsigned short pt_targets[MAX_PAGES_PER_VMA];
-};
-
-struct mm_snapshot
-{
-	unsigned long long timestamp_ns;
-	unsigned long long pid_tgid;
-	unsigned long long mm;
-	unsigned long long mmap_base;
-	unsigned long long total_vm;
-	unsigned long long data_vm;
-	unsigned long long exec_vm;
-	unsigned long long stack_vm;
-	unsigned long long pgtables_bytes;
-	unsigned int map_count;
-	unsigned int vma_count;
-	long long anon_pages;
-	long long file_pages;
-	long long shmem_pages;
-	long long swap_entries;
-	char comm[16];
-	struct vma_record vmas[MAX_VMAS];
-};
+static unsigned int record_count;
+static unsigned int seq_counter;
 
 static volatile sig_atomic_t exiting;
 
@@ -178,127 +140,110 @@ out:
 	return value;
 }
 
-static void json_comma(FILE *output, int *first)
+/*
+ * First NDJSON record.
+ * The frontend recognizes kind=meta and does not treat it as a snapshot.
+ * Static sampling limits live here once instead of on every record.
+ */
+static void write_meta(struct json_writer *jw)
 {
-	if (*first)
-	{
-		*first = 0;
-		return;
-	}
-	fputc(',', output);
+	json_object_begin(jw);
+	json_u32(jw, "schema_version", 1);
+	json_string(jw, "experiment", "memory");
+	json_string(jw, "kind", "meta");
+	json_string(jw, "source", "ebpf");
+	json_string(jw, "clock", "monotonic");
+	json_string(jw, "capture", "mm_phase_snapshot");
+	json_u32(jw, "max_vmas", MAX_VMAS);
+	json_u32(jw, "max_pages_per_vma", MAX_PAGES_PER_VMA);
+	json_u32(jw, "max_xarray_scan_slots", MAX_XARRAY_SCAN_SLOTS);
+	json_u32(jw, "max_xarray_depth", MAX_XARRAY_DEPTH);
+	json_u32(jw, "max_cache_orders", MAX_CACHE_ORDERS);
+	json_object_end(jw);
+	json_newline(jw);
 }
 
-static void json_string_value(FILE *output, const char *value)
+/*
+ * The event is one workload phase boundary, so event_info identifies the completed phase.
+ * The sequence is the authoritative link to the workload's own phase record.
+ */
+static void write_event_info(struct json_writer *jw, const struct mm_event_info *event_info)
 {
-	fputc('"', output);
-	for (size_t i = 0; i < 64 && value[i]; i++)
-	{
-		unsigned char c = value[i];
-
-		if (c == '"' || c == '\\')
-			fprintf(output, "\\%c", c);
-		else if (c < 0x20)
-			fprintf(output, "\\u%04x", c);
-		else
-			fputc(c, output);
-	}
-	fputc('"', output);
+	json_u32(jw, "phase_seq", event_info->phase_seq);
 }
 
-static void json_string(FILE *output, int *first, const char *name, const char *value)
+/* The workload task the probe executed as; this is where/as whom, not the captured mm itself. */
+static void write_context(struct json_writer *jw, const struct mm_context *context)
 {
-	json_comma(output, first);
-	fprintf(output, "\"%s\":", name);
-	json_string_value(output, value);
+	json_u32(jw, "cpu", context->cpu);
+	json_u32(jw, "pid", context->pid);
+	json_u32(jw, "tid", context->tid);
+	json_string_n(jw, "comm", context->comm, sizeof(context->comm));
 }
 
-static void json_u32(FILE *output, int *first, const char *name, unsigned int value)
+/* RSS counters observed on mm->rss_stat; signed because the kernel may transiently undercount. */
+static void write_rss(struct json_writer *jw, const struct mm_state *state)
 {
-	json_comma(output, first);
-	fprintf(output, "\"%s\":%u", name, value);
+	json_object_begin_field(jw, "rss");
+	json_i64(jw, "anon_pages", state->anon_pages);
+	json_i64(jw, "file_pages", state->file_pages);
+	json_i64(jw, "shmem_pages", state->shmem_pages);
+	json_i64(jw, "swap_entries", state->swap_entries);
+	json_object_end(jw);
 }
 
-static void json_u64(FILE *output, int *first, const char *name, unsigned long long value)
+/* Bounded folio observations from the address_space XArray scan, including order buckets. */
+static void write_file_cache(struct json_writer *jw, const struct mm_vma_record *vma)
 {
-	json_comma(output, first);
-	fprintf(output, "\"%s\":%llu", name, value);
-}
+	json_object_begin_field(jw, "file_cache");
+	json_u32(jw, "folios", vma->cache_folios);
+	json_u32(jw, "clean_folios", vma->cache_clean_folios);
+	json_u32(jw, "dirty_folios", vma->cache_dirty_folios);
+	json_u32(jw, "writeback_folios", vma->cache_writeback_folios);
+	json_u32(jw, "lru_folios", vma->cache_lru_folios);
+	json_u32(jw, "active_folios", vma->cache_active_folios);
+	json_u32(jw, "referenced_folios", vma->cache_referenced_folios);
+	json_u32(jw, "workingset_folios", vma->cache_workingset_folios);
+	json_u32(jw, "unevictable_folios", vma->cache_unevictable_folios);
 
-static void json_i64(FILE *output, int *first, const char *name, long long value)
-{
-	json_comma(output, first);
-	fprintf(output, "\"%s\":%lld", name, value);
-}
-
-static void json_hex(FILE *output, int *first, const char *name, unsigned long long value)
-{
-	json_comma(output, first);
-	fprintf(output, "\"%s\":\"0x%llx\"", name, value);
-}
-
-static void print_page_states(FILE *output, const struct vma_record *vma)
-{
-	for (unsigned int page = 0; page < vma->pt_scanned_pages && page < MAX_PAGES_PER_VMA; page++)
-	{
-		if (page)
-			fputc(',', output);
-		fprintf(output, "%u", vma->pt_states[page]);
-	}
-}
-
-static void print_page_targets(FILE *output, const struct vma_record *vma)
-{
-	for (unsigned int page = 0; page < vma->pt_scanned_pages && page < MAX_PAGES_PER_VMA; page++)
-	{
-		if (page)
-			fputc(',', output);
-		fprintf(output, "%u", vma->pt_targets[page] & 0x3fff);
-	}
-}
-
-static void print_page_dirty(FILE *output, const struct vma_record *vma)
-{
-	for (unsigned int page = 0; page < vma->pt_scanned_pages && page < MAX_PAGES_PER_VMA; page++)
-	{
-		if (page)
-			fputc(',', output);
-		fprintf(output, "%llu", (vma->pt_dirty[page >> 6] >> (page & 63)) & 1ULL);
-	}
-}
-
-static void print_file_cache(FILE *output, const struct vma_record *vma)
-{
-	int first = 1;
-
-	fputc('{', output);
-	json_u32(output, &first, "folios", vma->cache_folios);
-	json_u32(output, &first, "clean_folios", vma->cache_clean_folios);
-	json_u32(output, &first, "dirty_folios", vma->cache_dirty_folios);
-	json_u32(output, &first, "writeback_folios", vma->cache_writeback_folios);
-	json_u32(output, &first, "lru_folios", vma->cache_lru_folios);
-	json_u32(output, &first, "active_folios", vma->cache_active_folios);
-	json_u32(output, &first, "referenced_folios", vma->cache_referenced_folios);
-	json_u32(output, &first, "workingset_folios", vma->cache_workingset_folios);
-	json_u32(output, &first, "unevictable_folios", vma->cache_unevictable_folios);
-	json_comma(output, &first);
-	fputs("\"order_buckets\":[", output);
+	json_array_begin_field(jw, "order_buckets");
 	for (unsigned int order = 0; order < MAX_CACHE_ORDERS; order++)
 	{
-		int bucket_first = 1;
-		if (order)
-			fputc(',', output);
-		fputc('{', output);
-		json_u32(output, &bucket_first, "order", order);
-		json_u32(output, &bucket_first, "pages_per_folio", 1U << order);
-		json_u32(output, &bucket_first, "folios", vma->cache_order_folios[order]);
-		json_u32(output, &bucket_first, "dirty", vma->cache_order_dirty[order]);
-		fputc('}', output);
+		json_object_begin(jw);
+		json_u32(jw, "order", order);
+		json_u32(jw, "pages_per_folio", 1U << order);
+		json_u32(jw, "folios", vma->cache_order_folios[order]);
+		json_u32(jw, "dirty", vma->cache_order_dirty[order]);
+		json_object_end(jw);
 	}
-	fputc(']', output);
-	fputc('}', output);
+	json_array_end(jw);
+	json_object_end(jw);
 }
 
-static void print_page_table(FILE *output, const struct vma_record *vma)
+/* File backing facts; emitted as null when the VMA has no struct file. */
+static void write_file_backing(struct json_writer *jw, const struct mm_vma_record *vma)
+{
+	if (!vma->struct_file)
+	{
+		json_null(jw, "file");
+		return;
+	}
+
+	json_object_begin_field(jw, "file");
+	json_string_n(jw, "name", vma->file_name, sizeof(vma->file_name));
+	json_u64(jw, "inode", vma->inode);
+	json_u32(jw, "device", vma->device);
+	json_ptr(jw, "mapping", vma->mapping);
+	json_u64(jw, "cache_pages", vma->cache_pages);
+	json_object_end(jw);
+}
+
+/*
+ * Bounded page-table sample with userspace-derived summaries.
+ * The summary counts are deterministic summaries of the raw arrays, never separate kernel observations.
+ * The compact target identity is the same xor-folded PFN encoding the walker produces, masked to its 14 bits.
+ */
+static void write_page_table(struct json_writer *jw, const struct mm_vma_record *vma)
 {
 	unsigned int present_pages = 0;
 	unsigned int none_pages = 0;
@@ -309,24 +254,23 @@ static void print_page_table(FILE *output, const struct vma_record *vma)
 	unsigned int huge_pud_entries = 0;
 	unsigned int dirty_entries = 0;
 	unsigned char previous = 255;
-	int first = 1;
 
 	for (unsigned int page = 0; page < vma->pt_scanned_pages && page < MAX_PAGES_PER_VMA; page++)
 	{
 		unsigned char state = vma->pt_states[page];
 		unsigned int dirty = (vma->pt_dirty[page >> 6] >> (page & 63)) & 1ULL;
 
-		if (state == 1)
+		if (state == MM_PAGE_PTE)
 		{
 			present_pages++;
 			dirty_entries += dirty;
 		}
-		else if (state == 2)
+		else if (state == MM_PAGE_SWAP)
 			swap_pages++;
-		else if (state == 3)
+		else if (state == MM_PAGE_HUGE_PMD)
 		{
 			unsigned long long address = vma->start + (unsigned long long)page * 4096;
-			int first_huge_slot = previous != 3 || page == 0 || !(address & ((1ULL << 21) - 1));
+			int first_huge_slot = previous != MM_PAGE_HUGE_PMD || page == 0 || !(address & ((1ULL << 21) - 1));
 
 			present_pages++;
 			huge_pmd_pages++;
@@ -336,10 +280,10 @@ static void print_page_table(FILE *output, const struct vma_record *vma)
 				dirty_entries += dirty;
 			}
 		}
-		else if (state == 4)
+		else if (state == MM_PAGE_HUGE_PUD)
 		{
 			unsigned long long address = vma->start + (unsigned long long)page * 4096;
-			int first_huge_slot = previous != 4 || page == 0 || !(address & ((1ULL << 30) - 1));
+			int first_huge_slot = previous != MM_PAGE_HUGE_PUD || page == 0 || !(address & ((1ULL << 30) - 1));
 
 			present_pages++;
 			huge_pud_pages++;
@@ -354,174 +298,220 @@ static void print_page_table(FILE *output, const struct vma_record *vma)
 		previous = state;
 	}
 
-	fputc('{', output);
-	json_u32(output, &first, "scanned_pages", vma->pt_scanned_pages);
-	json_u32(output, &first, "present_pages", present_pages);
-	json_u32(output, &first, "none_pages", none_pages);
-	json_u32(output, &first, "swap_pages", swap_pages);
-	json_u32(output, &first, "huge_pmd_pages", huge_pmd_pages);
-	json_u32(output, &first, "huge_pmd_entries", huge_pmd_entries);
-	json_u32(output, &first, "huge_pud_pages", huge_pud_pages);
-	json_u32(output, &first, "huge_pud_entries", huge_pud_entries);
-	json_u32(output, &first, "dirty_entries", dirty_entries);
-	json_comma(output, &first);
-	fputs("\"pages\":[", output);
-	print_page_states(output, vma);
-	fputs("],\"dirty\":[", output);
-	print_page_dirty(output, vma);
-	fputs("],\"targets\":[", output);
-	print_page_targets(output, vma);
-	fputs("]}", output);
+	json_object_begin_field(jw, "page_table");
+	json_u32(jw, "scanned_pages", vma->pt_scanned_pages);
+	json_u32(jw, "present_pages", present_pages);
+	json_u32(jw, "none_pages", none_pages);
+	json_u32(jw, "swap_pages", swap_pages);
+	json_u32(jw, "huge_pmd_pages", huge_pmd_pages);
+	json_u32(jw, "huge_pmd_entries", huge_pmd_entries);
+	json_u32(jw, "huge_pud_pages", huge_pud_pages);
+	json_u32(jw, "huge_pud_entries", huge_pud_entries);
+	json_u32(jw, "dirty_entries", dirty_entries);
+
+	json_array_begin_field(jw, "pages");
+	for (unsigned int page = 0; page < vma->pt_scanned_pages && page < MAX_PAGES_PER_VMA; page++)
+		json_u32_value(jw, vma->pt_states[page]);
+	json_array_end(jw);
+
+	json_array_begin_field(jw, "dirty");
+	for (unsigned int page = 0; page < vma->pt_scanned_pages && page < MAX_PAGES_PER_VMA; page++)
+		json_u32_value(jw, (vma->pt_dirty[page >> 6] >> (page & 63)) & 1ULL);
+	json_array_end(jw);
+
+	json_array_begin_field(jw, "targets");
+	for (unsigned int page = 0; page < vma->pt_scanned_pages && page < MAX_PAGES_PER_VMA; page++)
+		json_u32_value(jw, vma->pt_targets[page] & 0x3fff);
+	json_array_end(jw);
+
+	json_object_end(jw);
 }
 
-static void print_vma(FILE *output, const struct vma_record *vma)
+static void write_vma(struct json_writer *jw, const struct mm_vma_record *vma)
 {
-	int first = 1;
+	json_object_begin(jw);
 
-	fputc('{', output);
-	json_hex(output, &first, "start", vma->start);
-	json_hex(output, &first, "end", vma->end);
-	json_hex(output, &first, "flags", vma->flags);
-	json_u64(output, &first, "pgoff", vma->pgoff);
-	json_u32(output, &first, "struct_file", vma->struct_file);
-	json_hex(output, &first, "anon_vma", vma->anon_vma);
-	json_hex(output, &first, "anon_vma_root", vma->anon_vma_root);
-	json_hex(output, &first, "anon_vma_parent", vma->anon_vma_parent);
-	json_u32(output, &first, "device", vma->device);
-	json_u64(output, &first, "inode", vma->inode);
-	json_hex(output, &first, "mapping", vma->mapping);
-	json_u64(output, &first, "cache_pages", vma->cache_pages);
-	json_comma(output, &first);
-	fputs("\"file_cache\":", output);
-	print_file_cache(output, vma);
-	json_string(output, &first, "file_name", vma->file_name);
-	json_comma(output, &first);
-	fputs("\"page_table\":", output);
-	print_page_table(output, vma);
-	fputc('}', output);
+	json_object_begin_field(jw, "range");
+	json_hex(jw, "start", vma->start);
+	json_hex(jw, "end", vma->end);
+	json_u64(jw, "pgoff", vma->pgoff);
+	json_object_end(jw);
+
+	json_hex(jw, "flags", vma->flags);
+
+	json_object_begin_field(jw, "anon_vma");
+	json_ptr(jw, "address", vma->anon_vma);
+	json_ptr(jw, "root", vma->anon_vma_root);
+	json_ptr(jw, "parent", vma->anon_vma_parent);
+	json_object_end(jw);
+
+	write_file_backing(jw, vma);
+	write_file_cache(jw, vma);
+	write_page_table(jw, vma);
+
+	json_object_end(jw);
 }
 
-/* libbpf invokes this once per phase-boundary snapshot emitted by the uprobe. */
-static int handle_event(void *ctx, void *data, size_t length)
+static void write_mm_state(struct json_writer *jw, const struct mm_state *state)
 {
-	const struct mm_snapshot *event = data;
-	FILE *output = ctx;
+	json_object_begin_field(jw, "mm");
+	json_ptr(jw, "address", state->mm);
+	json_ptr(jw, "mmap_base", state->mmap_base);
 
-	if (length < sizeof(*event))
+	json_object_begin_field(jw, "accounting");
+	json_u64(jw, "total_vm", state->total_vm);
+	json_u64(jw, "data_vm", state->data_vm);
+	json_u64(jw, "exec_vm", state->exec_vm);
+	json_u64(jw, "stack_vm", state->stack_vm);
+	json_u64(jw, "pgtables_bytes", state->pgtables_bytes);
+	json_object_end(jw);
+
+	write_rss(jw, state);
+
+	json_u32(jw, "map_count", state->map_count);
+	json_u32(jw, "vma_count", state->vma_count);
+	json_object_end(jw);
+
+	json_array_begin_field(jw, "vmas");
+	for (unsigned int i = 0; i < state->vma_count && i < MAX_VMAS; i++)
+		write_vma(jw, &state->vmas[i]);
+	json_array_end(jw);
+}
+
+static void write_snapshot(struct json_writer *jw, const struct mm_event *event, unsigned int seq)
+{
+	json_object_begin(jw);
+	json_u32(jw, "schema_version", 1);
+	json_string(jw, "experiment", "memory");
+	json_string(jw, "kind", "snapshot");
+	json_string(jw, "source", "ebpf");
+	json_u32(jw, "seq", seq);
+	json_u64(jw, "time_ns", event->time_ns);
+
+	json_object_begin_field(jw, "event_info");
+	write_event_info(jw, &event->event_info);
+	json_object_end(jw);
+
+	json_object_begin_field(jw, "context");
+	write_context(jw, &event->context);
+	json_object_end(jw);
+
+	json_object_begin_field(jw, "state");
+	write_mm_state(jw, &event->state);
+	json_object_end(jw);
+
+	json_object_end(jw);
+	json_newline(jw);
+}
+
+/*
+ * libbpf invokes this after the return probe emits one event.
+ * Rejecting a short record protects the byte-for-byte ABI shared with struct mm_event in mm_event.h.
+ * seq is assigned here in output order; the ring-buffer callback preserves snapshot order.
+ */
+static int handle_event(void *ctx, void *data, size_t len)
+{
+	const struct mm_event *event = data;
+	struct json_writer jw;
+
+	(void)ctx;
+
+	if (len < sizeof(*event))
 		return 0;
-	unsigned int tgid = event->pid_tgid >> 32;
-	unsigned int tid = (unsigned int)event->pid_tgid;
-	int first = 1;
 
-	fputc('{', output);
-	json_string(output, &first, "type", "mm_snapshot");
-	json_u64(output, &first, "time_ns", event->timestamp_ns);
-	json_u32(output, &first, "tgid", tgid);
-	json_u32(output, &first, "tid", tid);
-	json_string(output, &first, "comm", event->comm);
-	json_hex(output, &first, "mm", event->mm);
-	json_hex(output, &first, "mmap_base", event->mmap_base);
-	json_u64(output, &first, "total_vm", event->total_vm);
-	json_u64(output, &first, "data_vm", event->data_vm);
-	json_u64(output, &first, "exec_vm", event->exec_vm);
-	json_u64(output, &first, "stack_vm", event->stack_vm);
-	json_u64(output, &first, "pgtables_bytes", event->pgtables_bytes);
-	json_i64(output, &first, "anon_pages", event->anon_pages);
-	json_i64(output, &first, "file_pages", event->file_pages);
-	json_i64(output, &first, "shmem_pages", event->shmem_pages);
-	json_i64(output, &first, "swap_entries", event->swap_entries);
-	json_u32(output, &first, "map_count", event->map_count);
-	json_u32(output, &first, "vma_count", event->vma_count);
-	json_comma(output, &first);
-	fputs("\"vmas\":[", output);
-	for (unsigned int i = 0; i < event->vma_count && i < MAX_VMAS; i++)
-	{
-		if (i)
-			fputc(',', output);
-		print_vma(output, &event->vmas[i]);
-	}
-	fputs("]}\n", output);
-	fflush(output);
+	seq_counter++;
+	record_count++;
+
+	json_writer_init(&jw, stdout);
+	write_snapshot(&jw, event, seq_counter);
 	return 0;
 }
 
 int main(void)
 {
-	/* These stay in function scope because every failure path shares one cleanup block. */
 	struct mm_bpf *skel = NULL;
 	struct ring_buffer *ringbuf = NULL;
-	struct bpf_link *phase_link = NULL;
-	FILE *output = NULL;
+	struct bpf_link *entry_link = NULL;
+	struct bpf_link *return_link = NULL;
 	int err = 0;
-	LIBBPF_OPTS(bpf_uprobe_opts, uprobe_options);
-	uprobe_options.retprobe = true;
+	LIBBPF_OPTS(bpf_uprobe_opts, entry_options);
+	LIBBPF_OPTS(bpf_uprobe_opts, return_options);
+
+	entry_options.retprobe = false;
+	return_options.retprobe = true;
 
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
+
+	/* Stdout is NDJSON; line-buffer so records reach the capture promptly. */
+	setvbuf(stdout, NULL, _IOLBF, 0);
+
 	skel = mm_bpf__open();
 	if (!skel)
 	{
-		fprintf(stderr, "failed to open MM BPF skeleton\n");
+		fprintf(stderr, "mm: failed to open MM BPF skeleton\n");
 		return 1;
 	}
 	unsigned long long page_offset_base = symbol_address("/proc/kallsyms", "page_offset_base");
 	if (!page_offset_base)
 	{
-		fprintf(stderr, "failed to resolve x86 page-table layout symbols\n");
+		fprintf(stderr, "mm: failed to resolve x86 page-table layout symbols\n");
 		err = 1;
 		goto out;
 	}
 	skel->rodata->page_offset_base_address = page_offset_base;
 	if (mm_bpf__load(skel) != 0)
 	{
-		fprintf(stderr, "failed to load MM BPF skeleton\n");
+		fprintf(stderr, "mm: failed to load MM BPF skeleton\n");
 		err = 1;
 		goto out;
 	}
 	unsigned long long phase_offset = elf_symbol_file_offset(WORKLOAD_PATH, "phase_boundary");
 	if (!phase_offset)
 	{
-		fprintf(stderr, "failed to resolve phase_boundary symbol file offset in %s\n", WORKLOAD_PATH);
+		fprintf(stderr, "mm: failed to resolve phase_boundary symbol file offset in %s\n", WORKLOAD_PATH);
 		err = 1;
 		goto out;
 	}
-	fprintf(stderr, "attaching phase boundary uprobe at %s + 0x%llx\n", WORKLOAD_PATH, phase_offset);
-	phase_link = bpf_program__attach_uprobe_opts(skel->progs.snapshot_phase_return, -1, WORKLOAD_PATH, phase_offset, &uprobe_options);
-	if (!phase_link)
+	fprintf(stderr, "mm: attaching phase boundary probes at %s + 0x%llx\n", WORKLOAD_PATH, phase_offset);
+	entry_link = bpf_program__attach_uprobe_opts(skel->progs.phase_boundary_entry, -1, WORKLOAD_PATH, phase_offset, &entry_options);
+	if (!entry_link)
 	{
-		fprintf(stderr, "failed to attach phase boundary uprobe: %d\n", -errno);
+		fprintf(stderr, "mm: failed to attach phase boundary entry uprobe: %d\n", -errno);
 		err = 1;
 		goto out;
 	}
-	if (mkdir(CAPTURE_DIR, 0755) != 0 && errno != EEXIST)
+	return_link = bpf_program__attach_uprobe_opts(skel->progs.snapshot_phase_return, -1, WORKLOAD_PATH, phase_offset, &return_options);
+	if (!return_link)
 	{
-		perror("mkdir(" CAPTURE_DIR ")");
+		fprintf(stderr, "mm: failed to attach phase boundary return uprobe: %d\n", -errno);
 		err = 1;
 		goto out;
 	}
-	output = fopen(CAPTURE_PATH, "a");
-	if (!output)
-	{
-		perror("fopen(" CAPTURE_PATH ")");
-		err = 1;
-		goto out;
-	}
-	ringbuf = ring_buffer__new(bpf_map__fd(skel->maps.events), handle_event, output, NULL);
+	ringbuf = ring_buffer__new(bpf_map__fd(skel->maps.events), handle_event, NULL, NULL);
 	if (!ringbuf)
 	{
-		fprintf(stderr, "failed to create MM ring buffer: %d\n", -errno);
+		fprintf(stderr, "mm: failed to create ring buffer: %d\n", -errno);
 		err = 1;
 		goto out;
 	}
 
-	fprintf(stderr, "capturing phase-boundary VMA snapshots to " CAPTURE_PATH "\n");
+	/* Metadata first: static capture facts, not a snapshot. */
+	struct json_writer jw;
+
+	json_writer_init(&jw, stdout);
+	write_meta(&jw);
+	fflush(stdout);
+
+	fprintf(stderr, "LX_READY experiment=memory observer=mm\n");
+
 	while (!exiting)
 	{
 		err = ring_buffer__poll(ringbuf, 250);
 		if (err == -EINTR)
 			break;
 		if (err < 0)
-			goto out;
+			break;
 	}
 	while (ring_buffer__consume(ringbuf) > 0)
 		;
@@ -529,9 +519,12 @@ int main(void)
 
 out:
 	ring_buffer__free(ringbuf);
-	if (output)
-		fclose(output);
-	bpf_link__destroy(phase_link);
+	bpf_link__destroy(entry_link);
+	bpf_link__destroy(return_link);
 	mm_bpf__destroy(skel);
-	return err ? 1 : 0;
+
+	if (err)
+		return 1;
+	fprintf(stderr, "LX_DONE experiment=memory observer=mm records=%u\n", record_count);
+	return 0;
 }

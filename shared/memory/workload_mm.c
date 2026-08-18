@@ -18,6 +18,7 @@
 #include <sys/sysinfo.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include "json_writer.h"
 
 #define KiB 1024UL
 #define MiB (1024UL * KiB)
@@ -52,33 +53,70 @@
 #define THP_MAPPING_LENGTH (THP_LENGTH + THP_ALIGNMENT)
 #define THP_SPLIT_OFFSET (THP_LENGTH / 2)
 
-__attribute__((noinline, used, visibility("default"))) void phase_boundary(void)
+__attribute__((noinline, used, visibility("default"))) void phase_boundary(unsigned int phase_seq)
 {
 	/* Explicit uprobe target: snapshots are taken after a phase line is printed. */
+	/* The sequence identifies which completed phase produced the post-boundary snapshot. */
 	asm volatile("" ::: "memory");
+	(void)phase_seq;
+}
+
+/*
+ * Emit one canonical workload phase record.
+ * The sequence is the authoritative link to the eBPF snapshot's event_info.phase_seq.
+ */
+static void emit_phase_record(unsigned int seq, unsigned long long time_ns, const char *name)
+{
+	struct json_writer jw;
+
+	json_writer_init(&jw, stdout);
+	json_object_begin(&jw);
+	json_u32(&jw, "schema_version", 1);
+	json_string(&jw, "experiment", "memory");
+	json_string(&jw, "kind", "phase");
+	json_string(&jw, "source", "workload");
+	json_u32(&jw, "seq", seq);
+	json_u64(&jw, "time_ns", time_ns);
+	json_string(&jw, "name", name);
+	json_object_end(&jw);
+	json_newline(&jw);
+	fflush(stdout);
 }
 
 __attribute__((noinline, used, visibility("default"))) void phase(const char *name)
 {
 	static const char *active_phase;
+	static unsigned int phase_seq_counter;
 
 	/* Publish the preceding phase at this boundary, after its work completed. */
 	if (active_phase)
 	{
 		struct timespec now;
+		unsigned int seq = ++phase_seq_counter;
 		clock_gettime(CLOCK_MONOTONIC, &now);
 		unsigned long long time_ns = (unsigned long long)now.tv_sec * 1000000000ULL + (unsigned long long)now.tv_nsec;
-		printf("{\"type\":\"phase\",\"time_ns\":%llu,\"name\":\"%s\"}\n", time_ns, active_phase);
-		fflush(stdout);
-		phase_boundary();
+		emit_phase_record(seq, time_ns, active_phase);
+		phase_boundary(seq);
 	}
 	active_phase = name;
 }
 
 static void print_mm_constraints(void)
 {
-	printf("{\"type\":\"mm_constraints\",\"pt_sample_pages\":%u,\"xarray_scan_slots\":%u,\"huge_pmd_pages\":%u}\n",
-	       MM_PT_SAMPLE_PAGES, MM_XARRAY_SCAN_SLOTS, MM_HUGE_PMD_PAGES);
+	struct json_writer jw;
+
+	json_writer_init(&jw, stdout);
+	json_object_begin(&jw);
+	json_u32(&jw, "schema_version", 1);
+	json_string(&jw, "experiment", "memory");
+	json_string(&jw, "kind", "meta");
+	json_string(&jw, "source", "workload");
+	json_string(&jw, "clock", "monotonic");
+	json_u32(&jw, "pt_sample_pages", MM_PT_SAMPLE_PAGES);
+	json_u32(&jw, "xarray_scan_slots", MM_XARRAY_SCAN_SLOTS);
+	json_u32(&jw, "huge_pmd_pages", MM_HUGE_PMD_PAGES);
+	json_object_end(&jw);
+	json_newline(&jw);
 	fflush(stdout);
 }
 
@@ -733,6 +771,18 @@ int main(void)
 	/* Final boundary lets the observer capture the fully cleaned-up address space. */
 	PHASE("complete: all file-backed, private-anon, shared-anon, and THP exercise mappings were cleaned up");
 	phase(NULL);
-	printf("{\"type\":\"result\",\"status\":\"%s\",\"checksum\":%lu}\n", result == 0 ? "pass" : "fail", checksum);
+	struct json_writer jw;
+
+	json_writer_init(&jw, stdout);
+	json_object_begin(&jw);
+	json_u32(&jw, "schema_version", 1);
+	json_string(&jw, "experiment", "memory");
+	json_string(&jw, "kind", "result");
+	json_string(&jw, "source", "workload");
+	json_string(&jw, "status", result == 0 ? "pass" : "fail");
+	json_u64(&jw, "checksum", checksum);
+	json_object_end(&jw);
+	json_newline(&jw);
+	fflush(stdout);
 	return result == 0 ? 0 : 1;
 }

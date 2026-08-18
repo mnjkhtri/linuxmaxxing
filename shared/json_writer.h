@@ -40,11 +40,22 @@ void json_string(struct json_writer *jw, const char *name, const char *value);
 void json_string_n(struct json_writer *jw, const char *name, const char *value, size_t max_len);
 void json_u32(struct json_writer *jw, const char *name, uint32_t value);
 void json_u64(struct json_writer *jw, const char *name, uint64_t value);
+void json_i64(struct json_writer *jw, const char *name, int64_t value);
 void json_bool(struct json_writer *jw, const char *name, bool value);
 void json_null(struct json_writer *jw, const char *name);
+void json_hex(struct json_writer *jw, const char *name, uint64_t value);
 
 /* Project pointer convention: nonzero becomes "0x%016llx", zero becomes null. */
 void json_ptr(struct json_writer *jw, const char *name, uint64_t value);
+
+/* Value-position scalars: one element of an enclosing array. */
+void json_u32_value(struct json_writer *jw, uint32_t value);
+void json_u64_value(struct json_writer *jw, uint64_t value);
+void json_i64_value(struct json_writer *jw, int64_t value);
+void json_string_value(struct json_writer *jw, const char *value);
+void json_string_n_value(struct json_writer *jw, const char *value, size_t max_len);
+void json_bool_value(struct json_writer *jw, bool value);
+void json_null_value(struct json_writer *jw);
 
 void json_newline(struct json_writer *jw);
 
