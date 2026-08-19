@@ -371,7 +371,7 @@ function renderExecution(e){
     $('vmm-state').textContent=e.kind==='handoff'?(e.userspace_reason||'userspace exit'):'VMM run loop';
     $('vmm-detail').textContent=e.kind==='handoff'?'userspace emulation boundary':'outside guest while KVM_RUN active';
 
-    var wrap=$('domains');
+    var wrap=$('lanes');
     wrap.querySelectorAll('.flow-arrow,.flow-tag').forEach(function(n){n.parentNode.removeChild(n)});
     var pos={vmm:16.5,kvm:50,guest:83.5};
     if(['entry','exit','handoff'].indexOf(e.kind)>=0){
@@ -426,16 +426,27 @@ function renderDMA(e){
         $('dma-caption').textContent='DMA field is sampled only at the eBPF DMA event';
     }
 }
+/* Which execution lane owns a given event kind. */
+function laneFor(e){
+    if(e.kind==='handoff'||e.kind==='dma')return 'vmm';
+    if(e.kind==='exit'||e.kind==='irq')return 'kvm';
+    return 'guest';
+}
 function renderWindow(){
     var start=Math.max(0,Math.min(D.events.length-13,cursor-6)),
         end=Math.min(D.events.length,start+13);
     var slice=D.events.slice(start,end);
-    $('flow-window').innerHTML=slice.map(function(e,i){
-        var foot=e.rip?e.rip:e.irr?'IRR=1':e.isr?'ISR=1':e.rte!=='0x0'?'RTE '+e.rte:'';
-        return '<button class="event-cell '+e.kind+' '+(start+i===cursor?'current':'')+'" data-index="'+(start+i)+'" title="seq '+e.seq+': '+esc(prettyEvent(e))+'\n'+esc(e.raw)+'">'+
-            '<strong>'+esc(prettyEvent(e))+'</strong><span>seq '+e.seq+' · '+e.time_us.toFixed(3)+' µs</span><span>'+esc(foot)+'</span></button>';
-    }).join('');
-    $('flow-window').querySelectorAll('.event-cell').forEach(function(b){b.addEventListener('click',function(){select(+b.dataset.index)})});
+    var lanes={vmm:[],kvm:[],guest:[]};
+    slice.forEach(function(e,i){
+        var cell='<button class="event-cell '+e.kind+' '+(start+i===cursor?'current':'')+'" data-index="'+(start+i)+'" title="seq '+e.seq+': '+esc(prettyEvent(e))+'\n'+esc(e.raw)+'">'+
+            '<strong>'+esc(prettyEvent(e))+'</strong><span>seq '+e.seq+' · '+e.time_us.toFixed(3)+' µs</span></button>';
+        lanes[laneFor(e)].push(cell);
+    });
+    ['vmm','kvm','guest'].forEach(function(l){
+        var box=$('lane-'+l);
+        box.innerHTML=lanes[l].length?lanes[l].join(''):'<span class="lane-empty">—</span>';
+        box.querySelectorAll('.event-cell').forEach(function(b){b.addEventListener('click',function(){select(+b.dataset.index)})});
+    });
 }
 function renderNotebook(e){
     $('source-badge').textContent=e.trace_line?'trace + eBPF':'eBPF-only';

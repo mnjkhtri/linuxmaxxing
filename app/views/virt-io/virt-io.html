@@ -46,12 +46,11 @@
             <div><b>EXECUTION DOMAINS</b><span>current transition across VMM, KVM/VMX, and guest</span></div>
             <code class="address" id="rip-head">RIP —</code>
           </header>
-          <div class="domains" id="domains">
-            <div class="domain" data-domain="vmm"><h3>USERSPACE VMM</h3><strong id="vmm-state">waiting</strong><small id="vmm-detail">KVM_RUN boundary</small><span class="statepill" id="vmm-pill">userspace</span></div>
-            <div class="domain" data-domain="kvm"><h3>KVM / VMX</h3><strong id="kvm-state">run loop</strong><small id="kvm-detail">kernel virtualization boundary</small><span class="statepill" id="kvm-pill">kernel</span></div>
-            <div class="domain" data-domain="guest"><h3>GUEST vCPU 0</h3><strong id="guest-state">RIP 0x0</strong><small id="guest-detail">guest execution context</small><span class="statepill" id="guest-pill">guest</span></div>
+          <div class="lanes" id="lanes">
+            <div class="lane" data-lane="vmm"><div class="domain" data-domain="vmm"><h3>USERSPACE VMM</h3><strong id="vmm-state">waiting</strong><small id="vmm-detail">KVM_RUN boundary</small><span class="statepill" id="vmm-pill">userspace</span></div><div class="lane-events" id="lane-vmm"></div></div>
+            <div class="lane" data-lane="kvm"><div class="domain" data-domain="kvm"><h3>KVM / VMX</h3><strong id="kvm-state">run loop</strong><small id="kvm-detail">kernel virtualization boundary</small><span class="statepill" id="kvm-pill">kernel</span></div><div class="lane-events" id="lane-kvm"></div></div>
+            <div class="lane" data-lane="guest"><div class="domain" data-domain="guest"><h3>GUEST vCPU 0</h3><strong id="guest-state">RIP 0x0</strong><small id="guest-detail">guest execution context</small><span class="statepill" id="guest-pill">guest</span></div><div class="lane-events" id="lane-guest"></div></div>
           </div>
-          <div class="flow-window" id="flow-window"></div>
           <footer class="region-foot"><strong id="flow-kind">entry</strong><span id="flow-caption">KVM → guest</span></footer>
         </section>
 
