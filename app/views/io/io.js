@@ -225,7 +225,7 @@ function renderTimeline(){
 	root.setAttribute('viewBox','0 0 '+viewWidth+' '+height);
 	root.style.height=height+'px';
 	root.innerHTML='';
-	var defs=svg('defs');var marker=svg('marker',{id:'activity-arrow',viewBox:'0 0 6 6',refX:5,refY:3,markerWidth:5,markerHeight:5,orient:'auto'});marker.appendChild(svg('path',{d:'M0,0 L6,3 L0,6 z',fill:'context-stroke'}));defs.appendChild(marker);root.appendChild(defs);
+	var defs=svg('defs');var marker=svg('marker',{id:'activity-arrow',viewBox:'0 0 6 6',refX:5,refY:3,markerWidth:5,markerHeight:5,orient:'auto'});marker.appendChild(svg('path',{d:'M0,0 L6,3 L0,6 z',fill:'#6b7d8c'}));defs.appendChild(marker);root.appendChild(defs);
 	lanes.forEach(function(lane){
 		root.appendChild(svg('rect',{x:lane.x-74,y:13,width:148,height:50,rx:6,class:'activity-lane '+lane.key}));
 		root.appendChild(svg('text',{x:lane.x,y:33,'text-anchor':'middle',class:'lane-text'},lane.title));
@@ -235,7 +235,8 @@ function renderTimeline(){
 	records.forEach(function(event,index){
 		var lane=lanes.find(function(item){return item.key===traceLane(event)}),y=top+index*row,previous=index&&records[index-1],previousLane=previous&&lanes.find(function(item){return item.key===traceLane(previous)});
 		if(previous){
-			var py=top+(index-1)*row,path='M '+previousLane.x+' '+(py+8)+' L '+previousLane.x+' '+(y-8)+' L '+lane.x+' '+(y-8);
+			var py=top+(index-1)*row,gap=py+17;
+			var path='M '+previousLane.x+' '+(py+10)+' L '+previousLane.x+' '+gap+' L '+lane.x+' '+gap+' L '+lane.x+' '+(y-10);
 			root.appendChild(svg('path',{d:path,class:'activity-flow','marker-end':'url(#activity-arrow)'}));
 		}
 		var laneKey=traceLane(event),cpuClass='cpu-'+event.cpu,nodeClass='activity-node '+laneKey+' '+cpuClass+(selectedEvent&&selectedEvent.index===event.index?' selected':'');
@@ -252,7 +253,7 @@ function renderTimeline(){
 }
 function renderFocus(){
 	var phase=phases[selectedPhase],list=localPhaseEvents(phase);
-	if(selectedEvent==null||selectedEvent.time_ns<phase.start||selectedEvent.time_ns>phase.end){var important=list.find(function(e){return e.type==='irq_handler_entry'})||list[0];if(important)selectedEvent=important}
+	if(selectedEvent==null||selectedEvent.time_ns<phase.start||selectedEvent.time_ns>phase.end)selectedEvent=list[0]||null;
 	renderInspector();
 }
 function eventTitle(e){
