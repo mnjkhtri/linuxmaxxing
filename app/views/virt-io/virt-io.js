@@ -371,18 +371,6 @@ function renderExecution(e){
     $('vmm-state').textContent=e.kind==='handoff'?(e.userspace_reason||'userspace exit'):'VMM run loop';
     $('vmm-detail').textContent=e.kind==='handoff'?'userspace emulation boundary':'outside guest while KVM_RUN active';
 
-    var wrap=$('lanes');
-    wrap.querySelectorAll('.flow-arrow,.flow-tag').forEach(function(n){n.parentNode.removeChild(n)});
-    var pos={vmm:16.5,kvm:50,guest:83.5};
-    if(['entry','exit','handoff'].indexOf(e.kind)>=0){
-        var a=pos[e.from],b=pos[e.to],left=Math.min(a,b),width=Math.abs(a-b);
-        var ar=document.createElement('div');
-        ar.className='flow-arrow'+(b<a?' reverse':'');
-        ar.style.left=left+'%';ar.style.width=width+'%';
-        var tag=document.createElement('div');
-        tag.className='flow-tag';tag.style.left='calc('+((a+b)/2)+'% - 42px)';tag.textContent=prettyEvent(e);
-        wrap.appendChild(ar);wrap.appendChild(tag);
-    }
     $('flow-kind').textContent=e.kind;
     $('flow-caption').textContent=e.from+'\u00a0→\u00a0'+e.to;
 }
