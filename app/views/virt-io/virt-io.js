@@ -196,21 +196,50 @@ function regionDesc(evs,startSeq,endSeq){
     if(!facts.length)facts.push('guest bring-up: entry, exit, APIC wiring');
     return 'seq '+startSeq+'–'+endSeq+' · '+facts.join(' · ');
 }
-/* Segment the stream into episodes at motif boundaries. */
+/* Guard markers the guest writes to port 0xe9 (PIO used only as a synchronization marker). */
+var PHASE_LABEL={
+    A:'APIC-ready baseline',
+    B:'single IRQ_ONLY chain',
+    C:'IRQ pending while IF=0',
+    D:'same-vector IRQ burst while IF=0',
+    E:'virtual DMA TO/FROM'
+};
+/* Segment the stream into the guest's A..E phases, anchored on the 0xe9 markers. */
 function deriveEpisodes(events){
     var firstM=findIdx(events,function(e){return e.kind==='exit'&&e.reason==='EPT_MISCONFIG'});
-    var accepts=[],dmas=[],starts=[0];
+    var dmas=[];
+    events.forEach(function(e,i){if(e.name==='device_dma_transfer')dmas.push(i)});
+    /* A..E: boundaries fall on the three 0xe9 markers and the first DMA transfer. */
+    var markers=[];
     events.forEach(function(e,i){
-        if(e.name==='kvm_apic_accept_irq')accepts.push(i);
-        if(e.name==='device_dma_transfer')dmas.push(i);
+        if(e.kind==='exit'&&e.reason==='IO_INSTRUCTION'&&/e900/.test(e.info1||''))markers.push(i);
     });
+    var eps=[];
+    if(markers.length>=3&&dmas.length){
+        /* Boundaries as event indices: A=0..m1, B=m1+1..m2, C=m2+1..m3, D=m3+1..dma0-1, E=dma0..end. */
+        var bd=[0,markers[0]+1,markers[1]+1,markers[2]+1,dmas[0],events.length];
+        var letters=['A','B','C','D','E'];
+        for(var s=0;s<5;s++){
+            var a=bd[s],eb=bd[s+1]-1;
+            var slice=events.slice(a,eb+1);
+            eps.push({
+                start:events[a].seq,end:events[eb].seq,count:eb-a+1,
+                indices:(function(){var r=[];for(var k=a;k<=eb;k++)r.push(k);return r})(),
+                name:'Phase '+letters[s]+' \u00b7 '+PHASE_LABEL[letters[s]],
+                desc:regionDesc(slice,events[a].seq,events[eb].seq)
+            });
+        }
+        return eps;
+    }
+    /* Fallback when no markers: strongest motifs (first emulation, IRQ bursts, DMA, polling run). */
+    var accepts=[],starts=[0];
+    events.forEach(function(e,i){if(e.name==='kvm_apic_accept_irq')accepts.push(i)});
     if(firstM>=0)starts.push(firstM);
     if(accepts.length)starts.push(accepts[0]);
     for(var b=0;b<accepts.length-1;b++){
         if(events[accepts[b+1]].time_us-events[accepts[b]].time_us<40){starts.push(accepts[b]);break}
     }
     dmas.forEach(function(i){starts.push(i)});
-    /* Cluster the 0x108 EPT_MISCONFIG exits by time gap; the longest run is the polling motif. */
     var pollIdx=[];
     events.forEach(function(e,i){
         if(e.kind==='exit'&&e.reason==='EPT_MISCONFIG'&&e.rip==='0x108')pollIdx.push(i);
@@ -226,16 +255,15 @@ function deriveEpisodes(events){
     }
     if(pollStart>=0)starts.push(pollStart);
     starts=starts.filter(function(v,i){return starts.indexOf(v)===i}).sort(function(a,b){return a-b});
-    var eps=[];
-    for(var s=0;s<starts.length;s++){
-        var a=starts[s];
-        if(a>=events.length)break;
-        var b=s+1<starts.length?starts[s+1]-1:events.length-1;
-        var slice=events.slice(a,b+1);
+    for(var q=0;q<starts.length;q++){
+        var sa=starts[q];
+        if(sa>=events.length)break;
+        var se=q+1<starts.length?starts[q+1]-1:events.length-1;
+        var seg=events.slice(sa,se+1);
         eps.push({
-            start:events[a].seq,end:events[b].seq,count:b-a+1,
-            indices:(function(){var r=[];for(var k=a;k<=b;k++)r.push(k);return r})(),
-            name:regionName(slice,s===starts.length-1),desc:regionDesc(slice,events[a].seq,events[b].seq)
+            start:events[sa].seq,end:events[se].seq,count:se-sa+1,
+            indices:(function(){var r=[];for(var k=sa;k<=se;k++)r.push(k);return r})(),
+            name:regionName(seg,q===starts.length-1),desc:regionDesc(seg,events[sa].seq,events[se].seq)
         });
     }
     return eps;
