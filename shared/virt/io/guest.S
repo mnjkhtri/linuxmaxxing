@@ -184,32 +184,19 @@ protected_mode:
 	movl $CMD_MSI_ONLY, DEVICE_MMIO_BASE + REG_COMMAND
 	WAIT_IRQ_COUNT 3
 
-	/* ---- Phase E: virtual DMA (device internal buffer <-> guest RAM), existing DMA unchanged. ---- */
+	/* ---- Phase E: one-shot round-trip virtual DMA (device buffer <-> guest RAM). ---- */
 	movl $DMA_SRC, DEVICE_MMIO_BASE + REG_DMA_GPA       /* source: guest RAM 0x6000 */
 	movl $CMD_DMA_TO_DEVICE, DEVICE_MMIO_BASE + REG_COMMAND
 	WAIT_IRQ_COUNT 4                                       /* guest saw completion IRQ */
-
-	/* The device buffer must now read back the guest source exactly; a no-op copy fails here. */
-	movl $0, %ecx
-	movl $DMA_SRC, %esi
-1:	movl (%esi), %ebx                              /* expected 32-bit slice of the source */
-	movl $0, %eax
-	movl DEVICE_MMIO_BASE + REG_BUFFER(,%ecx,4), %eax /* readback of the matching device slice */
-	cmpl %ebx, %eax
-	jne dma_failed
-	addl $4, %esi
-	incl %ecx
-	cmpl $16, %ecx
-	jb 1b
 
 	movl $DMA_DST, DEVICE_MMIO_BASE + REG_DMA_GPA        /* dest: guest RAM 0x7000 */
 	movl $CMD_DMA_FROM_DEVICE, DEVICE_MMIO_BASE + REG_COMMAND
 	WAIT_IRQ_COUNT 5
 
-	/* The destination must equal the expected device pattern byte for byte. */
+	/* One-shot round-trip verification: the return copy must reproduce the original source. */
 	cld
-	movl $DMA_EXPECT, %esi
-	movl $DMA_DST, %edi
+	movl $DMA_DST, %esi
+	movl $DMA_SRC, %edi
 	movl $DMA_XFER_SIZE, %ecx
 	repe cmpsb
 	jne dma_failed

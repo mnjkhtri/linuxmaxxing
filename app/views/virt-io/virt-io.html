@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KVM virt-I/O state observer</title>
-<link rel="stylesheet" href="virt-io.css?v=31">
+<link rel="stylesheet" href="virt-io.css?v=53">
 </head>
 <body>
 <main class="io">
@@ -58,11 +58,11 @@
           </header>
           <div class="irq-body">
             <div class="irq-route">
-              <div class="irq-node" id="irq-device"><b>DEVICE</b><span>edge source</span></div>
+              <div class="irq-node" id="irq-device"><b>DEVICE</b><span id="device-node-sub">edge source</span></div>
               <div class="irq-edge" id="edge-gsi"></div>
-              <div class="irq-node" id="irq-ioapic"><b>IOAPIC</b><span>pin — / RTE</span></div>
+              <div class="irq-node" id="irq-ioapic"><b>IOAPIC</b><span id="ioapic-node-sub">pin — · RTE</span></div>
               <div class="irq-edge" id="edge-lapic"></div>
-              <div class="irq-node" id="irq-lapic"><b>LAPIC</b><span>apicid 0 / vec —</span></div>
+              <div class="irq-node" id="irq-lapic"><b>LAPIC</b><span id="lapic-node-sub">apicid 0 · vec —</span></div>
             </div>
             <div class="msi-route" id="msi-route">
               <div class="irq-node" id="irq-device-msi"><b>DEVICE</b><span>MSI source (toy virtual device)</span></div>
@@ -71,13 +71,23 @@
               <div class="irq-edge" id="edge-msi-lapic"></div>
               <div class="irq-node" id="irq-lapic-msi"><b>LAPIC</b><span id="msi-vec-detail">vec —</span></div>
             </div>
-            <div class="state-grid">
-              <div class="state-item" id="st-irr"><label>IRR · pending</label><strong class="val">—</strong><em class="sub"></em></div>
-              <div class="state-item" id="st-isr"><label>ISR · in service</label><strong class="val">—</strong><em class="sub"></em></div>
-              <div class="state-item" id="st-svr"><label>LAPIC SVR</label><strong class="val">—</strong><em class="sub"></em></div>
-              <div class="state-item" id="st-tpr"><label>LAPIC TPR</label><strong class="val">—</strong><em class="sub"></em></div>
-              <div class="state-item" id="st-rte"><label>IOAPIC RTE · pin 4</label><strong class="val">—</strong><em class="sub"></em></div>
-              <div class="state-item" id="st-route"><label>ROUTE</label><strong class="val">—</strong><em class="sub"></em></div>
+            <div class="ctrl-groups">
+              <div class="ctrl-group lapic-group">
+                <div class="ctrl-group-head"><b>LAPIC 0</b><span>vcpu local APIC</span></div>
+                <div class="state-grid">
+                  <div class="state-item" id="st-irr"><label>IRR · pending</label><strong class="val">—</strong><em class="sub"></em></div>
+                  <div class="state-item" id="st-isr"><label>ISR · in service</label><strong class="val">—</strong><em class="sub"></em></div>
+                  <div class="state-item" id="st-svr"><label>SVR</label><strong class="val">—</strong><em class="sub"></em></div>
+                  <div class="state-item" id="st-tpr"><label>TPR</label><strong class="val">—</strong><em class="sub"></em></div>
+                </div>
+              </div>
+              <div class="ctrl-group ioapic-group">
+                <div class="ctrl-group-head"><b>IOAPIC</b><span>pin 4 · GSI</span></div>
+                <div class="state-grid">
+                  <div class="state-item" id="st-rte"><label>RTE · pin 4</label><strong class="val">—</strong><em class="sub"></em></div>
+                  <div class="state-item" id="st-route"><label>ROUTE</label><strong class="val">—</strong><em class="sub"></em></div>
+                </div>
+              </div>
             </div>
           </div>
           <footer class="region-foot"><strong id="irq-state">idle</strong><span id="irq-caption">no pending/in-service vector in the LAPIC window</span></footer>
@@ -86,17 +96,25 @@
         <section class="region dma">
           <header class="region-title">
             <div><b>DMA / GPA OBSERVATIONS</b><span>only addresses and directions actually captured by the eBPF DMA event</span></div>
-            <code class="address">64 B / transfer</code>
+            <code class="address" id="dma-xfer">64 B / transfer</code>
           </header>
-          <div class="dma-body">
-            <div class="mem-bus">
-              <div class="mem-side"><h3>GUEST PHYSICAL MEMORY</h3><strong id="dma-gpa">no DMA now</strong><small>observed endpoints from this run</small></div>
-              <div class="dma-edge" id="dma-edge"></div>
-              <div class="device-side"><h3>TOY DEVICE</h3><strong id="device-state">256 B buffer</strong><small id="device-detail">no transfer at current hook</small><div class="buffer" id="buffer"><i></i><i></i><i></i><i></i></div></div>
+          <div class="rt-timeline">
+            <div class="rt-end rt-src" id="rt-src">
+              <code>1 · DMA_TO</code>
+              <strong id="dma-src">0x6000</strong>
+              <span id="dma-src-sub">guest source</span>
             </div>
-            <div class="gpa-map">
-              <div class="gpa" id="gpa6000"><code>GPA 0x6000</code><span>DMA_TO source at seq 85</span></div>
-              <div class="gpa" id="gpa7000"><code>GPA 0x7000</code><span>DMA_FROM destination at seq 151</span></div>
+            <div class="rt-edge" id="dma-edge-to"></div>
+            <div class="rt-dev">
+              <h3>TOY DEVICE</h3>
+              <strong id="device-state">256 B buffer</strong>
+              <small id="device-detail">returns the stored bytes (echo)</small>
+            </div>
+            <div class="rt-edge" id="dma-edge-from"></div>
+            <div class="rt-end rt-dst" id="rt-dst">
+              <code>2 · DMA_FROM</code>
+              <strong id="dma-dst">0x7000</strong>
+              <span id="dma-dst-sub">guest receive</span>
             </div>
           </div>
           <footer class="region-foot"><strong id="dma-state">not present</strong><span id="dma-caption">DMA is recorded only at the eBPF DMA event</span></footer>
@@ -110,12 +128,10 @@
       <div class="note-body">
         <div class="type"><i class="trace-dot"></i><span id="detail-type">VM entry</span></div>
         <h2 id="detail-title">kvm_entry</h2>
-        <p class="explain" id="explain"></p>
         <dl class="fields" id="fields"></dl>
-        <div class="raw"><label>raw trace detail</label><code id="raw">—</code></div>
       </div>
       <section class="toolbar">
-        <button id="first" title="first">|←</button>
+        <button id="next" title="next observation">→</button>
         <button id="prev" title="previous">←</button>
         <button id="play" title="play/pause">▶</button>
         <input id="scrub" type="range" min="0" max="164" value="0" aria-label="event scrubber">
@@ -124,6 +140,6 @@
     </aside>
   </section>
 </main>
-<script src="virt-io.js?v=31"></script>
+<script src="virt-io.js?v=53"></script>
 </body>
 </html>

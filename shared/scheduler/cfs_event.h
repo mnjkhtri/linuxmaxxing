@@ -35,7 +35,7 @@ struct tree_node
 
 struct cfs_event_info
 {
-	unsigned long long enqueued_entity; /* the enqueued sched_entity */
+	unsigned long long enqueued_entity;	 /* the enqueued sched_entity */
 	unsigned long long enqueued_rb_node; /* the enqueued entity's embedded rb_node */
 };
 
@@ -44,14 +44,14 @@ struct cfs_context
 	unsigned int cpu; /* CPU on which this probe callback executed */
 	unsigned int pid; /* TGID of the probing task */
 	unsigned int tid; /* TID of the probing task */
-	char comm[16];    /* task name of the probing task */
+	char comm[16];	  /* task name of the probing task */
 };
 
 struct cfs_state
 {
 	unsigned long long cfs_rq;
 	unsigned long long nr_running;
-	unsigned long long root; /* cfs_rq->tasks_timeline.rb_root.rb_node */
+	unsigned long long root;	 /* cfs_rq->tasks_timeline.rb_root.rb_node */
 	unsigned long long leftmost; /* cfs_rq->tasks_timeline.rb_leftmost */
 	unsigned int node_count;
 	unsigned int truncated;

@@ -177,8 +177,6 @@ static void device_execute_command(int vm, struct toy_device *dev, uint8_t *gues
 		ret = device_dma_transfer(dev, guest_mem, guest_mem_size, dev->command, dev->dma_gpa, DMA_XFER_SIZE);
 		break;
 	case CMD_DMA_FROM_DEVICE:
-		/* Re-seed the buffer so the guest can verify the exact bytes it receives. */
-		refill_device_pattern(dev);
 		ret = device_dma_transfer(dev, guest_mem, guest_mem_size, dev->command, dev->dma_gpa, DMA_XFER_SIZE);
 		break;
 	default:

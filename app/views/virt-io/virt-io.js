@@ -133,8 +133,6 @@ function buildEvents(snaps,trs){
             e.cpu=f.ctx.cpu;e.pid=f.ctx.pid;e.tid=f.ctx.tid;e.comm=f.ctx.comm;
         }
         e.kind=KINDS[f.name]||f.name;
-        e.accent=e.kind==='entry'?'cyan':e.kind==='exit'?'orange':e.kind==='handoff'?'green':
-            e.kind==='irq'?'yellow':e.kind==='dma'?'blue':e.kind==='apic'?'violet':e.kind==='msi'?'violet':e.kind;
         if(e.kind==='entry'){e.from='kvm';e.to='guest';e.label='VM entry'}
         else if(e.kind==='exit'){e.from='guest';e.to='kvm';e.label=e.reason||'VM exit'}
         else if(e.kind==='handoff'){e.from='kvm';e.to='vmm';e.label=(e.userspace_reason||'userspace exit').replace('KVM_EXIT_','')}
@@ -182,8 +180,8 @@ function regionName(evs,isLast){
         return 'DMA '+(d.dma_dir==='to_device'?'→':'←')+' device'+(isLast?' + tail':'');
     }
     var ac=evs.filter(function(e){return e.name==='kvm_apic_accept_irq'}).length;
-    var mis=evs.filter(function(e){return e.name==='kvm_exit'&&e.reason==='EPT_MISCONFIG'&&e.rip==='0x108'}).length;
-    if(mis>=6)return 'MMIO polling motif';
+    var mis=evs.filter(function(e){return e.name==='kvm_exit'&&e.reason==='EPT_MISCONFIG'}).length;
+    if(mis>=6)return 'MMIO-heavy region';
     if(ac>=3)return 'MSI + service';
     if(ac>=1)return 'IRQ service';
     var em=evs.some(function(e){return e.kind==='handoff'})||
@@ -235,66 +233,76 @@ function annotateEpisode(ep){
     if(s){ep.ingress=s.ingress;ep.egress=s.egress;ep.source=s.source}
     return ep;
 }
-/* Segment the stream into the guest's A..E phases, anchored on the 0xe9 markers. */
 function deriveEpisodes(events){
-    var firstM=findIdx(events,function(e){return e.kind==='exit'&&e.reason==='EPT_MISCONFIG'});
-    var dmas=[];
-    events.forEach(function(e,i){if(e.name==='device_dma_transfer')dmas.push(i)});
-
-    function letterOf(rip){if(rip<0x72)return'A';if(rip<0x8f)return'B';if(rip<0xb2)return'C';if(rip<0xcf)return'D';return'E'}
-    var ISR_MIN=0x1b0,ISR_MAX=0x1f0,SETUP_MIN=0x160,SETUP_MAX=0x1af;
-    var lastRip=0,lastAcceptLetter=null;
-
-    var assigned=events.map(function(e){
-        var rip=parseInt(e.rip||'0x0',16);
-        var hasRip=/^0x[0-9a-f]+$/i.test(e.rip||'');
-        var inISR=rip>=ISR_MIN&&rip<=ISR_MAX;
-        var inSetup=rip>=SETUP_MIN&&rip<=SETUP_MAX;
-        if(e.name==='device_dma_transfer')return'E';
-        if(e.name==='kvm_apic_accept_irq'){lastAcceptLetter=letterOf(lastRip);return lastAcceptLetter}
-        if(hasRip&&inISR)return lastAcceptLetter||letterOf(lastRip);
-        if(hasRip&&inSetup)return'A';
-        if(hasRip){lastRip=rip;return letterOf(rip)}
-        return letterOf(lastRip);
+    var accepts=[],dmas=[],markers=[];
+    events.forEach(function(e,i){
+        if(e.name==='kvm_apic_accept_irq')accepts.push(i);
+        if(e.name==='device_dma_transfer')dmas.push(i);
+        if(e.kind==='exit'&&e.reason==='IO_INSTRUCTION'){
+            var info=parseInt(e.info1,16)||0;
+            if(((info>>16)&0xffff)===0xe9)markers.push(i);
+        }
     });
 
     var eps=[];
-    var letters=['A','B','C','D','E'];
-    for(var s=0;s<5;s++){
-        var idx=[];
-        assigned.forEach(function(L,i){if(L===letters[s])idx.push(i)});
-        if(!idx.length)continue;
-        eps.push({
-            start:events[idx[0]].seq,end:events[idx[idx.length-1]].seq,count:idx.length,
-            indices:idx,
-            name:'Phase '+letters[s]+' \u00b7 '+PHASE_LABEL[letters[s]],
-            desc:regionDesc(events.slice(idx[0],idx[idx.length-1]+1),events[idx[0]].seq,events[idx[idx.length-1]].seq)
-        });
+    if(accepts.length>=4){
+        var seenCount={};
+        for(var w=0;w+1<accepts.length;w++){
+            var local={};
+            for(var j=accepts[w]+1;j<accepts[w+1];j++){
+                var e=events[j];
+                if(e.kind==='exit'&&/^0x[0-9a-f]{2,}$/i.test(e.rip||''))local[parseInt(e.rip,16)]=1;
+            }
+            for(var r in local)seenCount[r]=(seenCount[r]||0)+1;
+        }
+        var recurring=[];
+        for(var v in seenCount)if(seenCount[v]>=2)recurring.push(Number(v));
+        function inISR(rip){return recurring.some(function(q){return Math.abs(q-rip)<=0x40})}
+        function mmioExit(e){return e.kind==='exit'&&(e.reason==='EPT_MISCONFIG'||e.reason==='EPT_VIOLATION')}
+
+        var openB=0;
+        for(var k=markers.length?markers[0]+1:0;k<events.length;k++){
+            if(events[k].name==='kvm_entry'){openB=k;break}
+        }
+        function openAfter(lo,hi){
+            for(var i=lo+1;i<hi;i++){
+                var e=events[i];
+                if(e.kind!=='exit')continue;
+                if(mmioExit(e)&&!inISR(parseInt(e.rip||'0',16)))return i;
+            }
+            return -1;
+        }
+        var opens=[0,openB];
+        for(var i=1;i<=3;i++){
+            if(i>=accepts.length)break;
+            opens.push(openAfter(accepts[i-1],accepts[i]));
+        }
+        opens.push(events.length);
+        if(opens.length===6&&opens.every(function(o){return o>=0})){
+            var letters=['A','B','C','D','E'];
+            for(var s=0;s<letters.length;s++){
+                var lo=opens[s],hi=opens[s+1];
+                if(hi<=lo)continue;
+                var idx=[];
+                for(var t=lo;t<hi;t++)idx.push(t);
+                eps.push({
+                    start:events[lo].seq,end:events[hi-1].seq,count:idx.length,indices:idx,
+                    name:'Phase '+letters[s]+' \u00b7 '+PHASE_LABEL[letters[s]],
+                    desc:regionDesc(events.slice(lo,hi),events[lo].seq,events[hi-1].seq)
+                });
+            }
+            if(eps.length)return eps.map(annotateEpisode);
+        }
     }
-    if(eps.length)return eps.map(annotateEpisode);
-    /* Fallback when no markers: strongest motifs (first emulation, IRQ/MSI service, DMA, polling run). */
-    var accepts=[],starts=[0];
-    events.forEach(function(e,i){if(e.name==='kvm_apic_accept_irq')accepts.push(i)});
+
+    var starts=[0];
+    var firstM=findIdx(events,function(e){return e.kind==='exit'&&e.reason==='EPT_MISCONFIG'});
     if(firstM>=0)starts.push(firstM);
     if(accepts.length)starts.push(accepts[0]);
     for(var b=0;b<accepts.length-1;b++){
         if(events[accepts[b+1]].time_us-events[accepts[b]].time_us<40){starts.push(accepts[b]);break}
     }
     dmas.forEach(function(i){starts.push(i)});
-    var pollIdx=[];
-    events.forEach(function(e,i){
-        if(e.kind==='exit'&&e.reason==='EPT_MISCONFIG'&&e.rip==='0x108')pollIdx.push(i);
-    });
-    var pollStart=-1,best=-1,runStart=0;
-    for(var p=1;p<=pollIdx.length;p++){
-        var cont=p<pollIdx.length&&events[pollIdx[p]].time_us-events[pollIdx[p-1]].time_us<40;
-        if(!cont){
-            var len=p-runStart;
-            if(len>=6&&len>best){best=len;pollStart=pollIdx[runStart]}
-            runStart=p;
-        }
-    }
-    if(pollStart>=0)starts.push(pollStart);
     starts=starts.filter(function(v,i){return starts.indexOf(v)===i}).sort(function(a,b){return a-b});
     for(var q=0;q<starts.length;q++){
         var sa=starts[q];
@@ -315,23 +323,6 @@ function episodeFor(index){
         if(index>=ep.start-1&&index<=ep.end-1)return i;
     }
     return D.episodes.length-1;
-}
-
-/* Metrics for the sustained RIP 0x108 MMIO polling run. */
-function pollMetrics(events){
-    var run=[];
-    events.forEach(function(e){
-        if(e.kind==='exit'&&e.reason==='EPT_MISCONFIG'&&e.rip==='0x108')run.push(e);
-    });
-    var gaps=[];
-    for(var i=1;i<run.length;i++)gaps.push(+(run[i].time_us-run[i-1].time_us).toFixed(3));
-    var med=null;
-    if(gaps.length){
-        gaps.sort(function(a,b){return a-b});
-        var m=Math.floor(gaps.length/2);
-        med=gaps.length%2?gaps[m]:+( (gaps[m-1]+gaps[m])/2 ).toFixed(3);
-    }
-    return{poll_count:run.length,poll_median_us:med};
 }
 
 /* ---- presentation helpers ------------------------------------------- */
@@ -357,22 +348,6 @@ function detailType(e){
     if(e.kind==='apic')return'guest APIC programming';
     return e.kind;
 }
-function explanation(e){
-    if(e.name==='kvm_entry')return 'KVM is transferring execution into vCPU 0.  The snapshot is taken at the entry hook; RIP '+esc(e.rip||'—')+' is the guest instruction pointer reported by the trace.';
-    if(e.name==='kvm_exit'){
-        var extra=e.paired_handoff?'  The immediately following trace event is '+esc(e.paired_handoff)+', so this exit crosses onward into userspace emulation.':'';
-        if(e.reason==='EPT_MISCONFIG')extra+='  Here the label is kept literal: this capture uses EPT_MISCONFIG repeatedly on the path that often hands off as KVM_EXIT_MMIO.';
-        return 'Guest execution has stopped and control has returned to KVM with exit reason '+esc(e.reason||'—')+' at RIP '+esc(e.rip||'—')+'.'+extra;
-    }
-    if(e.name==='kvm_userspace_exit')return 'KVM_RUN returns to the userspace VMM with '+esc(e.userspace_reason||'—')+'.  This is the host-side emulation boundary visible in the flow trace.';
-    if(e.name==='kvm_apic_accept_irq')return "KVM's LAPIC path records acceptance of vector 64 for APIC ID 0.  This event is part of the interrupt-delivery path, not itself proof that guest handler code has started.";
-    if(e.name==='kvm_ioapic_set_irq')return 'The KVM IOAPIC tracepoint records pin '+(e.pin||D.meta.device_gsi)+' routed toward vector '+(e.vec||D.meta.device_vector)+'.  The sampler also reads pin '+(e.pin||D.meta.device_gsi)+' RTE from vcpu->kvm->arch.vioapic, so the guest Phase-A RTE programming and this line assertion are both observable.';
-    if(e.name==='kvm_msi_set_irq')return 'KVM_SIGNAL_MSI injected an architectural MSI message from the toy device.  The message carries its own address (0x'+(e.msi_addr!==undefined?e.msi_addr.toString(16):'—')+') and data (vec '+(e.msi_vector!=null?e.msi_vector:'—')+'); it targets the LAPIC directly, so no GSI and no IOAPIC redirection participates in this delivery.';
-    if(e.name==='kvm_apic')return 'The guest writes APIC_'+(e.apic_reg||'reg')+' = '+(e.apic_val||'?')+'.  This is guest APIC programming observed in the KVM trace before later vector-64 activity.';
-    if(e.name==='device_dma_transfer')return 'An eBPF-only device event samples a '+D.meta.dma_xfer_size+'-byte '+(e.dma_dir==='to_device'?'guest-memory → device':'device → guest-memory')+' transfer at GPA '+esc(e.dma_gpa)+'.  It is inserted into the trace flow by monotonic time.';
-    return 'Observed transition in the fused trace/eBPF sequence.';
-}
-
 /* ---- renderers -------------------------------------------------------- */
 
 function renderRoadmap(){
@@ -600,6 +575,11 @@ function irqStateDisplay(e,f){
     if(f==='irr'||f==='isr')return vecList(lapicWindow(e[f]));
     return irqStateMap(e)[f];
 }
+function vecHex(v){
+    if(v==null)return'—';
+    if(typeof v==='number')return'0x'+v.toString(16);
+    return /^0x([0-9a-f]+)$/.test(String(v))?String(v):'0x'+parseInt(String(v),16).toString(16);
+}
 function irqRouteLabel(e){
     var m=/^0x([0-9a-f]+)$/,v;
     if(e.kind==='msi'||e.name==='kvm_msi_set_irq'){
@@ -653,6 +633,9 @@ function renderIRQ(e){
         if(e.name==='kvm_apic_accept_irq'){nodes.forEach(function(id){$(id).classList.add('hot')});edges.forEach(function(id){$(id).classList.add('hot')})}
         if(e.name==='kvm_ioapic_set_irq'){$('irq-ioapic').classList.add('hot');$('edge-lapic').classList.add('hot');$('irq-lapic').classList.add('hot')}
         if(e.name==='kvm_apic')$('irq-lapic').classList.add('hot');
+        $('device-node-sub').textContent='edge source · GSI '+(e.pin!=null?e.pin:D.meta.device_gsi);
+        $('ioapic-node-sub').textContent='pin '+(e.pin!=null?e.pin:D.meta.device_gsi)+' · vec '+vecHex(e.vec!=null?e.vec:parseInt(D.meta.device_vector,16));
+        $('lapic-node-sub').textContent='apicid 0 · vec '+vecHex(e.vec!=null?e.vec:parseInt(D.meta.device_vector,16));
         $('irq-address').textContent='GSI '+D.meta.device_gsi+' → VEC '+D.meta.device_vector;
     }
 
@@ -675,31 +658,41 @@ function renderIRQ(e){
     else{$('irq-state').textContent=(e.kind==='irq'||e.kind==='msi')?'route activity':'idle';$('irq-caption').textContent=(e.kind==='irq'||e.kind==='msi')?'trace route active; IRR/ISR window empty':'no pending/in-service vector in the LAPIC window'}
 }
 function renderDMA(e){
-    var edge=$('dma-edge'),buf=Array.prototype.slice.call($('buffer').children);
-    edge.className='dma-edge';buf.forEach(function(x){x.classList.remove('hot')});
-    $('gpa6000').classList.remove('hot');$('gpa7000').classList.remove('hot');
+    var to=$('dma-edge-to'),from=$('dma-edge-from');
+    to.className=from.className='rt-edge';
+    $('rt-src').classList.remove('hot');$('rt-dst').classList.remove('hot');
     if(e.dma_present){
-        edge.classList.add('hot',e.dma_dir==='to_device'?'to':'from');
-        buf[0].classList.add('hot');
-        $('dma-gpa').textContent=e.dma_gpa;
+        (e.dma_dir==='to_device'?to:from).classList.add('hot');
+        $(e.dma_dir==='to_device'?'rt-src':'rt-dst').classList.add('hot');
         $('device-state').textContent=e.dma_dir==='to_device'?'receiving '+D.meta.dma_xfer_size+' B':'sending '+D.meta.dma_xfer_size+' B';
-        $('device-detail').textContent=e.dma_dir.replace('_',' ')+'\u00a0· eBPF event · verified byte-for-byte for this run';
-        $(e.dma_gpa==='0x6000'?'gpa6000':'gpa7000').classList.add('hot');
-        $('dma-state').textContent=e.dma_dir;
+        $('device-detail').textContent=e.dma_dir==='to_device'?'storing the guest bytes for the return copy':'returning the stored bytes (echo)';
+        $('dma-state').textContent=e.dma_dir.replace('_',' ');
         $('dma-caption').textContent=D.meta.dma_xfer_size+' B at '+e.dma_gpa+' · '+e.dma_dir;
+    }else if(D.dmaFrom!=null&&cursor>=D.dmaFrom){
+        from.className='rt-edge dim';
+        $('rt-dst').classList.add('hot');
+        $('device-state').textContent='round trip returned';
+        $('device-detail').textContent='guest compares returned bytes to the source';
+        $('dma-state').textContent='round-trip · verifying';
+        $('dma-caption').textContent='one-shot round-trip verification runs after DMA_FROM';
+    }else if(D.dmaTo!=null&&cursor>=D.dmaTo){
+        to.className='rt-edge dim';
+        $('rt-src').classList.add('hot');
+        $('device-state').textContent='outbound copy complete';
+        $('device-detail').textContent='awaiting the return copy · no DMA running';
+        $('dma-state').textContent='staged · awaiting return';
+        $('dma-caption').textContent='no DMA in progress between the two transfer hooks';
     }else{
-        $('dma-gpa').textContent='no DMA now';
         $('device-state').textContent=D.meta.device_buffer_size+' B buffer';
-        $('device-detail').textContent='no transfer at current hook';
+        $('device-detail').textContent='no transfer in this phase';
         $('dma-state').textContent='not present';
-        $('dma-caption').textContent='DMA recorded only at the eBPF DMA event';
+        $('dma-caption').textContent='DMA transfers happen only at the two device_dma_transfer hooks';
     }
 }
 function renderNotebook(e){
     $('source-badge').textContent=e.trace_line?'trace + eBPF':'eBPF-only';
     $('detail-type').textContent=detailType(e);
     $('detail-title').textContent=e.name;
-    $('explain').textContent=explanation(e);
     var rows=[
         ['sequence',e.seq],
         ['time',e.time_us.toFixed(3)+' µs from capture start'],
@@ -711,7 +704,7 @@ function renderNotebook(e){
     if(e.reason)rows.push(['VM-exit reason',e.reason]);
     if(e.userspace_reason)rows.push(['userspace reason',e.userspace_reason+' ('+e.userspace_reason.replace('KVM_EXIT_','')+' enum)']);
     if(e.info1)rows.push(['exit info1',e.info1]);
-    if(e.accept_apicid!=null||e.apicid!=null)rows.push(['APIC id',e.apicid]);
+    if(e.apicid!=null)rows.push(['APIC id',e.apicid]);
     if(e.vec!=null)rows.push(['vector',e.vec]);
     if(e.apic_text)rows.push(['APIC write',e.apic_text]);
     if(e.irq_text)rows.push(['IRQ trace',e.irq_text]);
@@ -737,7 +730,6 @@ function renderNotebook(e){
     if(e.dt_prev_us!=null)rows.push(['Δ previous',e.dt_prev_us+' µs']);
     if(e.dt_next_us!=null)rows.push(['Δ next',e.dt_next_us+' µs']);
     $('fields').innerHTML=rows.map(function(r){return '<dt>'+esc(r[0])+'</dt><dd title="'+esc(r[1])+'">'+esc(r[1])+'</dd>'}).join('');
-    $('raw').textContent=e.raw;
 }
 function select(index){
     if(!D||!D.events.length)return;
@@ -756,7 +748,7 @@ function togglePlay(){
     timer=setInterval(function(){if(cursor>=D.events.length-1){togglePlay();return}select(cursor+1)},280);
 }
 function wireToolbar(){
-    $('first').addEventListener('click',function(){select(0)});
+    $('next').addEventListener('click',function(){select(cursor+1)});
     $('prev').addEventListener('click',function(){select(cursor-1)});
     $('play').addEventListener('click',togglePlay);
     $('scrub').addEventListener('input',function(e){select(+e.target.value)});
@@ -777,13 +769,21 @@ Promise.all([
     if(!snaps.length)throw Error('no eBPF snapshots parsed');
     D.events=finalize(buildEvents(snaps,parseTrace(parts[1])));
     D.episodes=deriveEpisodes(D.events);
-    var pm=pollMetrics(D.events);
-    D.poll_count=pm.poll_count;D.poll_median_us=pm.poll_median_us;
+    D.dmaTo=null;D.dmaFrom=null;
+    D.events.forEach(function(x,i){
+        if(x.name!=='device_dma_transfer')return;
+        if(x.dma_dir==='to_device'&&D.dmaTo==null)D.dmaTo=i;
+        if(x.dma_dir==='from_device'&&D.dmaFrom==null)D.dmaFrom=i;
+    });
     $('strip-host').textContent=D.events[0]?D.events[0].cpu:'—';
     $('strip-gsi').textContent=D.meta.device_gsi;
     $('strip-vector').textContent=D.meta.device_vector+' / '+D.meta.msi_vector;
     $('strip-dma').textContent=D.meta.dma_xfer_size+' B';
     $('strip-buf').textContent=D.meta.device_buffer_size+' B';
+    $('dma-src-sub').textContent=(D.dmaTo!=null?'guest source · seq '+(D.dmaTo+1):'guest source');
+    $('dma-dst-sub').textContent=(D.dmaFrom!=null?'guest receive · seq '+(D.dmaFrom+1)+' · echo':'guest receive');
+    $('dma-xfer').textContent=D.meta.dma_xfer_size+' B / transfer';
+    $('scrub').max=D.events.length-1;
     $('task').textContent=(D.events[0]?D.events[0].comm:'vmm')+'-'+(D.events[0]?D.events[0].pid:'?');
     $('status').lastElementChild.textContent=D.events.length+' observations aligned';
     wireToolbar();
