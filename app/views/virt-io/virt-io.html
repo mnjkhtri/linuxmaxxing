@@ -1,55 +1,128 @@
-/* SPDX-License-Identifier: GPL-2.0 */
 <!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Virt I/O</title>
-<link rel="stylesheet" href="../../theme.css?v=7">
-<link rel="stylesheet" href="virt-io.css?v=2">
+<title>KVM virt-I/O state observer</title>
+<link rel="stylesheet" href="virt-io.css?v=3">
 </head>
 <body>
-<main class="vio">
-<header class="head"><div>
-<div class="eyebrow">VIRT · TOY MMIO DEVICE · INTERRUPTS + DMA</div>
-<h1>Virtual <span>I/O</span></h1>
-<p>guest → device MMIO → VMM model → virtual DMA → IOAPIC → LAPIC → guest ISR → EOI</p>
-</div><div id="status" role="status"><i class="trace-dot"></i><span>loading virt-io capture…</span></div></header>
+<main class="io">
+  <header class="head">
+    <div>
+      <div class="eyebrow">TRACE → eBPF SNAPSHOT → I/O STATE</div>
+      <h1>KVM <span>virt-I/O</span> observer</h1>
+      <p>Control-flow transitions and sampled interrupt / DMA state from one toy-VMM run.</p>
+    </div>
+    <div id="status" role="status"><i class="trace-dot"></i><span>loading virt-io capture…</span></div>
+  </header>
 
-<div class="strip panel">
-<div class="mm-strip" id="meta-vec"></div>
-<div id="phase-now" class="phase-now">phase —</div>
-</div>
+  <nav id="roadmap" class="roadmap panel" aria-label="Derived execution episodes"></nav>
 
-<section class="workbench">
-<aside class="roadmap panel" id="phases" aria-label="interrupt and DMA phases"></aside>
+  <section class="workbench">
+    <section class="topology panel">
+      <header class="panel-head">
+        <h2>I/O topology</h2>
+        <div class="strip">
+          <span>vCPU <b>0</b></span><i>|</i>
+          <span>host CPU <b id="strip-host">—</b></span><i>|</i>
+          <span>GSI <b id="strip-gsi">—</b></span><i>|</i>
+          <span>vector <b id="strip-vector">—</b></span><i>|</i>
+          <span>DMA <b id="strip-dma">—</b></span><i>|</i>
+          <span>device buf <b id="strip-buf">—</b></span>
+        </div>
+      </header>
 
-<section class="stage">
-<section class="panel path-panel">
-<header class="panel-head"><h2>Interrupt + DMA path</h2><span id="path-desc">select an observation</span></header>
-<div id="path"></div>
-</section>
+      <div class="scope">
+        <span class="micro">VIRT / IO</span>
+        <strong class="task" id="task">vmm</strong>
+        <span id="episode-name">derived episode</span>
+        <span id="event-clock">t = 0.000 µs</span>
+      </div>
 
-<section class="cols3">
-<section class="panel reg-panel-slot"><div id="rte"></div></section>
-<section class="panel"><div id="irqmat"></div></section>
-<section class="panel dma-panel"><div id="dma" class="dma-body"></div></section>
-</section>
+      <div class="stage">
+        <section class="region execution">
+          <header class="region-title">
+            <div><b>EXECUTION DOMAINS</b><span>current transition across VMM, KVM/VMX, and guest</span></div>
+            <code class="address" id="rip-head">RIP —</code>
+          </header>
+          <div class="domains" id="domains">
+            <div class="domain" data-domain="vmm"><h3>USERSPACE VMM</h3><strong id="vmm-state">waiting</strong><small id="vmm-detail">KVM_RUN boundary</small><span class="statepill" id="vmm-pill">userspace</span></div>
+            <div class="domain" data-domain="kvm"><h3>KVM / VMX</h3><strong id="kvm-state">run loop</strong><small id="kvm-detail">kernel virtualization boundary</small><span class="statepill" id="kvm-pill">kernel</span></div>
+            <div class="domain" data-domain="guest"><h3>GUEST vCPU 0</h3><strong id="guest-state">RIP 0x0</strong><small id="guest-detail">guest execution context</small><span class="statepill" id="guest-pill">guest</span></div>
+          </div>
+          <footer class="region-foot"><strong id="flow-kind">entry</strong><span id="flow-caption">KVM → guest</span></footer>
+        </section>
 
-<section class="panel tl-panel">
-<header class="panel-head"><h2>Raw chronology</h2><span>eBPF snapshots ⇢ kvm trace · click any row</span></header>
-<div id="timeline"></div>
-</section>
-</section>
+        <section class="region interrupts">
+          <header class="region-title">
+            <div><b>INTERRUPT ROUTE</b><span>trace route and sampled LAPIC pending/in-service state</span></div>
+            <code class="address" id="irq-address">GSI — → VEC —</code>
+          </header>
+          <div class="irq-body">
+            <div class="irq-route">
+              <div class="irq-node" id="irq-device"><b>DEVICE</b><span>edge source</span></div>
+              <div class="irq-edge" id="edge-gsi"></div>
+              <div class="irq-node" id="irq-ioapic"><b>IOAPIC</b><span>pin — / RTE</span></div>
+              <div class="irq-edge" id="edge-lapic"></div>
+              <div class="irq-node" id="irq-lapic"><b>LAPIC</b><span>apicid 0 / vec —</span></div>
+            </div>
+            <div class="bitfield">
+              <div class="bit" id="irr-bit"><label>IRR · pending</label><strong>0</strong><div class="desc">sampled interrupt-request state</div></div>
+              <div class="bit" id="isr-bit"><label>ISR · in service</label><strong>0</strong><div class="desc">sampled in-service state</div></div>
+              <div class="bit"><label>RTE observation</label><strong id="rte-val">0x0</strong><div class="desc">capture field; value rides on kvm_ioapic_set_irq snapshots</div></div>
+              <div class="bit"><label>IOAPIC pointer</label><strong id="ioapic-val">—</strong><div class="desc">metadata: ioapic_available=false</div></div>
+            </div>
+          </div>
+          <footer class="region-foot"><strong id="irq-state">idle</strong><span id="irq-caption">no pending/in-service bit at this hook</span></footer>
+        </section>
 
-<aside class="notebook panel">
-<header class="panel-head"><h2>Observation</h2><span id="inspect-type">eBPF snapshot</span></header>
-<div class="inspector-head"><h3 id="inspect-title">—</h3></div>
-<div id="trace-pair" class="trace-pair"></div>
-<dl class="fields" id="fields"><dt>state</dt><dd>loading</dd></dl>
-</aside>
-</section>
+        <section class="region dma">
+          <header class="region-title">
+            <div><b>DMA / GPA OBSERVATIONS</b><span>only addresses and directions actually captured by the eBPF DMA event</span></div>
+            <code class="address">64 B / transfer</code>
+          </header>
+          <div class="dma-body">
+            <div class="mem-bus">
+              <div class="mem-side"><h3>GUEST PHYSICAL MEMORY</h3><strong id="dma-gpa">no DMA now</strong><small>observed endpoints from this run</small></div>
+              <div class="dma-edge" id="dma-edge"></div>
+              <div class="device-side"><h3>TOY DEVICE</h3><strong id="device-state">256 B buffer</strong><small id="device-detail">no transfer sampled at current hook</small><div class="buffer" id="buffer"><i></i><i></i><i></i><i></i></div></div>
+            </div>
+            <div class="gpa-map">
+              <div class="gpa" id="gpa6000"><code>GPA 0x6000</code><span>DMA_TO source at seq 85</span></div>
+              <div class="gpa" id="gpa7000"><code>GPA 0x7000</code><span>DMA_FROM destination at seq 151</span></div>
+            </div>
+          </div>
+          <footer class="region-foot"><strong id="dma-state">not present</strong><span id="dma-caption">DMA field is sampled only at the eBPF DMA event</span></footer>
+        </section>
+      </div>
+
+      <section class="chronology">
+        <div class="chrono-head"><b>LOCAL CHRONOLOGY</b><span>13-event window centered on selection</span><span id="window-range"></span></div>
+        <div id="flow-window" class="flow-window"></div>
+      </section>
+    </section>
+
+    <aside class="notebook panel">
+      <header class="panel-head"><h2>Transition internals</h2><span id="source-badge">trace + eBPF</span></header>
+      <div class="note-body">
+        <div class="type"><i class="trace-dot"></i><span id="detail-type">VM entry</span></div>
+        <h2 id="detail-title">kvm_entry</h2>
+        <p class="explain" id="explain"></p>
+        <dl class="fields" id="fields"></dl>
+        <div class="raw"><label>raw trace detail</label><code id="raw">—</code></div>
+        <div class="science" id="science"></div>
+      </div>
+      <section class="toolbar">
+        <button id="first" title="first">|←</button>
+        <button id="prev" title="previous">←</button>
+        <button id="play" title="play/pause">▶</button>
+        <input id="scrub" type="range" min="0" max="164" value="0" aria-label="event scrubber">
+        <span id="counter">1 / 165</span>
+      </section>
+    </aside>
+  </section>
 </main>
-<script src="virt-io.js?v=2"></script>
+<script src="virt-io.js?v=3"></script>
 </body>
 </html>
