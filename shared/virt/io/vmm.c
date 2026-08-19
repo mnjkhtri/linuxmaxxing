@@ -3,15 +3,23 @@
  * Toy VMM for the IO-virtualization experiment.
  *
  * One VM, one vCPU, flat 32-bit protected-mode guest with paging off (GVA == GPA), one guest-RAM slot, and one tiny MMIO virtual device.
- * The guest programs its own virtual LAPIC/IOAPIC and drives the device; this VMM only provides the device model and the interrupt line.
+ * The guest programs its own virtual LAPIC/IOAPIC and drives the device; this VMM provides the device model and the interrupt transports.
+ *
+ * Two explicit interrupt-delivery paths (never conflated):
+ *   legacy commands (CMD_IRQ_ONLY, CMD_DMA_TO_DEVICE, CMD_DMA_FROM_DEVICE):
+ *     KVM_IRQ_LINE -> virtual IOAPIC -> virtual LAPIC -> guest IDT vector DEVICE_VECTOR
+ *   MSI command (CMD_MSI_ONLY):
+ *     KVM_SIGNAL_MSI with an architectural MSI message -> virtual LAPIC -> guest IDT vector MSI_VECTOR
+ *     (the MSI message includes its own routing/delivery; no GSI and no IOAPIC participate)
  *
  * Main path for each operation:
  *   guest writes COMMAND over MMIO
  *     -> KVM_EXIT_MMIO
  *       -> device_mmio_write() -> device_execute_command()
  *         -> device_dma_transfer() (virtual DMA into guest RAM)
- *         -> device_raise_irq()   (KVM_IRQ_LINE assert + deassert)
- *           -> KVM virtual IOAPIC -> KVM virtual LAPIC -> guest IDT -> ISR
+ *       -> legacy: device_raise_legacy_irq() (KVM_IRQ_LINE assert + deassert)
+ *                    or MSI: device_signal_msi() (KVM_SIGNAL_MSI)
+ *         -> KVM virtual IOAPIC/LAPIC -> guest IDT -> ISR
  *
  * NOTE: this is deliberately VIRTUAL DMA, not physical PCI bus-master DMA.
  * "Device -> guest memory" is a copy between the device's internal buffer and the registered KVM memory-slot backing (host userspace RAM).
@@ -111,11 +119,11 @@ __attribute__((noinline)) int device_dma_transfer(struct toy_device *dev, uint8_
 }
 
 /*
- * One legacy edge on DEVICE_GSI: assert then deassert through KVM_IRQ_LINE.
- * The in-kernel irqchip (virtual IOAPIC + LAPIC) delivers vector DEVICE_VECTOR; the VMM never injects directly.
- * Every command that raises the interrupt uses this same edge path.
+ * One legacy edge on DEVICE_GSI through KVM_IRQ_LINE: assert then deassert.
+ * The in-kernel irqchip (virtual IOAPIC + LAPIC) delivers vector DEVICE_VECTOR.
+ * This path is used for the legacy interrupt (Phase B), the pending case (Phase C), and DMA completion (Phase E).
  */
-static void raise_gsi_edge(int vm)
+static void device_raise_legacy_irq(int vm)
 {
 	struct kvm_irq_level level = {.irq = DEVICE_GSI, .level = 1};
 
@@ -127,9 +135,32 @@ static void raise_gsi_edge(int vm)
 }
 
 /*
- * Execute a command synchronously, then signal completion through STATUS + IRQ.
- * CMD_IRQ_BURST raises IRQ_BURST_PULSES distinct edges on the same GSI while the guest keeps IF=0.
- * The LAPIC holds one pending IRR bit for DEVICE_VECTOR regardless of how many edges arrive, which is the point of the phase.
+ * Deliver one architectural x86 MSI message for this single-vCPU xAPIC setup.
+ * The message targets LAPIC ID 0 in physical destination mode with fixed edge-triggered delivery of MSI_VECTOR.
+ * The MSI address and data encode the routing/delivery themselves, so the LAPIC accepts vector 0x41 directly and the IOAPIC is bypassed.
+ * Address encoding (xAPIC MSI base at 0xFEE00000): bits[31:20] carry the destination APIC ID shifted by 20, bit 3 sets logical/physical destination mode (cleared = physical).
+ * Data encoding: bits[7:0] hold the vector, bits[10:8] the delivery mode (000 = fixed), and bit 15 the trigger mode (0 = edge).
+ */
+static void device_signal_msi(int vm)
+{
+	struct kvm_msi msi = {0};
+
+	msi.address_lo = 0xfee00000u | (0u << 20);                       /* Physical mode, destination APIC ID 0. */
+	msi.address_hi = 0;
+	msi.data = MSI_VECTOR | (0u << 8) | (0u << 15);                  /* Fixed (000), edge, vector 0x41. */
+
+	if (ioctl(vm, KVM_SIGNAL_MSI, &msi) <= 0)
+	{
+		/* KVM_SIGNAL_MSI returns >0 delivered, 0 guest-blocked, -1 error; none of those is success here. */
+		perror("KVM_SIGNAL_MSI");
+		fprintf(stderr, "MSI delivery failed for Phase D.\n");
+		exit(1);
+	}
+}
+
+/*
+ * Execute a command synchronously, then signal completion through STATUS + the matching interrupt transport.
+ * CMD_MSI_ONLY is the only MSI command; every other successful command uses the legacy KVM_IRQ_LINE edge.
  */
 static void device_execute_command(int vm, struct toy_device *dev, uint8_t *guest_mem, uint64_t guest_mem_size)
 {
@@ -139,7 +170,7 @@ static void device_execute_command(int vm, struct toy_device *dev, uint8_t *gues
 	switch (dev->command)
 	{
 	case CMD_IRQ_ONLY:
-	case CMD_IRQ_BURST:
+	case CMD_MSI_ONLY:
 		ret = 0; /* pure interrupt delivery; no I/O data changes */
 		break;
 	case CMD_DMA_TO_DEVICE:
@@ -159,13 +190,10 @@ static void device_execute_command(int vm, struct toy_device *dev, uint8_t *gues
 	/* Only a successful operation raises the completion interrupt; a failed copy must not look done. */
 	if (ret != 0)
 		return;
-	if (dev->command == CMD_IRQ_BURST)
-	{
-		for (unsigned int i = 0; i < IRQ_BURST_PULSES; i++)
-			raise_gsi_edge(vm);
-	}
+	if (dev->command == CMD_MSI_ONLY)
+		device_signal_msi(vm);
 	else
-		raise_gsi_edge(vm);
+		device_raise_legacy_irq(vm);
 }
 
 /* MMIO read: synthesize the register value in the guest's data buffer. */
@@ -249,6 +277,16 @@ int main(void)
 		return 1;
 	}
 
+	/*
+	 * Phase D depends on KVM_SIGNAL_MSI, so the capability must be present before the run starts.
+	 * If this kernel cannot signal MSI, fail loudly and explain rather than silently falling back to KVM_IRQ_LINE.
+	 */
+	if (ioctl(kvm, KVM_CHECK_EXTENSION, KVM_CAP_SIGNAL_MSI) <= 0)
+	{
+		fprintf(stderr, "KVM_CAP_SIGNAL_MSI is not supported by this kernel; the MSI Phase D cannot be demonstrated.\n");
+		return 1;
+	}
+
 	/* KVM_CREATE_VM creates one VM object; its fd is used for VM-wide ioctls. */
 	int vm = ioctl(kvm, KVM_CREATE_VM, 0);
 	if (vm < 0)
@@ -261,6 +299,7 @@ int main(void)
 	 * In-kernel irqchip: KVM emulates the legacy PIC plus the virtual IOAPIC and gives each vCPU a local APIC.
 	 * Must be created before the vCPU so the vCPU gets its LAPIC.
 	 * The guest then programs these virtual devices itself; the VMM never injects vectors directly.
+	 * The irqchip is also required for the KVM_SIGNAL_MSI path used in Phase D.
 	 */
 	if (ioctl(vm, KVM_CREATE_IRQCHIP, 0) < 0)
 	{

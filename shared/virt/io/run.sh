@@ -62,7 +62,7 @@ mkdir "$trace_dir/instances/$instance_name"
 trace_instance="$trace_dir/instances/$instance_name"
 grep -qw mono "$trace_instance/trace_clock" || exit 1
 echo mono > "$trace_instance/trace_clock"
-for event in kvm_entry kvm_exit kvm_userspace_exit kvm_ioapic_set_irq kvm_apic_accept_irq kvm_inj_virq kvm_eoi kvm_apic; do
+for event in kvm_entry kvm_exit kvm_userspace_exit kvm_ioapic_set_irq kvm_apic_accept_irq kvm_inj_virq kvm_eoi kvm_apic kvm_msi_set_irq; do
 	[ -d "$trace_instance/events/kvm/$event" ] || exit 1
 	echo 1 > "$trace_instance/events/kvm/$event/enable"
 done

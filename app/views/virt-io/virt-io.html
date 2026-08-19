@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KVM virt-I/O state observer</title>
-<link rel="stylesheet" href="virt-io.css?v=15">
+<link rel="stylesheet" href="virt-io.css?v=16">
 </head>
 <body>
 <main class="io">
@@ -68,11 +68,18 @@
               <div class="irq-edge" id="edge-lapic"></div>
               <div class="irq-node" id="irq-lapic"><b>LAPIC</b><span>apicid 0 / vec —</span></div>
             </div>
+            <div class="msi-route" id="msi-route">
+              <div class="irq-node" id="irq-device-msi"><b>DEVICE</b><span>MSI source (toy virtual device)</span></div>
+              <div class="irq-edge" id="edge-msg"></div>
+              <div class="irq-node" id="irq-msg"><b>MSI MESSAGE</b><span id="msi-msg-detail">addr — · dest — · fixed · edge</span></div>
+              <div class="irq-edge" id="edge-msi-lapic"></div>
+              <div class="irq-node" id="irq-lapic-msi"><b>LAPIC</b><span id="msi-vec-detail">vec —</span></div>
+            </div>
             <div class="bitfield">
               <div class="bit" id="irr-bit"><label>IRR · pending</label><strong>0</strong><div class="desc">sampled interrupt-request state</div></div>
               <div class="bit" id="isr-bit"><label>ISR · in service</label><strong>0</strong><div class="desc">sampled in-service state</div></div>
-              <div class="bit"><label>RTE observation</label><strong id="rte-val">0x0</strong><div class="desc">capture field; value rides on kvm_ioapic_set_irq snapshots</div></div>
-              <div class="bit"><label>IOAPIC pointer</label><strong id="ioapic-val">—</strong><div class="desc">metadata: ioapic_available=false</div></div>
+              <div class="bit"><label id="aux-label-a">RTE observation</label><strong id="rte-val">0x0</strong><div class="desc" id="aux-desc-a">capture field; value rides on kvm_ioapic_set_irq snapshots</div></div>
+              <div class="bit"><label id="aux-label-b">IOAPIC pointer</label><strong id="ioapic-val">—</strong><div class="desc" id="aux-desc-b">metadata: ioapic_available=false</div></div>
             </div>
           </div>
           <footer class="region-foot"><strong id="irq-state">idle</strong><span id="irq-caption">no pending/in-service bit at this hook</span></footer>
@@ -119,6 +126,6 @@
     </aside>
   </section>
 </main>
-<script src="virt-io.js?v=15"></script>
+<script src="virt-io.js?v=16"></script>
 </body>
 </html>

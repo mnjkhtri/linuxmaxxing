@@ -34,19 +34,21 @@
 #define CMD_IRQ_ONLY 1u
 #define CMD_DMA_TO_DEVICE 2u
 #define CMD_DMA_FROM_DEVICE 3u
-#define CMD_IRQ_BURST 4u /* Several same-vector GSI pulses while the guest has IF=0. */
-
-/* Deterministic edge-pulse count for CMD_IRQ_BURST (each pulse is an assert/deassert pair). */
-#define IRQ_BURST_PULSES 3u
+#define CMD_MSI_ONLY 4u /* A single MSI message delivered through KVM_SIGNAL_MSI, bypassing the IOAPIC. */
 
 /* STATUS bits read from REG_STATUS. */
 #define STATUS_BUSY 0x01u
 #define STATUS_DONE 0x02u
 #define STATUS_ERROR 0x04u
 
-/* Interrupt routing: one legacy edge-triggered GSI into the in-kernel irqchip. */
+/*
+ * Interrupt routing: one legacy edge-triggered GSI into the in-kernel irqchip.
+ * DEVICE_GSI / DEVICE_VECTOR stay on the legacy KVM_IRQ_LINE -> IOAPIC -> LAPIC path for Phases B, C and E.
+ * MSI_VECTOR is a distinct vector delivered only by the MSI message in Phase D (no GSI, no IOAPIC).
+ */
 #define DEVICE_GSI 4u
 #define DEVICE_VECTOR 0x40u
+#define MSI_VECTOR 0x41u
 
 /* Device internal buffer bounds. */
 #define DEVICE_BUFFER_SIZE 256u
@@ -59,6 +61,6 @@
 /* Phase markers written through MARKER_PORT. */
 #define MARKER_APIC_READY 0x11u
 #define MARKER_IRQ_PENDING_IF0 0x12u
-#define MARKER_IRQ_BURST_PENDING 0x13u /* Sync point: burst raised while IF=0, nothing serviced yet. */
+#define MARKER_MSI 0x13u /* Sync point: MSI already delivered (vector 0x41), guest ISR may have run. */
 
 #endif /* DEVICE_H */

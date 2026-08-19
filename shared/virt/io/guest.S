@@ -19,12 +19,12 @@
  *   A  APIC ready  -- install IDT, configure LAPIC + IOAPIC RTE(4), marker, sti
  *   B  normal IRQ  -- CMD_IRQ_ONLY, full IOAPIC -> LAPIC -> inject -> ISR -> EOI
  *   C  pending while IF=0 -- cli, CMD_IRQ_ONLY, sync marker, sti;nop, deliver
- *   D  IRQ burst while IF=0 -- cli, CMD_IRQ_BURST (IRQ_BURST_PULSES pulses on the same GSI), sync marker, sti;nop
- *   D shows coalescing: several same-vector edges hold ONE LAPIC IRR bit, and one ISR run services the burst.
- *   E  DMA_TO_DEVICE / DMA_FROM_DEVICE (existing DMA phase, renumbered from D)
+ *   D  MSI         -- CMD_MSI_ONLY, KVM_SIGNAL_MSI bypasses the IOAPIC, LAPIC -> IDT[0x41] -> ISR -> EOI
+ *   E  DMA_TO_DEVICE / DMA_FROM_DEVICE (existing DMA phase)
  *   E verifies every DMA byte: DMA_TO reads the device buffer back, DMA_FROM compares the destination.
  *   Any verification failure halts permanently, and the VMM reports that halt as a failed run.
  *   Only byte-exact DMA reaches port 0x82, the VMM's sole success signal.
+ *   IRQ count progression enforced by the waits: B=1, C=2, D(MSI)=3, E DMA_TO=4, E DMA_FROM=5.
  *
  * Constants must stay in sync with device.h.
  */
@@ -43,12 +43,11 @@
 .set CMD_IRQ_ONLY,        1           /* no I/O data; proves pure interrupt delivery */
 .set CMD_DMA_TO_DEVICE,   2           /* guest RAM -> device internal buffer */
 .set CMD_DMA_FROM_DEVICE, 3           /* device internal buffer -> guest RAM */
-.set CMD_IRQ_BURST,       4           /* several same-vector GSI pulses while IF=0 */
-
-.set IRQ_BURST_PULSES, 3
+.set CMD_MSI_ONLY,        4           /* MSI message via KVM_SIGNAL_MSI; bypasses IOAPIC */
 
 .set DEVICE_GSI,    4                 /* global system interrupt this device raises */
-.set DEVICE_VECTOR, 0x40              /* interrupt vector routed into the guest IDT */
+.set DEVICE_VECTOR, 0x40              /* legacy vector routed into the guest IDT */
+.set MSI_VECTOR,    0x41              /* MSI vector (distinct, so captures tell 0x40 vs 0x41 apart) */
 
 .set DMA_XFER_SIZE, 64                /* tiny deterministic transfer size */
 
@@ -56,7 +55,7 @@
 .set DONE_PORT,   0x82                /* outb terminates the VMM run */
 .set MARKER_APIC_READY,      0x11     /* phase A complete: LAPIC+IOAPIC programmed */
 .set MARKER_IRQ_PENDING_IF0, 0x12     /* phase C: IRQ raised while guest IF=0 */
-.set MARKER_IRQ_BURST_PENDING, 0x13   /* phase D: burst raised while IF=0, nothing serviced yet */
+.set MARKER_MSI,             0x13     /* phase D: MSI command written; MSI delivered as vector 0x41 */
 
 /* ---- arch MMIO regions (virtual LAPIC / IOAPIC) ---- */
 .set LAPIC_BASE,  0xfee00000          /* architectural local APIC MMIO page */
@@ -68,7 +67,7 @@
 .set IOAPIC_WIN,  0x10                /* IOWIN: register value */
 
 /* ---- guest memory layout ---- */
-.set IDT_BASE,  0x1000                /* 256-entry IDT (gate 0x40 built at runtime) */
+.set IDT_BASE,  0x1000                /* 256-entry IDT (gates 0x40 and 0x41 built at runtime) */
 .set STACK_TOP, 0x0e00                /* stack top; grows down, stays below IDT */
 .set IRQ_COUNT, 0x4000                /* u32 bumped by the ISR; phases key off it */
 .set DMA_SRC,   0x6000                /* DMA_TO source buffer */
@@ -174,18 +173,15 @@ protected_mode:
 	WAIT_IRQ_COUNT 2
 
 	/*
-	 * ---- Phase D: same-vector IRQ burst while IF=0. ----
-	 * The VMM raises IRQ_BURST_PULSES distinct edges on DEVICE_GSI while IF is still 0.
-	 * The LAPIC holds one IRR bit for DEVICE_VECTOR no matter how many edges arrive: IRR is a bit, not a counter.
-	 * The marker forces a synchronization VM exit so the observer samples that single-pending state deterministically.
-	 * sti's one instruction shadow means 0x40 only delivers on the next instruction (nop), exactly one ISR run later.
+	 * ---- Phase D: MSI bypasses the GSI/IOAPIC route. ----
+	 * IF is already enabled here (no CLI in this phase).  The guest writes CMD_MSI_ONLY over MMIO;
+	 * the VMM device model sends one architectural MSI message via KVM_SIGNAL_MSI, which delivers
+	 * vector 0x41 straight to the LAPIC.  No GSI and no IOAPIC redirection participates in the delivery.
+	 * The marker forces a synchronization VM exit so the observer can sample the MSI route deterministically.
 	 */
-	cli
-	movl $CMD_IRQ_BURST, DEVICE_MMIO_BASE + REG_COMMAND
-	movb $MARKER_IRQ_BURST_PENDING, %al
+	movb $MARKER_MSI, %al
 	outb %al, $MARKER_PORT
-	sti                            /* IF becomes 1 only after the next instruction */
-	nop                            /* consume the STI shadow; the single pending vector now injects */
+	movl $CMD_MSI_ONLY, DEVICE_MMIO_BASE + REG_COMMAND
 	WAIT_IRQ_COUNT 3
 
 	/* ---- Phase E: virtual DMA (device internal buffer <-> guest RAM), existing DMA unchanged. ---- */
@@ -229,18 +225,15 @@ dma_failed:
 	hlt
 
 /*
- * Build the single 32-bit interrupt gate at IDT[0x40] and load the table.
+ * Build one 32-bit interrupt gate at IDT[\vector] for \handler.
  * Descriptor layout (8 bytes): offset[15:0] | selector | 0 | P/DPL/type | offset[31:16].
  * KERNEL_CS means the handler runs in ring-0 flat code; 0x8e = present, DPL=0, 32-bit interrupt gate.
  * Built at runtime because the handler address is only resolvable as a relocation, not as split data.
  */
-setup_idt:
-	pushl %edi
-	pushl %eax
-	pushl %ebx
-	movl $irq_handler, %ebx
+.macro BUILD_GATE handler, vector
+	movl $\handler, %ebx
 	movl $IDT_BASE, %edi
-	addl $(DEVICE_VECTOR * 8), %edi   /* IDT[DEVICE_VECTOR] */
+	addl $(\vector * 8), %edi
 	movw %bx, 0(%edi)          /* handler offset[15:0] */
 	movw $KERNEL_CS, 2(%edi)   /* segment selector = ring-0 code */
 	movb $0x00, 4(%edi)        /* descriptor byte 4 reserved */
@@ -248,14 +241,25 @@ setup_idt:
 	movl %ebx, %eax
 	shrl $16, %eax
 	movw %ax, 6(%edi)          /* handler offset[31:16] */
+.endm
+
+setup_idt:
+	pushl %edi
+	pushl %eax
+	pushl %ebx
+	BUILD_GATE irq_handler, DEVICE_VECTOR
+	BUILD_GATE msi_handler, MSI_VECTOR
 	lidt idt_descriptor
 	popl %ebx
 	popl %eax
 	popl %edi
 	ret
 
-/* Guest ISR for vector 0x40: acknowledge, observe device, then architecturally EOI. */
-irq_handler:
+/*
+ * Common ISR body for both vectors: bump irq_count, read the device STATUS, ack, then architecturally EOI.
+ * Both the legacy (0x40) and MSI (0x41) handlers terminate in this same body so each EOI is correct.
+ */
+isr_body:
 	pusha                                              /* preserve all guest GPRs */
 	incl irq_count                                     /* phases key off this bump */
 	movl DEVICE_MMIO_BASE + REG_STATUS, %eax           /* read device STATUS via MMIO */
@@ -264,6 +268,14 @@ irq_handler:
 	movl $0, LAPIC_BASE + LAPIC_EOI                    /* EOI to virtual LAPIC */
 	popa
 	iret                                               /* return, restoring EFLAGS (IF) */
+
+/* Guest ISR for vector 0x40 delivered through the legacy IOAPIC -> LAPIC path. */
+irq_handler:
+	jmp isr_body
+
+/* Guest ISR for vector 0x41 delivered by the MSI message, bypassing the IOAPIC. */
+msi_handler:
+	jmp isr_body
 
 /* ================= data / tables ================= */
 .align 8
@@ -277,13 +289,13 @@ gdt_descriptor:
 	.long gdt                           /* base = 0 (loaded at GPA 0) */
 
 idt_descriptor:
-	.word (DEVICE_VECTOR * 8 + 8) - 1   /* limit: gate at index 0x40 */
+	.word (MSI_VECTOR * 8 + 8) - 1   /* limit: gate at index 0x41 */
 	.long IDT_BASE                      /* base = 0x1000 */
 
-/* IDT: gate at vector 0x40 is built at runtime into this reserved region. */
+/* IDT: gates at vectors 0x40 and 0x41 are built at runtime into this reserved region. */
 .org IDT_BASE
 idt:
-	.space DEVICE_VECTOR * 8 + 8, 0
+	.space MSI_VECTOR * 8 + 8, 0
 
 /* IRQ bookkeeping: incremented by the ISR. */
 .org IRQ_COUNT

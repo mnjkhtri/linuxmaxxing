@@ -33,7 +33,8 @@ enum io_event_type
 	IO_EVENT_KVM_EOI = 6,
 	IO_EVENT_KVM_APIC = 7,
 	IO_EVENT_DEVICE_DMA_TRANSFER = 8,
-	IO_EVENT_COUNT = 9,
+	IO_EVENT_KVM_MSI_SET_IRQ = 9,
+	IO_EVENT_COUNT = 10,
 };
 
 /* Which boundary this snapshot belongs to. */
@@ -51,12 +52,22 @@ struct vio_context
 	char comm[16];	  /* Task name of the probing task. */
 };
 
-/* Best-effort LAPIC/IOAPIC sample taken at the boundary for DEVICE_GSI / DEVICE_VECTOR. */
+/* Best-effort LAPIC/IOAPIC sample taken at the boundary. */
 struct vio_controller
 {
-	unsigned long long rte; /* IOAPIC redirection entry for DEVICE_GSI (64 bits). */
-	unsigned char irr;		/* LAPIC IRR bit for DEVICE_VECTOR. */
-	unsigned char isr;		/* LAPIC ISR bit for DEVICE_VECTOR. */
+	unsigned long long rte;			 /* IOAPIC redirection entry for DEVICE_GSI (64 bits). */
+	unsigned char irr;				 /* LAPIC IRR bit for the sampled vector. */
+	unsigned char isr;				 /* LAPIC ISR bit for the sampled vector. */
+	unsigned int vector;			 /* Vector the IRR/ISR bits were sampled for. */
+	unsigned char vector_sampled;	 /* 1 when a real vector was sampled, 0 when none was available. */
+};
+
+/* An observed architectural MSI message; only present when the MSI tracepoint fired. */
+struct vio_msi
+{
+	unsigned char present;			 /* 1 when kvm_msi_set_irq produced this observation. */
+	unsigned long long address;		 /* Raw MSI address (xAPIC base plus destination fields). */
+	unsigned long long data;		 /* Raw MSI data (delivery mode, trigger, vector). */
 };
 
 /* The uprobed virtual-DMA operation; only the fields that vary are recorded. */
@@ -74,6 +85,7 @@ struct vio_state
 	unsigned long long apic;	  /* struct kvm_lapic *, when this tracepoint exposes one. */
 	unsigned long long ioapic;	  /* struct kvm_ioapic *, when this tracepoint exposes one. */
 	struct vio_controller controller;
+	struct vio_msi msi;
 	struct vio_dma dma;
 };
 

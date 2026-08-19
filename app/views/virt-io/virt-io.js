@@ -37,7 +37,7 @@ function parseBpf(text){
         try{r=JSON.parse(line)}catch(ignore){return}
         if(r.kind==='meta'){D=D||{};D.meta=r;return}
         if(r.kind!=='snapshot')return;
-        var st=r.state||{},ct=st.controller||{},d=st.dma||{};
+        var st=r.state||{},ct=st.controller||{},d=st.dma||{},ms=st.msi||{};
         out.push({
             seq:Number(r.seq),
             time_ns:Number(r.time_ns),
@@ -46,6 +46,10 @@ function parseBpf(text){
             ctx:r.context||{},
             vcpu:st.vcpu,kvm:st.kvm,apic:st.apic,ioapic:st.ioapic,
             rte:ct.rte,irr:ct.irr,isr:ct.isr,
+            vec_sampled:ct.vector_sampled,vec:ct.vector,
+            msi_present:ms.present,msi_addr:ms.address,msi_data:ms.data,
+            msi_vector:ms.vector,msi_dest:ms.destination,msi_logical:ms.logical,
+            msi_level:ms.level_triggered,msi_delivery:ms.delivery_mode,
             dpresent:d.present,dgpa:d.gpa,ddir:d.dir
         });
     });
@@ -80,6 +84,9 @@ function parseTrace(text){
         }else if(e.type==='kvm_apic_accept_irq'){
             var ac=e.body.match(/apicid\s+(\d+)\s+vec\s+(\d+)\s+\(([^)]+)\)/i);
             if(ac){e.apicid=ac[1];e.vec=ac[2];e.mode=ac[3].split('|')}
+        }else if(e.type==='kvm_msi_set_irq'){
+            var msi=e.body.match(/address=0x([0-9a-f]+)\s+data=0x([0-9a-f]+)/i);
+            if(msi){e.msi_address='0x'+msi[1];e.msi_data='0x'+msi[2]}
         }else if(e.type==='kvm_apic'){
             var aw=e.body.match(/apic_(\w+)\s*=\s*(0x[0-9a-f]+)/i);
             if(aw){e.reg=aw[1];e.val=aw[2]}
@@ -92,8 +99,8 @@ function parseTrace(text){
 /* ---- event model ------------------------------------------------------ */
 
 var KINDS={kvm_entry:'entry',kvm_exit:'exit',kvm_userspace_exit:'handoff',
-    kvm_apic_accept_irq:'irq',kvm_ioapic_set_irq:'irq',kvm_apic:'apic',
-    device_dma_transfer:'dma'};
+    kvm_apic_accept_irq:'irq',kvm_ioapic_set_irq:'irq',kvm_msi_set_irq:'msi',
+    kvm_apic:'apic',device_dma_transfer:'dma'};
 
 /* Join each eBPF snapshot with its line-by-line trace record into one stream. */
 function buildEvents(snaps,trs){
@@ -105,6 +112,10 @@ function buildEvents(snaps,trs){
             seq:f.seq,name:f.name,time_ns:f.time_ns,
             vcpu_ptr:f.vcpu,kvm_ptr:f.kvm,apic_ptr:f.apic,ioapic_ptr:f.ioapic,
             irr:f.irr,isr:f.isr,rte:f.rte,
+            vec_sampled:f.vec_sampled,vec:f.vec,
+            msi_present:f.msi_present,msi_addr:f.msi_addr,msi_data:f.msi_data,
+            msi_vector:f.msi_vector,msi_dest:f.msi_dest,msi_logical:f.msi_logical,
+            msi_level:f.msi_level,msi_delivery:f.msi_delivery,
             dma_present:f.dpresent,dma_gpa:f.dgpa,dma_dir:f.ddir,
             reason:'',info1:'',userspace_reason:'',rip:'',apic_text:'',irq_text:''
         };
@@ -118,19 +129,21 @@ function buildEvents(snaps,trs){
             if(t.type==='kvm_apic')e.apic_text=t.body,e.apic_reg=t.reg,e.apic_val=t.val;
             if(t.type==='kvm_apic_accept_irq')e.irq_text=t.body,e.apicid=t.apicid,e.vec=t.vec;
             if(t.type==='kvm_ioapic_set_irq')e.irq_text=t.body,e.pin=t.pin,e.vec=t.vec;
+            if(t.type==='kvm_msi_set_irq')e.irq_text=t.body,e.trace_msi_addr=t.msi_address,e.trace_msi_data=t.msi_data;
         }else{
             e.trace_line=null;e.raw='eBPF-only device DMA observation';e.flags='';
             e.cpu=f.ctx.cpu;e.pid=f.ctx.pid;e.tid=f.ctx.tid;e.comm=f.ctx.comm;
         }
         e.kind=KINDS[f.name]||f.name;
         e.accent=e.kind==='entry'?'cyan':e.kind==='exit'?'orange':e.kind==='handoff'?'green':
-            e.kind==='irq'?'yellow':e.kind==='dma'?'blue':e.kind==='apic'?'violet':e.kind;
+            e.kind==='irq'?'yellow':e.kind==='dma'?'blue':e.kind==='apic'?'violet':e.kind==='msi'?'violet':e.kind;
         if(e.kind==='entry'){e.from='kvm';e.to='guest';e.label='VM entry'}
         else if(e.kind==='exit'){e.from='guest';e.to='kvm';e.label=e.reason||'VM exit'}
         else if(e.kind==='handoff'){e.from='kvm';e.to='vmm';e.label=(e.userspace_reason||'userspace exit').replace('KVM_EXIT_','')}
         else if(e.kind==='dma'){e.from=e.dma_dir==='to_device'?'memory':'device';e.to=e.dma_dir==='to_device'?'device':'memory';e.label=e.dma_dir==='to_device'?'DMA → device':'DMA ← device'}
         else if(e.name==='kvm_apic_accept_irq'){e.from='device';e.to='lapic';e.label='APIC accepts vec '+(e.vec||metaVec())}
         else if(e.name==='kvm_ioapic_set_irq'){e.from='gsi';e.to='lapic';e.label='IOAPIC pin '+(e.pin||metaGsi())+' → vec '+(e.vec||metaVec())}
+        else if(e.name==='kvm_msi_set_irq'){e.from='vmm';e.to='lapic';e.label='MSI msg → vec '+(e.msi_vector||metaMsiVec())+' · no IOAPIC'}
         else if(e.name==='kvm_apic'){e.from='guest';e.to='lapic';e.label='APIC '+(e.apic_reg||'reg')+' write'}
         else{e.from='';e.to='';e.label=e.name}
         return e;
@@ -138,6 +151,7 @@ function buildEvents(snaps,trs){
 }
 function metaGsi(){return D&&D.meta?D.meta.device_gsi:''}
 function metaVec(){return D&&D.meta?D.meta.device_vector:''}
+function metaMsiVec(){return D&&D.meta?D.meta.msi_vector:''}
 
 /* Derive the shared timeline, cross-references, and hand-off pairing. */
 function finalize(events){
@@ -172,7 +186,7 @@ function regionName(evs,isLast){
     var ac=evs.filter(function(e){return e.name==='kvm_apic_accept_irq'}).length;
     var mis=evs.filter(function(e){return e.name==='kvm_exit'&&e.reason==='EPT_MISCONFIG'&&e.rip==='0x108'}).length;
     if(mis>=6)return 'MMIO polling motif';
-    if(ac>=3)return 'IRQ burst + service';
+    if(ac>=3)return 'MSI + service';
     if(ac>=1)return 'IRQ service';
     var em=evs.some(function(e){return e.kind==='handoff'})||
         evs.some(function(e){return e.name==='kvm_exit'&&e.reason==='EPT_MISCONFIG'});
@@ -184,7 +198,9 @@ function regionDesc(evs,startSeq,endSeq){
     var dm=evs.filter(function(e){return e.name==='device_dma_transfer'});
     if(dm.length)facts.push('DMA '+(dm[0].dma_dir==='to_device'?'→':'←')+' GPA '+dm[0].dma_gpa);
     var ac=evs.filter(function(e){return e.name==='kvm_apic_accept_irq'}).length;
-    if(ac)facts.push(ac+' accepted vector-64 edge'+(ac>1?'s':''));
+    if(ac)facts.push(ac+' accepted '+(ac>1?'edges':'edge')+' (vec '+(metaVec())+')');
+    var msi=evs.filter(function(e){return e.name==='kvm_msi_set_irq'}).length;
+    if(msi)facts.push(msi+' MSI message vec '+(metaMsiVec())+' · IOAPIC bypassed');
     var reas={};
     evs.forEach(function(e){if(e.name==='kvm_exit'&&e.reason)reas[e.reason]=(reas[e.reason]||0)+1});
     Object.keys(reas).forEach(function(k){
@@ -203,7 +219,7 @@ var PHASE_LABEL={
     A:'APIC-ready baseline',
     B:'single IRQ_ONLY chain',
     C:'IRQ pending while IF=0',
-    D:'same-vector IRQ burst while IF=0',
+    D:'MSI bypasses GSI/IOAPIC',
     E:'virtual DMA TO/FROM'
 };
 /* Segment the stream into the guest's A..E phases, anchored on the 0xe9 markers. */
@@ -233,7 +249,7 @@ function deriveEpisodes(events){
         }
         return eps;
     }
-    /* Fallback when no markers: strongest motifs (first emulation, IRQ bursts, DMA, polling run). */
+    /* Fallback when no markers: strongest motifs (first emulation, IRQ/MSI service, DMA, polling run). */
     var accepts=[],starts=[0];
     events.forEach(function(e,i){if(e.name==='kvm_apic_accept_irq')accepts.push(i)});
     if(firstM>=0)starts.push(firstM);
@@ -302,8 +318,9 @@ function prettyEvent(e){
     if(e.name==='kvm_exit')return e.reason||'VM exit';
     if(e.name==='kvm_userspace_exit')return(e.userspace_reason||'userspace exit').replace('KVM_EXIT_','');
     if(e.name==='device_dma_transfer')return e.dma_dir==='to_device'?'DMA → device':'DMA ← device';
-    if(e.name==='kvm_apic_accept_irq')return'APIC accepts vec 64';
+    if(e.name==='kvm_apic_accept_irq')return'APIC accepts vec '+(e.vec!=null?e.vec:'?');
     if(e.name==='kvm_ioapic_set_irq')return'IOAPIC set_irq';
+    if(e.name==='kvm_msi_set_irq')return'MSI set_irq';
     if(e.name==='kvm_apic')return'APIC SPIV write';
     return e.name;
 }
@@ -313,6 +330,7 @@ function detailType(e){
     if(e.kind==='handoff')return'domain transition · KVM → userspace';
     if(e.kind==='dma')return'device state · DMA';
     if(e.kind==='irq')return'interrupt route';
+    if(e.kind==='msi')return'interrupt route · MSI';
     if(e.kind==='apic')return'guest APIC programming';
     return e.kind;
 }
@@ -326,6 +344,7 @@ function explanation(e){
     if(e.name==='kvm_userspace_exit')return 'KVM_RUN returns to the userspace VMM with '+esc(e.userspace_reason||'—')+'.  This is the host-side emulation boundary visible in the flow trace.';
     if(e.name==='kvm_apic_accept_irq')return "KVM's LAPIC path records acceptance of vector 64 for APIC ID 0.  This event is part of the interrupt-delivery path, not itself proof that guest handler code has started.";
     if(e.name==='kvm_ioapic_set_irq')return 'The KVM IOAPIC tracepoint records pin '+(e.pin||D.meta.device_gsi)+' routed toward vector '+(e.vec||D.meta.device_vector)+'.  The eBPF metadata says the IOAPIC object was not directly available to the state sampler, so the route is learned from the tracepoint.';
+    if(e.name==='kvm_msi_set_irq')return 'KVM_SIGNAL_MSI injected an architectural MSI message from the toy device.  The message carries its own address (0x'+(e.msi_addr!==undefined?e.msi_addr.toString(16):'—')+') and data (vec '+(e.msi_vector!=null?e.msi_vector:'—')+'); it targets the LAPIC directly, so no GSI and no IOAPIC redirection participates in this delivery.';
     if(e.name==='kvm_apic')return 'The guest writes APIC_'+(e.apic_reg||'reg')+' = '+(e.apic_val||'?')+'.  This is guest APIC programming observed in the KVM trace before later vector-64 activity.';
     if(e.name==='device_dma_transfer')return 'An eBPF-only device event samples a '+D.meta.dma_xfer_size+'-byte '+(e.dma_dir==='to_device'?'guest-memory → device':'device → guest-memory')+' transfer at GPA '+esc(e.dma_gpa)+'.  It is inserted into the trace flow by monotonic time.';
     return 'Observed transition in the fused trace/eBPF sequence.';
@@ -375,23 +394,53 @@ function renderExecution(e){
     $('flow-caption').textContent=e.from+'\u00a0→\u00a0'+e.to;
 }
 function renderIRQ(e){
+    var card=$('irq-address').closest('.region');
+    var isMsi=e.kind==='msi'||e.name==='kvm_msi_set_irq';
+    card.classList.toggle('msi',isMsi);
     var nodes=['irq-device','irq-ioapic','irq-lapic'],edges=['edge-gsi','edge-lapic'];
+    if(isMsi){
+        nodes=['irq-device-msi','irq-msg','irq-lapic-msi'];edges=['edge-msg','edge-msi-lapic'];
+    }
     nodes.forEach(function(id){$(id).classList.remove('hot')});
     edges.forEach(function(id){$(id).classList.remove('hot')});
-    if(e.name==='kvm_apic_accept_irq'){nodes.forEach(function(id){$(id).classList.add('hot')});edges.forEach(function(id){$(id).classList.add('hot')})}
-    if(e.name==='kvm_ioapic_set_irq'){$('irq-ioapic').classList.add('hot');$('edge-lapic').classList.add('hot');$('irq-lapic').classList.add('hot')}
-    if(e.name==='kvm_apic')$('irq-lapic').classList.add('hot');
+    if(isMsi){
+        nodes.forEach(function(id){$(id).classList.add('hot')});
+        edges.forEach(function(id){$(id).classList.add('hot')});
+        $('irq-address').textContent='MSI → VEC 0x'+(e.msi_vector!=null?e.msi_vector.toString(16):'—')+' · GSI/IOAPIC bypassed';
+        $('msi-msg-detail').textContent='addr '+(e.msi_addr!=null?'0x'+e.msi_addr.toString(16):'0x0')+' · dest '+(e.msi_dest!=null?e.msi_dest:'0')+' · '+
+            (e.msi_delivery===0||e.msi_delivery==null?'fixed':'delivery '+(e.msi_delivery))+' · '+(e.msi_level?'level':'edge');
+        $('msi-vec-detail').textContent='vec 0x'+(e.msi_vector!=null?e.msi_vector.toString(16):'41')+(e.msi_logical?' · logical':' · physical')+' · no IOAPIC';
+        $('aux-label-a').textContent='MSI address';
+        $('aux-desc-a').textContent='architectural message address (xAPIC base + destination)';
+        $('aux-label-b').textContent='MSI data';
+        $('aux-desc-b').textContent='delivery mode + trigger + vector';
+        $('rte-val').textContent=e.msi_addr!=null?'0x'+e.msi_addr.toString(16):'0x0';
+        $('ioapic-val').textContent=e.msi_data!=null?'0x'+e.msi_data.toString(16):'0x0';
+    }else{
+        $('aux-label-a').textContent='RTE observation';
+        $('aux-desc-a').textContent='capture field; value rides on kvm_ioapic_set_irq snapshots';
+        $('aux-label-b').textContent='IOAPIC pointer';
+        $('aux-desc-b').textContent='metadata: ioapic_available=false';
+        if(e.name==='kvm_apic_accept_irq'){nodes.forEach(function(id){$(id).classList.add('hot')});edges.forEach(function(id){$(id).classList.add('hot')})}
+        if(e.name==='kvm_ioapic_set_irq'){$('irq-ioapic').classList.add('hot');$('edge-lapic').classList.add('hot');$('irq-lapic').classList.add('hot')}
+        if(e.name==='kvm_apic')$('irq-lapic').classList.add('hot');
+        $('rte-val').textContent=e.rte;
+        $('ioapic-val').textContent=e.ioapic_ptr||'NULL';
+        $('irq-address').textContent='GSI '+D.meta.device_gsi+' → VEC '+((e.vec!=null?e.vec:D.meta.device_vector));
+    }
 
     var irr=$('irr-bit'),isr=$('isr-bit');
-    irr.classList.toggle('on',!!e.irr);isr.classList.toggle('on',!!e.isr);
-    irr.querySelector('strong').textContent=e.irr?'1':'0';isr.querySelector('strong').textContent=e.isr?'1':'0';
-    $('irq-address').textContent='GSI '+D.meta.device_gsi+' → VEC '+D.meta.device_vector;
-    $('rte-val').textContent=e.rte;
-    $('ioapic-val').textContent=e.ioapic_ptr||'NULL';
-    if(e.irr&&e.isr){$('irq-state').textContent='pending + in service';$('irq-caption').textContent='both sampled bits set'}
+    var sampled=e.vec_sampled===true||e.vec_sampled===1;
+    irr.querySelector('label').textContent=sampled?('IRR · pending · vec '+(e.vec!=null?e.vec:'?')):'IRR · pending · not sampled';
+    isr.querySelector('label').textContent=sampled?('ISR · in service · vec '+(e.vec!=null?e.vec:'?')):'ISR · in service · not sampled';
+    irr.classList.toggle('on',sampled&&e.irr);isr.classList.toggle('on',sampled&&e.isr);
+    irr.querySelector('strong').textContent=sampled?e.irr?'1':'0':'—';
+    isr.querySelector('strong').textContent=sampled?e.isr?'1':'0':'—';
+    if(!sampled){$('irq-state').textContent='not sampled';$('irq-caption').textContent='no vector carried by this boundary; IRR/ISR not claimed'}
+    else if(e.irr&&e.isr){$('irq-state').textContent='pending + in service';$('irq-caption').textContent='both sampled bits set'}
     else if(e.irr){$('irq-state').textContent='pending';$('irq-caption').textContent='IRR=1 / ISR=0 · vector held while IF=0'}
     else if(e.isr){$('irq-state').textContent='in service';$('irq-caption').textContent='IRR=0 / ISR=1 at this hook'}
-    else{$('irq-state').textContent=e.kind==='irq'?'route activity':'idle';$('irq-caption').textContent=e.kind==='irq'?'trace route active; sampled IRR/ISR still zero':'no pending/in-service bit at this hook'}
+    else{$('irq-state').textContent=(e.kind==='irq'||e.kind==='msi')?'route activity':'idle';$('irq-caption').textContent=(e.kind==='irq'||e.kind==='msi')?'trace route active; sampled IRR/ISR still zero':'no pending/in-service bit at this hook'}
 }
 function renderDMA(e){
     var edge=$('dma-edge'),buf=Array.prototype.slice.call($('buffer').children);
@@ -417,7 +466,7 @@ function renderDMA(e){
 /* Which execution lane owns a given event kind. */
 function laneFor(e){
     if(e.kind==='handoff'||e.kind==='dma')return 'vmm';
-    if(e.kind==='exit'||e.kind==='irq')return 'kvm';
+    if(e.kind==='exit'||e.kind==='irq'||e.kind==='msi')return 'kvm';
     return 'guest';
 }
 function renderWindow(){
@@ -458,7 +507,18 @@ function renderNotebook(e){
     if(e.apic_text)rows.push(['APIC write',e.apic_text]);
     if(e.irq_text)rows.push(['IRQ trace',e.irq_text]);
     if(e.paired_handoff)rows.push(['hand-off next',e.paired_handoff]);
-    rows.push(['IRR / ISR',(e.irr?1:0)+' / '+(e.isr?1:0)],['RTE',e.rte],['vCPU *',e.vcpu_ptr],['KVM *',e.kvm_ptr],['LAPIC *',e.apic_ptr],['IOAPIC *',e.ioapic_ptr||'NULL']);
+    var sampled=e.vec_sampled===true||e.vec_sampled===1;
+    var irrTxt=sampled?(e.irr?1:0)+' (vec '+(e.vec!=null?e.vec:'?')+')':'not sampled';
+    var isrTxt=sampled?(e.isr?1:0)+' (vec '+(e.vec!=null?e.vec:'?')+')':'not sampled';
+    rows.push(['IRR / ISR',irrTxt+' / '+isrTxt],['RTE',e.rte],['vCPU *',e.vcpu_ptr],['KVM *',e.kvm_ptr],['LAPIC *',e.apic_ptr],['IOAPIC *',e.ioapic_ptr||'NULL']);
+    if(e.msi_present){
+        rows.push(['MSI address','0x'+(e.msi_addr!=null?e.msi_addr.toString(16):'0')]);
+        rows.push(['MSI data','0x'+(e.msi_data!=null?e.msi_data.toString(16):'0')+' · vec '+(e.msi_vector!=null?e.msi_vector:'?')]);
+        rows.push(['MSI decode','dest '+(e.msi_dest!=null?e.msi_dest:'0')+' · '+(e.msi_logical?'logical':'physical')+' · '+(e.msi_delivery===0||e.msi_delivery==null?'fixed':'dm '+(e.msi_delivery))+' · '+(e.msi_level?'level':'edge')]);
+        rows.push(['MSG via','KVM_SIGNAL_MSI · IOAPIC/GSI bypassed']);
+    } else if(e.msi_present===false && (e.kind==='msi'||e.name==='kvm_msi_set_irq')){
+        rows.push(['MSG via','MSI event present, no raw message facts']);
+    }
     if(e.dma_present)rows.push(['DMA',e.dma_dir+' · '+e.dma_gpa+' · '+D.meta.dma_xfer_size+' B']);
     if(e.dt_prev_us!=null)rows.push(['Δ previous',e.dt_prev_us+' µs']);
     if(e.dt_next_us!=null)rows.push(['Δ next',e.dt_next_us+' µs']);
@@ -507,7 +567,7 @@ Promise.all([
     D.poll_count=pm.poll_count;D.poll_median_us=pm.poll_median_us;
     $('strip-host').textContent=D.events[0]?D.events[0].cpu:'—';
     $('strip-gsi').textContent=D.meta.device_gsi;
-    $('strip-vector').textContent=D.meta.device_vector;
+    $('strip-vector').textContent=D.meta.device_vector+' / '+D.meta.msi_vector;
     $('strip-dma').textContent=D.meta.dma_xfer_size+' B';
     $('strip-buf').textContent=D.meta.device_buffer_size+' B';
     $('task').textContent=(D.events[0]?D.events[0].comm:'vmm')+'-'+(D.events[0]?D.events[0].pid:'?');

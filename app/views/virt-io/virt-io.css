@@ -84,7 +84,10 @@ code,.mono{font-family:var(--mono)}
 .domain.active .statepill{border-color:rgba(169,159,104,.45);color:var(--yellow)}
 /* interrupt state */
 .irq-body{min-height:0;margin:7px 0;display:grid;grid-template-rows:auto 1fr;gap:7px}
-.irq-route{display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr) 18px minmax(0,1fr);align-items:center}
+.irq-route,.msi-route{display:grid;grid-template-columns:minmax(0,1fr) 18px minmax(0,1fr) 18px minmax(0,1fr);align-items:center}
+.msi-route{display:none}
+.interrupts.msi .irq-route{display:none}
+.interrupts.msi .msi-route{display:grid}
 .irq-node{min-width:0;padding:9px 7px;border:1px solid var(--line);border-radius:5px;background:rgba(9,15,21,.95);text-align:center}
 .irq-node.hot{border-color:var(--linehot)}
 .irq-node b{display:block;color:var(--text);font:700 8px var(--mono)}.irq-node span{display:block;margin-top:4px;color:var(--faint);font:7px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -117,7 +120,7 @@ code,.mono{font-family:var(--mono)}
 .event-cell:hover{border-color:var(--linehot)}.event-cell.current{border-color:var(--linehot);box-shadow:inset 0 0 0 1px rgba(169,159,104,.18)}
 .event-cell:before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--faint)}
 .event-cell.entry:before{background:var(--cyan)}.event-cell.exit:before{background:var(--orange)}.event-cell.handoff:before{background:var(--green)}
-.event-cell.irq:before{background:var(--yellow)}.event-cell.dma:before{background:var(--blue)}.event-cell.apic:before{background:var(--violet)}
+.event-cell.irq:before{background:var(--yellow)}.event-cell.dma:before{background:var(--blue)}.event-cell.apic:before{background:var(--violet)}.event-cell.msi:before{background:var(--violet)}
 .event-cell strong{display:block;color:var(--text);font:750 7px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .event-cell span{display:block;margin-top:2px;color:var(--faint);font:6px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lane-empty{display:block;min-height:0;border:1px dashed rgba(54,69,80,.22);border-radius:4px;background:rgba(13,20,27,.22)}

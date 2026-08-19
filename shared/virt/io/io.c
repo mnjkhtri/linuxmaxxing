@@ -64,6 +64,8 @@ static const char *event_name(unsigned int event)
 		return "kvm_apic";
 	case IO_EVENT_DEVICE_DMA_TRANSFER:
 		return "device_dma_transfer";
+	case IO_EVENT_KVM_MSI_SET_IRQ:
+		return "kvm_msi_set_irq";
 	default:
 		return "unknown";
 	}
@@ -99,6 +101,7 @@ static void write_meta(struct json_writer *jw)
 	json_string(jw, "capture", "io_snapshot");
 	json_u32(jw, "device_gsi", DEVICE_GSI);
 	json_u32(jw, "device_vector", DEVICE_VECTOR);
+	json_u32(jw, "msi_vector", MSI_VECTOR);
 	json_u32(jw, "dma_xfer_size", DMA_XFER_SIZE);
 	json_u32(jw, "device_buffer_size", DEVICE_BUFFER_SIZE);
 	json_u32(jw, "events", IO_EVENT_COUNT);
@@ -135,8 +138,24 @@ static void write_state(struct json_writer *jw, const struct vio_state *state)
 	json_ptr(jw, "ioapic", state->ioapic);
 	json_object_begin_field(jw, "controller");
 	json_hex(jw, "rte", state->controller.rte);
+	json_bool(jw, "vector_sampled", state->controller.vector_sampled != 0);
+	json_u32(jw, "vector", state->controller.vector);
 	json_bool(jw, "irr", state->controller.irr != 0);
 	json_bool(jw, "isr", state->controller.isr != 0);
+	json_object_end(jw);
+	json_object_begin_field(jw, "msi");
+	json_bool(jw, "present", state->msi.present != 0);
+	if (state->msi.present)
+	{
+		/* Raw MSI message fields; the frontend decodes destination/delivery/trigger into readable words. */
+		json_hex(jw, "address", state->msi.address);
+		json_hex(jw, "data", state->msi.data);
+		json_u32(jw, "vector", (unsigned int)(state->msi.data & 0xff));
+		json_u32(jw, "destination", (unsigned int)((state->msi.address >> 12) & 0xff));
+		json_bool(jw, "logical", (state->msi.address & (1u << 3)) != 0);
+		json_bool(jw, "level_triggered", (state->msi.data & (1u << 15)) != 0);
+		json_u32(jw, "delivery_mode", (unsigned int)((state->msi.data >> 8) & 0x7));
+	}
 	json_object_end(jw);
 	json_object_begin_field(jw, "dma");
 	json_bool(jw, "present", state->dma.dir == CMD_DMA_TO_DEVICE || state->dma.dir == CMD_DMA_FROM_DEVICE);
