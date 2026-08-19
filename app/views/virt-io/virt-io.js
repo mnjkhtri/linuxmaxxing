@@ -437,14 +437,15 @@ function renderWindow(){
         end=Math.min(D.events.length,start+13);
     var slice=D.events.slice(start,end);
     var lanes={vmm:[],kvm:[],guest:[]};
+    ['vmm','kvm','guest'].forEach(function(l){for(var j=0;j<slice.length;j++)lanes[l].push('')});
     slice.forEach(function(e,i){
         var cell='<button class="event-cell '+e.kind+' '+(start+i===cursor?'current':'')+'" data-index="'+(start+i)+'" title="seq '+e.seq+': '+esc(prettyEvent(e))+'\n'+esc(e.raw)+'">'+
             '<strong>'+esc(prettyEvent(e))+'</strong><span>seq '+e.seq+' · '+e.time_us.toFixed(3)+' µs</span></button>';
-        lanes[laneFor(e)].push(cell);
+        lanes[laneFor(e)][i]=cell;
     });
     ['vmm','kvm','guest'].forEach(function(l){
         var box=$('lane-'+l);
-        box.innerHTML=lanes[l].length?lanes[l].join(''):'<span class="lane-empty">—</span>';
+        box.innerHTML=lanes[l].map(function(cell){return cell||'<span class="lane-empty"></span>'}).join('');
         box.querySelectorAll('.event-cell').forEach(function(b){b.addEventListener('click',function(){select(+b.dataset.index)})});
     });
 }
