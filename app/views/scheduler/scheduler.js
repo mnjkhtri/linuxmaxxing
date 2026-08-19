@@ -286,14 +286,14 @@
           next.last = timeNs;
         }
       } else if (type === 'sched_process_wait' ||
-                 type === 'sched_process_exit' ||
-                 type === 'sched_process_free') {
+        type === 'sched_process_exit' ||
+        type === 'sched_process_free') {
         mark(row(f.pid, f.comm, timeNs), type.replace('sched_process_', ''), timeNs);
       }
 
       if (type === 'sched_process_fork' || type === 'sched_wakeup_new' ||
-          type === 'sched_switch' || type === 'sched_process_wait' ||
-          type === 'sched_process_exit' || type === 'sched_process_free') {
+        type === 'sched_switch' || type === 'sched_process_wait' ||
+        type === 'sched_process_exit' || type === 'sched_process_free') {
         start = Math.min(start, timeNs);
         end = Math.max(end, timeNs);
       }
@@ -438,7 +438,6 @@
     var node = frame.map[address];
     byId('layer').textContent = 'CPU ' + frame.cpu + ' / rb_node';
     byId('title').textContent = node.comm;
-    byId('copy').textContent = '';
     byId('v-node').textContent = address;
     byId('v-node').title = address;
   }
@@ -600,7 +599,7 @@
       box.className = 'migration';
       text.textContent = next
         ? 'Next: ' + frameComm(next) + ' \u00b7 event ' + next.global + ' \u00b7 CPU ' +
-          next.fromCpu + ' \u2192 CPU ' + next.cpu
+        next.fromCpu + ' \u2192 CPU ' + next.cpu
         : 'No later cross-CPU event.';
     }
   }
