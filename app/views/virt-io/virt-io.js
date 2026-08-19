@@ -340,7 +340,7 @@ function scienceNote(e){
     if(e.irr&&!e.isr)return 'At this hook the sampler sees IRR=1 and ISR=0: a pending interrupt is observable (the vector is latched, not yet in service).  Exact internal transition timing is only bounded by neighboring probes.';
     if(!e.irr&&e.isr)return 'At this hook the sampler sees IRR=0 and ISR=1: the sampled state has moved from pending to in-service.  This is a sampled state observation, not continuous LAPIC tracing.';
     if(e.name==='kvm_ioapic_set_irq')return 'Note the cross-source asymmetry: the tracepoint exposes IOAPIC pin/vector semantics, while the eBPF state says ioapic_available=false and carries a NULL IOAPIC pointer.  RTE '+(e.rte==='0x0'?'bits are not carried on this snapshot':'= '+e.rte+' rides on this snapshot')+'.';
-    return 'Interpretation rule: arrows show observed control-flow or sampled state adjacency.  They do not invent transitions that the sources did not expose.';
+    return '';
 }
 
 /* ---- renderers -------------------------------------------------------- */
