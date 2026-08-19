@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KVM virt-I/O state observer</title>
-<link rel="stylesheet" href="virt-io.css?v=13">
+<link rel="stylesheet" href="virt-io.css?v=14">
 </head>
 <body>
 <main class="io">
@@ -54,6 +54,7 @@
           <footer class="region-foot"><strong id="flow-kind">entry</strong><span id="flow-caption">KVM → guest</span></footer>
         </section>
 
+        <div class="support-stack">
         <section class="region interrupts">
           <header class="region-title">
             <div><b>INTERRUPT ROUTE</b><span>trace route and sampled LAPIC pending/in-service state</span></div>
@@ -95,6 +96,7 @@
           </div>
           <footer class="region-foot"><strong id="dma-state">not present</strong><span id="dma-caption">DMA field is sampled only at the eBPF DMA event</span></footer>
         </section>
+        </div>
       </div>
     </section>
 
@@ -117,6 +119,6 @@
     </aside>
   </section>
 </main>
-<script src="virt-io.js?v=13"></script>
+<script src="virt-io.js?v=14"></script>
 </body>
 </html>
