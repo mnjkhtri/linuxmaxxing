@@ -438,8 +438,7 @@
     var node = frame.map[address];
     byId('layer').textContent = 'CPU ' + frame.cpu + ' / rb_node';
     byId('title').textContent = node.comm;
-    byId('copy').textContent = 'Embedded rb_node ' + (node.color === 'red' ? 'is red' : 'is black') +
-      '. Its child links are left ' + short(node.left) + ' and right ' + short(node.right) + '.';
+    byId('copy').textContent = '';
     byId('v-node').textContent = address;
     byId('v-node').title = address;
   }
