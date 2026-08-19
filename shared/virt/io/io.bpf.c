@@ -108,6 +108,7 @@ static __always_inline struct kvm_vcpu *vcpu_from_map(void)
 }
 
 /* Fixed metadata for a snapshot taken from the owning vcpu. */
+static __always_inline void sample_controller_config(struct vio_event *event, struct kvm_vcpu *vcpu);
 static __always_inline void snapshot_base(struct vio_event *event, struct kvm_vcpu *vcpu)
 {
 	unsigned char *bytes = (unsigned char *)event;
@@ -128,46 +129,63 @@ static __always_inline void snapshot_base(struct vio_event *event, struct kvm_vc
 	event->context.cpu = bpf_get_smp_processor_id();
 	event->state.vcpu = (__u64)vcpu;
 	event->state.kvm = (__u64)BPF_CORE_READ(vcpu, kvm);
+	sample_controller_config(event, vcpu);
 }
 
-/* Best-effort read of one vector bit in a LAPIC IRR/ISR field. */
-static __always_inline __u8 lapic_pending_bit(const struct kvm_lapic *apic, __u32 base, __u32 vector)
+static __always_inline __u32 lapic_bank(const struct kvm_lapic *apic, unsigned int base, unsigned int k)
 {
 	const __u32 *regs = READ_KVM_LAPIC_REGS(apic);
-	__u32 word = (base >> 2) + (vector >> 5) * 4; /* The 32 vectors of a bank occupy four u32 slots. */
-	__u32 bit = 1u << (vector & 31);
-	__u32 value = 0;
 
 	if (!regs)
 		return 0;
-	bpf_probe_read_kernel(&value, sizeof(value), &regs[word]);
-	return !!(value & bit);
+	__u32 value = 0;
+
+	bpf_probe_read_kernel(&value, sizeof(value), &regs[(base >> 2) + k * 4]);
+	return value;
 }
 
-/* Sample the LAPIC IRR/ISR bits through the vcpu's own lapic relationship for the given vector. */
-static __always_inline void sample_lapic(struct vio_event *event, struct kvm_vcpu *vcpu, __u32 vector)
+static __always_inline unsigned long long lapic_reg(const struct kvm_lapic *apic, unsigned int offset)
 {
-	struct kvm_lapic *apic = vcpu ? BPF_CORE_READ(vcpu, arch.apic) : NULL;
+	const __u32 *regs = READ_KVM_LAPIC_REGS(apic);
 
-	event->state.apic = (__u64)apic;
-	if (apic)
+	if (!regs)
+		return 0;
+	__u32 value = 0;
+
+	bpf_probe_read_kernel(&value, sizeof(value), &regs[offset >> 2]);
+	return value & 0xffffffffu;
+}
+
+static __always_inline void sample_lapic_window(struct vio_event *event, struct kvm_lapic *apic)
+{
+#pragma unroll
+	for (unsigned int k = 0; k < 8; k++)
 	{
-		event->state.controller.irr = lapic_pending_bit(apic, 0x200u, vector); /* The 0x200 offset is the LAPIC IRR base. */
-		event->state.controller.isr = lapic_pending_bit(apic, 0x100u, vector); /* The 0x100 offset is the LAPIC ISR base. */
+		event->state.controller.irr[k] = lapic_bank(apic, 0x200u, k);
+		event->state.controller.isr[k] = lapic_bank(apic, 0x100u, k);
 	}
 }
 
-/* Record that IRR/ISR were sampled for a real vector and read those bits. */
-static __always_inline void sample_controller_for_vector(struct vio_event *event, struct kvm_vcpu *vcpu, __u32 vector)
+static __always_inline void sample_controller_config(struct vio_event *event, struct kvm_vcpu *vcpu)
 {
-	event->state.controller.vector = vector;
-	event->state.controller.vector_sampled = 1;
-	sample_lapic(event, vcpu, vector);
+	struct kvm_lapic *apic = vcpu ? BPF_CORE_READ(vcpu, arch.apic) : NULL;
+	struct kvm_ioapic *ioapic = vcpu ? BPF_CORE_READ(vcpu, kvm, arch.vioapic) : NULL;
+
+	event->state.apic = (__u64)apic;
+	event->state.ioapic = (__u64)ioapic;
+	if (apic)
+	{
+		event->state.controller.tpr = lapic_reg(apic, 0x080u);
+		event->state.controller.svr = lapic_reg(apic, 0x0F0u);
+		sample_lapic_window(event, apic);
+	}
+	if (ioapic)
+		event->state.controller.rte = READ_KVM_IOAPIC_RTE(ioapic, DEVICE_GSI);
 }
 
 /*
  * Emit one record into the shared ring buffer.
- * Boundaries without a vector do not claim IRR/ISR state; vector_sampled stays 0 so the UI renders NOT SAMPLED.
+ * IRR/ISR and the config registers are sampled as full windows, so every boundary carries state.
  */
 static __always_inline int emit_boundary(enum io_event_type event_type, struct kvm_vcpu *vcpu)
 {
@@ -224,7 +242,6 @@ int kvm_apic_accept_irq_snapshot(struct bpf_raw_tracepoint_args *ctx)
 		return 0;
 
 	event->event_info.event = (unsigned int)IO_EVENT_KVM_APIC_ACCEPT_IRQ;
-	sample_controller_for_vector(event, vcpu, (__u32)(ctx->args[2] & 0xff)); /* The vector is the third raw argument. */
 	bpf_ringbuf_output(&events, event, sizeof(*event), 0);
 	return 0;
 }
@@ -244,7 +261,6 @@ int kvm_inj_virq_snapshot(struct bpf_raw_tracepoint_args *ctx)
 		return 0;
 
 	event->event_info.event = (unsigned int)IO_EVENT_KVM_INJ_VIRQ;
-	sample_controller_for_vector(event, vcpu, (__u32)(ctx->args[0] & 0xff));
 	bpf_ringbuf_output(&events, event, sizeof(*event), 0);
 	return 0;
 }
@@ -264,7 +280,6 @@ int kvm_ioapic_set_irq_snapshot(struct bpf_raw_tracepoint_args *ctx)
 		return 0;
 
 	event->event_info.event = (unsigned int)IO_EVENT_KVM_IOAPIC_SET_IRQ;
-	sample_controller_for_vector(event, vcpu, (__u32)(ctx->args[0] & 0xff)); /* The RTE's low byte is the vector. */
 	event->state.controller.rte = ctx->args[0];
 	bpf_ringbuf_output(&events, event, sizeof(*event), 0);
 	return 0;
@@ -294,7 +309,6 @@ int kvm_msi_set_irq_snapshot(struct bpf_raw_tracepoint_args *ctx)
 	event->state.msi.present = 1;
 	event->state.msi.address = address;
 	event->state.msi.data = data;
-	sample_controller_for_vector(event, vcpu, data & 0xff);
 	bpf_ringbuf_output(&events, event, sizeof(*event), 0);
 	return 0;
 }
@@ -314,7 +328,6 @@ int kvm_eoi_snapshot(struct bpf_raw_tracepoint_args *ctx)
 		return 0;
 
 	event->event_info.event = (unsigned int)IO_EVENT_KVM_EOI;
-	sample_controller_for_vector(event, vcpu, (__u32)(ctx->args[0] & 0xff));
 	bpf_ringbuf_output(&events, event, sizeof(*event), 0);
 	return 0;
 }

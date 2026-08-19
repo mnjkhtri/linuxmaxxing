@@ -55,19 +55,19 @@ struct vio_context
 /* Best-effort LAPIC/IOAPIC sample taken at the boundary. */
 struct vio_controller
 {
-	unsigned long long rte;			 /* IOAPIC redirection entry for DEVICE_GSI (64 bits). */
-	unsigned char irr;				 /* LAPIC IRR bit for the sampled vector. */
-	unsigned char isr;				 /* LAPIC ISR bit for the sampled vector. */
-	unsigned int vector;			 /* Vector the IRR/ISR bits were sampled for. */
-	unsigned char vector_sampled;	 /* 1 when a real vector was sampled, 0 when none was available. */
+	unsigned long long rte;
+	unsigned long long tpr;
+	unsigned long long svr;
+	unsigned int irr[8];
+	unsigned int isr[8];
 };
 
 /* An observed architectural MSI message; only present when the MSI tracepoint fired. */
 struct vio_msi
 {
-	unsigned char present;			 /* 1 when kvm_msi_set_irq produced this observation. */
-	unsigned long long address;		 /* Raw MSI address (xAPIC base plus destination fields). */
-	unsigned long long data;		 /* Raw MSI data (delivery mode, trigger, vector). */
+	unsigned char present;		/* 1 when kvm_msi_set_irq produced this observation. */
+	unsigned long long address; /* Raw MSI address (xAPIC base plus destination fields). */
+	unsigned long long data;	/* Raw MSI data (delivery mode, trigger, vector). */
 };
 
 /* The uprobed virtual-DMA operation; only the fields that vary are recorded. */
@@ -80,10 +80,10 @@ struct vio_dma
 /* The interrupt-controller and virtual-DMA state observed after the boundary. */
 struct vio_state
 {
-	unsigned long long vcpu;	  /* struct kvm_vcpu * that owns this snapshot. */
-	unsigned long long kvm;		  /* Owning struct kvm * for this vCPU. */
-	unsigned long long apic;	  /* struct kvm_lapic *, when this tracepoint exposes one. */
-	unsigned long long ioapic;	  /* struct kvm_ioapic *, when this tracepoint exposes one. */
+	unsigned long long vcpu;   /* struct kvm_vcpu * that owns this snapshot. */
+	unsigned long long kvm;	   /* Owning struct kvm * for this vCPU. */
+	unsigned long long apic;   /* struct kvm_lapic *, when this tracepoint exposes one. */
+	unsigned long long ioapic; /* struct kvm_ioapic *, when this tracepoint exposes one. */
 	struct vio_controller controller;
 	struct vio_msi msi;
 	struct vio_dma dma;

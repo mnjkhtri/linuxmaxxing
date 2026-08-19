@@ -138,10 +138,24 @@ static void write_state(struct json_writer *jw, const struct vio_state *state)
 	json_ptr(jw, "ioapic", state->ioapic);
 	json_object_begin_field(jw, "controller");
 	json_hex(jw, "rte", state->controller.rte);
-	json_bool(jw, "vector_sampled", state->controller.vector_sampled != 0);
-	json_u32(jw, "vector", state->controller.vector);
-	json_bool(jw, "irr", state->controller.irr != 0);
-	json_bool(jw, "isr", state->controller.isr != 0);
+	json_hex(jw, "tpr", state->controller.tpr);
+	json_hex(jw, "svr", state->controller.svr);
+	json_object_begin_field(jw, "irr");
+	for (unsigned int k = 0; k < 8; k++)
+	{
+		char key[4] = {'b', (char)('0' + k), '\0'};
+
+		json_hex(jw, key, state->controller.irr[k]);
+	}
+	json_object_end(jw);
+	json_object_begin_field(jw, "isr");
+	for (unsigned int k = 0; k < 8; k++)
+	{
+		char key[4] = {'b', (char)('0' + k), '\0'};
+
+		json_hex(jw, key, state->controller.isr[k]);
+	}
+	json_object_end(jw);
 	json_object_end(jw);
 	json_object_begin_field(jw, "msi");
 	json_bool(jw, "present", state->msi.present != 0);

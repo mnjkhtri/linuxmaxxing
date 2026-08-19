@@ -74,7 +74,7 @@ $(KVM_COMPAT): | $(BUILD_DIR)
 		echo '#define READ_KVM_LAPIC_REGS(apic) ((const __u32 *)0)' > $@; \
 		echo '#define READ_KVM_LAPIC_REGS_AVAILABLE 0' >> $@; \
 	fi
-	@if $(BPFTOOL) btf dump file $(KVM_BTF_SOURCE) format c | sed -n '/struct kvm_ioapic {/,/^};/p' | grep -q bits; then \
+	@if $(BPFTOOL) btf dump file $(KVM_BTF_SOURCE) format c | grep -q 'redirtbl'; then \
 		echo '#define READ_KVM_IOAPIC_RTE(ioapic, irq) BPF_CORE_READ(ioapic, redirtbl[irq].bits)' >> $@; \
 		echo '#define READ_KVM_IOAPIC_RTE_AVAILABLE 1' >> $@; \
 	else \

@@ -24,7 +24,7 @@ fi
 ssh "${ssh_opts[@]}" "$TARGET" "mkdir -p -- '$IO_DIR' '$REMOTE_DIR/shared'"
 scp -p "${ssh_opts[@]}" "$SCRIPT_DIR/vmm.c" "$SCRIPT_DIR/guest.S" "$SCRIPT_DIR/io.c" "$SCRIPT_DIR/io.bpf.c" "$SCRIPT_DIR/io_event.h" "$SCRIPT_DIR/device.h" "$SCRIPT_DIR/Makefile" "$TARGET:$IO_DIR/"
 scp -p "${ssh_opts[@]}" "$REPO_ROOT/shared/json_writer.c" "$REPO_ROOT/shared/json_writer.h" "$TARGET:$REMOTE_DIR/shared/"
-ssh "${ssh_opts[@]}" "$TARGET" "cd '$IO_DIR' && make all"
+ssh "${ssh_opts[@]}" "$TARGET" "cd '$IO_DIR' && make clean all"
 ssh "${ssh_opts[@]}" "$TARGET" "sudo -n bash -s -- '$IO_DIR'" <<'REMOTE'
 set -euo pipefail
 REMOTE_DIR="$1"

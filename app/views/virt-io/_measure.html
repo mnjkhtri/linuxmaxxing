@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KVM virt-I/O state observer</title>
-<link rel="stylesheet" href="virt-io.css?v=31">
+<link rel="stylesheet" href="virt-io.css?v=14">
 </head>
 <body>
 <main class="io">
@@ -12,7 +12,7 @@
     <div>
       <div class="eyebrow">TRACE → eBPF SNAPSHOT → I/O STATE</div>
       <h1>KVM <span>virt-I/O</span> observer</h1>
-      <p>Control flow, interrupt routing, and DMA state from one toy-VMM run.</p>
+      <p>Control-flow transitions and sampled interrupt / DMA state from one toy-VMM run.</p>
     </div>
     <div id="status" role="status"><i class="trace-dot"></i><span>loading virt-io capture…</span></div>
   </header>
@@ -43,17 +43,21 @@
       <div class="stage">
         <section class="region execution">
           <header class="region-title">
-            <div><b>EXECUTION DOMAINS</b><span>phase-scoped residency across VMM, KVM, and guest; hook location shown separately</span></div>
+            <div><b>EXECUTION DOMAINS</b><span>current transition across VMM, KVM/VMX, and guest</span></div>
             <code class="address" id="rip-head">RIP —</code>
           </header>
-          <div id="exec-html" class="exec-html" role="img" aria-label="KVM execution-domain residency chronogram"></div>
+          <div class="lanes" id="lanes">
+            <div class="lane" data-lane="vmm"><div class="domain" data-domain="vmm"><h3>USERSPACE VMM</h3><strong id="vmm-state">waiting</strong><small id="vmm-detail">KVM_RUN boundary</small><span class="statepill" id="vmm-pill">userspace</span></div><div class="lane-events" id="lane-vmm"></div></div>
+            <div class="lane" data-lane="kvm"><div class="domain" data-domain="kvm"><h3>KVM / VMX</h3><strong id="kvm-state">run loop</strong><small id="kvm-detail">kernel virtualization boundary</small><span class="statepill" id="kvm-pill">kernel</span></div><div class="lane-events" id="lane-kvm"></div></div>
+            <div class="lane" data-lane="guest"><div class="domain" data-domain="guest"><h3>GUEST vCPU 0</h3><strong id="guest-state">RIP 0x0</strong><small id="guest-detail">guest execution context</small><span class="statepill" id="guest-pill">guest</span></div><div class="lane-events" id="lane-guest"></div></div>
+          </div>
           <footer class="region-foot"><strong id="flow-kind">entry</strong><span id="flow-caption">KVM → guest</span></footer>
         </section>
 
         <div class="support-stack">
         <section class="region interrupts">
           <header class="region-title">
-            <div><b>INTERRUPT ROUTE</b><span>trace route and LAPIC pending/in-service list</span></div>
+            <div><b>INTERRUPT ROUTE</b><span>trace route and sampled LAPIC pending/in-service state</span></div>
             <code class="address" id="irq-address">GSI — → VEC —</code>
           </header>
           <div class="irq-body">
@@ -64,23 +68,14 @@
               <div class="irq-edge" id="edge-lapic"></div>
               <div class="irq-node" id="irq-lapic"><b>LAPIC</b><span>apicid 0 / vec —</span></div>
             </div>
-            <div class="msi-route" id="msi-route">
-              <div class="irq-node" id="irq-device-msi"><b>DEVICE</b><span>MSI source (toy virtual device)</span></div>
-              <div class="irq-edge" id="edge-msg"></div>
-              <div class="irq-node" id="irq-msg"><b>MSI MESSAGE</b><span id="msi-msg-detail">addr — · dest — · fixed · edge</span></div>
-              <div class="irq-edge" id="edge-msi-lapic"></div>
-              <div class="irq-node" id="irq-lapic-msi"><b>LAPIC</b><span id="msi-vec-detail">vec —</span></div>
-            </div>
-            <div class="state-grid">
-              <div class="state-item" id="st-irr"><label>IRR · pending</label><strong class="val">—</strong><em class="sub"></em></div>
-              <div class="state-item" id="st-isr"><label>ISR · in service</label><strong class="val">—</strong><em class="sub"></em></div>
-              <div class="state-item" id="st-svr"><label>LAPIC SVR</label><strong class="val">—</strong><em class="sub"></em></div>
-              <div class="state-item" id="st-tpr"><label>LAPIC TPR</label><strong class="val">—</strong><em class="sub"></em></div>
-              <div class="state-item" id="st-rte"><label>IOAPIC RTE · pin 4</label><strong class="val">—</strong><em class="sub"></em></div>
-              <div class="state-item" id="st-route"><label>ROUTE</label><strong class="val">—</strong><em class="sub"></em></div>
+            <div class="bitfield">
+              <div class="bit" id="irr-bit"><label>IRR · pending</label><strong>0</strong><div class="desc">sampled interrupt-request state</div></div>
+              <div class="bit" id="isr-bit"><label>ISR · in service</label><strong>0</strong><div class="desc">sampled in-service state</div></div>
+              <div class="bit"><label>RTE observation</label><strong id="rte-val">0x0</strong><div class="desc">capture field; value rides on kvm_ioapic_set_irq snapshots</div></div>
+              <div class="bit"><label>IOAPIC pointer</label><strong id="ioapic-val">—</strong><div class="desc">metadata: ioapic_available=false</div></div>
             </div>
           </div>
-          <footer class="region-foot"><strong id="irq-state">idle</strong><span id="irq-caption">no pending/in-service vector in the LAPIC window</span></footer>
+          <footer class="region-foot"><strong id="irq-state">idle</strong><span id="irq-caption">no pending/in-service bit at this hook</span></footer>
         </section>
 
         <section class="region dma">
@@ -92,14 +87,14 @@
             <div class="mem-bus">
               <div class="mem-side"><h3>GUEST PHYSICAL MEMORY</h3><strong id="dma-gpa">no DMA now</strong><small>observed endpoints from this run</small></div>
               <div class="dma-edge" id="dma-edge"></div>
-              <div class="device-side"><h3>TOY DEVICE</h3><strong id="device-state">256 B buffer</strong><small id="device-detail">no transfer at current hook</small><div class="buffer" id="buffer"><i></i><i></i><i></i><i></i></div></div>
+              <div class="device-side"><h3>TOY DEVICE</h3><strong id="device-state">256 B buffer</strong><small id="device-detail">no transfer sampled at current hook</small><div class="buffer" id="buffer"><i></i><i></i><i></i><i></i></div></div>
             </div>
             <div class="gpa-map">
               <div class="gpa" id="gpa6000"><code>GPA 0x6000</code><span>DMA_TO source at seq 85</span></div>
               <div class="gpa" id="gpa7000"><code>GPA 0x7000</code><span>DMA_FROM destination at seq 151</span></div>
             </div>
           </div>
-          <footer class="region-foot"><strong id="dma-state">not present</strong><span id="dma-caption">DMA is recorded only at the eBPF DMA event</span></footer>
+          <footer class="region-foot"><strong id="dma-state">not present</strong><span id="dma-caption">DMA field is sampled only at the eBPF DMA event</span></footer>
         </section>
         </div>
       </div>
@@ -124,6 +119,22 @@
     </aside>
   </section>
 </main>
-<script src="virt-io.js?v=31"></script>
+<script src="virt-io.js?v=14"></script>
+</body>
+
+<script>
+setTimeout(function(){
+var r={vh:window.innerHeight,vw:window.innerWidth};
+function box(id){var el=document.getElementById(id);if(!el)return null;var b=el.getBoundingClientRect();return {x:Math.round(b.x),y:Math.round(b.y),w:Math.round(b.width),h:Math.round(b.height)}}
+function cls(c){var el=document.querySelector(c);if(!el)return null;var b=el.getBoundingClientRect();return {x:Math.round(b.x),y:Math.round(b.y),w:Math.round(b.width),h:Math.round(b.height)}}
+r.stage=cls(".stage");r.exec=cls(".execution");r.stack=cls(".support-stack");r.intr=cls(".interrupts");r.dma=cls(".dma");
+r.lanes=cls(".lanes");r.laneV=cls("#lane-vmm");r.laneK=cls("#lane-kvm");r.laneG=cls("#lane-guest");
+r.cellV=document.querySelectorAll("#lane-vmm .event-cell").length;
+r.cellK=document.querySelectorAll("#lane-kvm .event-cell").length;
+r.cellG=document.querySelectorAll("#lane-guest .event-cell").length;
+r.bitfield=cls(".bitfield");r.irqBody=cls(".irq-body");r.dmaBody=cls(".dma-body");
+var pre=document.createElement("pre");pre.id="meas";pre.textContent="MEAS:"+JSON.stringify(r);document.body.appendChild(pre);
+},2500);
+</script>
 </body>
 </html>
