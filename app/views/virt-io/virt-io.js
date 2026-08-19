@@ -191,8 +191,10 @@ function regionDesc(evs,startSeq,endSeq){
         if(k==='EPT_MISCONFIG')facts.push('EPT_MISCONFIG \u00d7'+reas[k]);
         else facts.push(k+(reas[k]>1?' \u00d7'+reas[k]:''));
     });
-    var hoff=evs.filter(function(e){return e.kind==='handoff'}).map(function(e){return (e.userspace_reason||'').replace('KVM_EXIT_','')});
-    if(hoff.length)facts.push(hoff.join('/')+' handoffs');
+    var hc={};
+    evs.forEach(function(e){if(e.kind==='handoff'){var k=(e.userspace_reason||'').replace('KVM_EXIT_','')||'?';hc[k]=(hc[k]||0)+1}});
+    var hparts=Object.keys(hc).sort().map(function(k){return k+(hc[k]>1?' \u00d7'+hc[k]:'')});
+    if(hparts.length)facts.push(hparts.join(' / ')+' handoffs');
     if(!facts.length)facts.push('guest bring-up: entry, exit, APIC wiring');
     return 'seq '+startSeq+'–'+endSeq+' · '+facts.join(' · ');
 }
@@ -351,7 +353,7 @@ function renderRoadmap(){
             return '<button class="phase-dot '+(idx===cursor?'current':'')+'" data-index="'+idx+'" title="seq '+evt.seq+': '+esc(prettyEvent(evt))+' (raw: '+esc(evt.raw)+')"></button>';
         }).join('');
         return '<div class="zone '+(ei===active?'active':'')+'" data-ep="'+ei+'">'+
-            '<div><div class="zone-label">'+esc(ep.name)+'</div><div class="zone-sub">'+ep.start+'–'+ep.end+' · inferred grouping · '+ep.count+' events</div></div>'+
+            '<div><div class="zone-label">'+esc(ep.name)+'</div><div class="zone-sub">seq '+ep.start+'–'+ep.end+' · '+ep.count+' events</div></div>'+
             '<div class="zone-dots">'+dots+'</div></div>';
     }).join('');
     $('roadmap').querySelectorAll('.phase-dot').forEach(function(b){
@@ -481,7 +483,8 @@ function select(index){
     if(!D||!D.events.length)return;
     cursor=Math.max(0,Math.min(D.events.length-1,index||0));
     var e=ev(),epi=episodeFor(cursor),ep=D.episodes[epi];
-    $('episode-name').textContent=ep.name+' · '+ep.desc;
+    $('episode-name').textContent=ep.name;
+    $('episode-name').title=ep.name+' — '+ep.desc;
     $('event-clock').textContent='t = '+e.time_us.toFixed(3)+' µs';
     $('scrub').value=cursor;
     $('counter').textContent=(cursor+1)+' / '+D.events.length;
