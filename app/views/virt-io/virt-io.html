@@ -51,6 +51,7 @@
             <div class="domain" data-domain="kvm"><h3>KVM / VMX</h3><strong id="kvm-state">run loop</strong><small id="kvm-detail">kernel virtualization boundary</small><span class="statepill" id="kvm-pill">kernel</span></div>
             <div class="domain" data-domain="guest"><h3>GUEST vCPU 0</h3><strong id="guest-state">RIP 0x0</strong><small id="guest-detail">guest execution context</small><span class="statepill" id="guest-pill">guest</span></div>
           </div>
+          <div class="flow-window" id="flow-window"></div>
           <footer class="region-foot"><strong id="flow-kind">entry</strong><span id="flow-caption">KVM → guest</span></footer>
         </section>
 
@@ -96,11 +97,6 @@
           <footer class="region-foot"><strong id="dma-state">not present</strong><span id="dma-caption">DMA field is sampled only at the eBPF DMA event</span></footer>
         </section>
       </div>
-
-      <section class="chronology">
-        <div class="chrono-head"><b>LOCAL CHRONOLOGY</b><span>13-event window centered on selection</span><span id="window-range"></span></div>
-        <div id="flow-window" class="flow-window"></div>
-      </section>
     </section>
 
     <aside class="notebook panel">

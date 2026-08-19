@@ -430,7 +430,6 @@ function renderWindow(){
     var start=Math.max(0,Math.min(D.events.length-13,cursor-6)),
         end=Math.min(D.events.length,start+13);
     var slice=D.events.slice(start,end);
-    $('window-range').textContent='seq '+slice[0].seq+'–'+slice[slice.length-1].seq;
     $('flow-window').innerHTML=slice.map(function(e,i){
         var foot=e.rip?e.rip:e.irr?'IRR=1':e.isr?'ISR=1':e.rte!=='0x0'?'RTE '+e.rte:'';
         return '<button class="event-cell '+e.kind+' '+(start+i===cursor?'current':'')+'" data-index="'+(start+i)+'" title="seq '+e.seq+': '+esc(prettyEvent(e))+'\n'+esc(e.raw)+'">'+
