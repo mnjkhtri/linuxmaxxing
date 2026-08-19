@@ -330,18 +330,6 @@ function explanation(e){
     if(e.name==='device_dma_transfer')return 'An eBPF-only device event samples a '+D.meta.dma_xfer_size+'-byte '+(e.dma_dir==='to_device'?'guest-memory → device':'device → guest-memory')+' transfer at GPA '+esc(e.dma_gpa)+'.  It is inserted into the trace flow by monotonic time.';
     return 'Observed transition in the fused trace/eBPF sequence.';
 }
-function scienceNote(e){
-    if(e.kind==='dma'){
-        var nxt=e.next_seq?D.events[+(e.next_seq)-1]:null;
-        var lag=nxt&&nxt.dt_prev_us!=null?'  The next APIC-accept tracepoint occurs '+nxt.dt_prev_us+' µs later.':'';
-        return 'Observation: temporal adjacency, not a latency decomposition.  The files alone do not separate device execution, batching, scheduling, and probe placement.'+lag;
-    }
-    if(e.rip==='0x108'&&e.reason==='EPT_MISCONFIG')return 'This is one member of the '+D.poll_count+'-exit RIP 0x108 motif.  After the first long gap, the repeated exit cadence is about '+D.poll_median_us+' µs (median over steady repetitions).  This is KVM\u2019s MMIO-SPTE path: a reserved-bit EPT entry that refires per access after the first violation arms it.';
-    if(e.irr&&!e.isr)return 'At this hook the sampler sees IRR=1 and ISR=0: a pending interrupt is observable (the vector is latched, not yet in service).  Exact internal transition timing is only bounded by neighboring probes.';
-    if(!e.irr&&e.isr)return 'At this hook the sampler sees IRR=0 and ISR=1: the sampled state has moved from pending to in-service.  This is a sampled state observation, not continuous LAPIC tracing.';
-    if(e.name==='kvm_ioapic_set_irq')return 'Note the cross-source asymmetry: the tracepoint exposes IOAPIC pin/vector semantics, while the eBPF state says ioapic_available=false and carries a NULL IOAPIC pointer.  RTE '+(e.rte==='0x0'?'bits are not carried on this snapshot':'= '+e.rte+' rides on this snapshot')+'.';
-    return '';
-}
 
 /* ---- renderers -------------------------------------------------------- */
 
@@ -477,7 +465,6 @@ function renderNotebook(e){
     if(e.dt_next_us!=null)rows.push(['Δ next',e.dt_next_us+' µs']);
     $('fields').innerHTML=rows.map(function(r){return '<dt>'+esc(r[0])+'</dt><dd title="'+esc(r[1])+'">'+esc(r[1])+'</dd>'}).join('');
     $('raw').textContent=e.raw;
-    $('science').textContent=scienceNote(e);
 }
 function select(index){
     if(!D||!D.events.length)return;

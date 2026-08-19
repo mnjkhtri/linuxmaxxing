@@ -140,7 +140,6 @@ code,.mono{font-family:var(--mono)}
 .raw{margin-top:8px;padding:7px;border:1px solid var(--line);border-radius:5px;background:rgba(7,12,18,.72)}
 .raw label{display:block;color:var(--faint);font:700 6px var(--mono);letter-spacing:.08em;text-transform:uppercase}
 .raw code{display:block;margin-top:5px;color:#c9d5dd;font:6.5px/1.5 var(--mono);white-space:normal;overflow-wrap:anywhere}
-.science{margin-top:8px;padding:7px;border:1px dashed #4b4a32;border-radius:5px;color:#c8bb72;font:6.8px/1.45 var(--mono)}
 .toolbar{margin-top:auto;display:grid;grid-template-columns:30px 30px 30px minmax(70px,1fr) 44px;align-items:center;gap:4px;padding:7px;border-top:1px solid var(--line);background:var(--panel2)}
 .toolbar button{min-width:0;width:100%;padding:4px 1px}.toolbar input{min-width:0;width:100%;accent-color:var(--cyan)}
 #counter{color:var(--text);font:7px var(--mono);text-align:center;white-space:nowrap}
