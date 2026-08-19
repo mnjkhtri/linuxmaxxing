@@ -19,7 +19,8 @@
  * Twenty-five children are released together, named schedNNN, and assigned different positive nice values. Some periodically sleep or yield; the rest stay CPU-bound.
  * This exposes forks, wakeups, context switches, per-CPU CFS tree changes, and cross-CPU movement in one experiment.
  *
- * The observers do not filter on schedNNN. Kernel workers, the shell, idle tasks, and any other task involved in the interval remain truthful parts of the scheduler story.
+ * The eBPF CFS observer scopes its capture to the schedNNN children, so tracing starts with them and ends the moment they all exit.
+ * The tracefs side still records the full sched_* stream for cross-reference.
  */
 static volatile sig_atomic_t stop;
 

@@ -46,6 +46,24 @@ static __always_inline void fill_node(struct tree_node *dst, struct rb_node *nod
 	read_node_comm(node, dst->comm);
 }
 
+/*
+ * Scope the capture to the workload: return nonzero only when the enqueued sched_entity belongs to one of the schedNNN workload tasks.
+ * Everything else (workers, the shell, idle, other guests) is skipped in the entry probe, so it is never even staged and never reaches the ring buffer.
+ * The moment the last workload child exits there is nothing left to match, so tracing ends exactly when the workload finishes instead of trailing off into unrelated system enqueues.
+ * Task-level entities embed struct task_struct at se - offsetof(task_struct, se), the same walk read_node_comm uses for tree nodes.
+ * A group entity has no task behind that offset; reading its comm then fails with a negative error, which we treat as not-a-workload-task, so such enqueues are safely skipped.
+ */
+static __always_inline int workload_entity(struct sched_entity *se)
+{
+	char comm[16] = {};
+	struct task_struct *task =
+		(struct task_struct *)((char *)se - bpf_core_field_offset(struct task_struct, se));
+	long n = bpf_probe_read_kernel_str(comm, sizeof(comm), task->comm);
+	if (n < 0)
+		return 0;
+	return comm[0] == 's' && comm[1] == 'c' && comm[2] == 'h' && comm[3] == 'e' && comm[4] == 'd';
+}
+
 /* Recover a task name from a task-level sched_entity; group entities may have no task. */
 static __always_inline void read_node_comm(struct rb_node *node, char *comm)
 {
@@ -133,6 +151,10 @@ int BPF_KPROBE(kprobe_enqueue_entity)
 		.cfs_rq = (struct cfs_rq *)PT_REGS_PARM1(ctx),
 		.se = (struct sched_entity *)PT_REGS_PARM2(ctx),
 	};
+
+	/* Only workload entities are staged; everyone else is dropped here so the active_args map never fills with unrelated enqueues and the kretprobe has nothing to emit for them. */
+	if (!workload_entity(args.se))
+		return 0;
 
 	u64 id = bpf_get_current_pid_tgid();
 	bpf_map_update_elem(&active_args, &id, &args, BPF_ANY);

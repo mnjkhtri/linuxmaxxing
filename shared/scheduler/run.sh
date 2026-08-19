@@ -10,6 +10,8 @@ set -Eeuo pipefail
 #   eBPF post-enqueue CFS   -> scheduler.eBPF.ndjson (what state looked like)
 #
 # Both observers are active before the workload starts and both run on CLOCK_MONOTONIC.
+# The eBPF observer emits only the schedNNN workload enqueues, so tracing ends the moment the workload exits.
+# The tracefs instance still captures the full sched_* stream for cross-reference.
 # The frontend compares tracefs seconds * 1e9 directly with the eBPF time_ns without offsets.
 #
 # Scheduler is currently the reference capture pattern for future experiments:
@@ -71,7 +73,7 @@ preflight()
 
 # -----------------------------------------------------------------------------
 # setup_trace: a private tracefs instance on the mono clock with only the six lifecycle tracepoints enabled.
-# They stay unfiltered on purpose: kernel workers, the shell, and idle tasks that exchanged CPU time during the interval are truthful parts of the scheduler story.
+# The tracefs stream stays unfiltered by design: it keeps the full sched_* record for cross-referencing the scoped eBPF capture.
 # -----------------------------------------------------------------------------
 setup_trace()
 {
