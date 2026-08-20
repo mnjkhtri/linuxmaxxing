@@ -1,0 +1,99 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0 -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtio paravirtual I/O explorer</title>
+<link rel="stylesheet" href="virt-paraio.css?v=2">
+</head>
+<body>
+<main class="paraio">
+  <header class="hero">
+    <div>
+      <div class="eyebrow">VIRT · PARAVIRTUAL I/O · VIRTIO-MMIO + SPLIT VIRTQUEUE</div>
+      <h1>Shared RAM carries the request. <span>MMIO only rings the doorbell.</span></h1>
+    </div>
+    <div id="status" role="status"><i class="trace-dot"></i><span>loading para-I/O capture…</span></div>
+  </header>
+
+  <section class="comparison panel" aria-label="Emulated and paravirtual I/O comparison">
+    <div class="compare-side emulated"><b>EMULATED VIRT·IO</b><span>MMIO DMA_GPA + COMMAND</span><i>→ request semantics cross in VM exits →</i><span>VMM device model</span><em>completion: interrupt path</em></div>
+    <div class="compare-vs">VERSUS</div>
+    <div class="compare-side paravirtual"><b>PARAVIRTUAL PARA·IO</b><span>desc + avail in shared RAM</span><i>→ QueueNotify doorbell: one data-path exit →</i><span>VMM reads shared RAM</span><em>current teaching baseline: used ring + polling</em></div>
+  </section>
+
+  <section class="laboratory">
+    <nav id="roadmap" class="roadmap panel" aria-label="Virtio phases"></nav>
+
+    <section class="workbench">
+      <section class="machine panel">
+        <header class="panel-head">
+          <div><h2>Paravirtual I/O machine</h2><span id="machine-caption">Selected capture boundary drives every active state.</span></div>
+          <code id="selected-time">t = —</code>
+        </header>
+
+        <div id="control-rail" class="control-rail">
+          <span class="rail-domain">GUEST DRIVER</span><i></i><div><b id="control-register">modern virtio-mmio</b><small id="control-value">device bring-up</small></div><i></i><span class="rail-domain">USERSPACE DEVICE</span>
+        </div>
+
+        <div class="topology-stage">
+          <section class="execution-region region">
+            <header class="region-title"><div><b>EXECUTION CHRONOGRAM</b><span id="timeline-scope">Phase A</span></div><code>TIME ↓</code></header>
+            <div class="lane-head"><span>Δt</span><div><b>GUEST</b><b>KVM</b><b>VMM / DEVICE</b></div><span>OBSERVATION</span></div>
+            <div id="timeline" class="timeline"></div>
+            <footer class="region-foot"><b id="selected-time">t = —</b><span id="machine-caption">Selected capture boundary drives the topology.</span></footer>
+          </section>
+
+          <div class="support-stack">
+            <section class="queue-region region">
+              <header class="region-title"><div><b>SPLIT VIRTQUEUE</b><span>shared guest RAM is the protocol</span></div><code>queue 0 · size 8</code></header>
+              <div id="protocol-stage" class="protocol-stage" data-action="setup">
+                <div class="actor guest-actor" data-node="guest"><i></i><strong id="guest-action">virtio setup</strong><small id="guest-detail">guest driver</small></div>
+                <div class="doorbell" data-node="notify"><i></i><b>QueueNotify = 0</b><code>MMIO 0x050</code></div>
+                <div class="actor backend" data-node="backend"><i></i><strong>process_queue()</strong><small id="backend-action">userspace backend</small></div>
+                <div class="exit-gate" data-node="exit"><span>KVM_EXIT_MMIO</span><b>doorbell only</b></div>
+                <div class="memory-grid">
+              <article class="memory-node descriptor" data-node="descriptor"><header><b>DESCRIPTOR TABLE</b><code>GPA 0x4000</code></header><h3>desc[0]</h3><dl id="desc-fields"></dl></article>
+              <article class="memory-node avail" data-node="avail"><header><b>AVAILABLE RING</b><code>GPA 0x5000</code></header><h3>driver → device</h3><dl id="avail-fields"></dl></article>
+              <article class="memory-node used" data-node="used"><header><b>USED RING</b><code>GPA 0x6000</code></header><h3>device → driver</h3><dl id="used-fields"></dl></article>
+              <article class="memory-node buffer" data-node="buffer"><header><b>RNG BUFFER</b><code>GPA 0x7000</code></header><h3>device-writable bytes</h3><dl id="buffer-fields"></dl></article>
+                </div>
+                <div class="backend-private"><span>last_avail_idx</span><code id="last-avail">not sampled</code></div>
+              </div>
+            </section>
+
+            <section class="ownership-region region">
+              <header class="region-title"><div><b>OWNERSHIP / PUBLICATION</b><span>selected boundary drives this route</span></div></header>
+              <div class="ownership-track" id="ownership-track">
+                <button data-target="notify" data-action="prepare">1<span>desc</span></button><i></i><button data-target="notify" data-action="publish">2<span>avail</span></button><i></i><button data-target="notify" data-action="notify">3<span>notify</span></button><i></i><button data-target="begin" data-action="consume">4<span>consume</span></button><i></i><button data-target="end" data-action="complete">5<span>used</span></button><i></i><button data-target="success" data-action="poll">6<span>poll</span></button>
+              </div>
+              <div id="ownership-callout" class="ownership-callout"><em>SOURCE-DERIVED</em><b>Descriptor preparation is not individually trapped.</b><span>Choose or play Phase C to follow ownership.</span></div>
+              <footer class="exit-economy"><span>request <b>0 exits</b></span><span>QueueNotify <b id="notify-exits">—</b></span><span>completion <b>0 exits</b></span></footer>
+            </section>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <aside class="inspector panel">
+      <header class="panel-head"><div><h2>Observation notebook</h2><span>one boundary · one coherent sample</span></div><code id="source-badge">—</code></header>
+      <div class="inspector-body">
+        <div class="selected-kind"><i class="trace-dot"></i><span id="event-kind">—</span></div>
+        <h2 id="event-title">Select an observation</h2>
+        <p id="coherence-note">State belongs only to the selected boundary.</p>
+        <section><h3>EVENT INFO</h3><dl id="event-fields"></dl></section>
+        <section><h3>CONTEXT</h3><dl id="context-fields"></dl></section>
+        <section><h3>SAMPLED MACHINE STATE</h3><dl id="state-fields"></dl></section>
+        <section><h3>RAW SOURCE</h3><pre id="raw-source">—</pre></section>
+      </div>
+      <footer class="toolbar">
+        <button id="prev" title="Previous observation">←</button><button id="play" title="Play or pause">▶</button><button id="next" title="Next observation">→</button>
+        <input id="scrub" type="range" min="0" value="0" aria-label="Observation scrubber"><span id="counter">0 / 0</span>
+      </footer>
+    </aside>
+  </section>
+</main>
+<script src="virt-paraio.js?v=2"></script>
+</body>
+</html>
