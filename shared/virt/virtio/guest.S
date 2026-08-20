@@ -110,9 +110,10 @@ protected_mode:
 	jne fail_driver_ok
 
 	/* -------------------------------------------------- */
-	/* PHASE C — ONE PARAVIRTUALIZED I/O REQUEST */
-	/* Goal: the request itself lives in shared RAM. */
+	/* PHASE C — PARAVIRTUALIZED I/O THROUGH THE VIRTQUEUE */
+	/* Goal: requests live in shared RAM; QueueNotify only tells the backend that the queue has new work. */
 	/* -------------------------------------------------- */
+	/* C1 — one request: learn the basic descriptor to available ring to notification to used ring path. */
 	/* Descriptor zero describes 32 device-writable bytes, but the guest still owns the descriptor while preparing it. */
 	movl $VIRTIO_RNG_BUFFER_GPA, VIRTQ_DESC_GPA + VIRTQ_DESC_ADDR_OFFSET
 	movl $0, VIRTQ_DESC_GPA + VIRTQ_DESC_ADDR_OFFSET + 4
@@ -148,6 +149,75 @@ completion_published:
 	cmpl $0, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTQ_USED_ELEM_ID_OFFSET
 	jne fail_completion
 	cmpl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTQ_USED_ELEM_LEN_OFFSET
+	jne fail_completion
+
+	/* C2 — batch several requests before ringing the same doorbell once. */
+	/* These four descriptors physically exist while avail.idx remains one, so the device cannot consume them yet. */
+	movl $(VIRTIO_RNG_BUFFER_GPA + 1 * VIRTIO_RNG_BUFFER_STRIDE), VIRTQ_DESC_GPA + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET
+	movl $0, VIRTQ_DESC_GPA + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET + 4
+	movl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_DESC_GPA + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_LEN_OFFSET
+	movw $VIRTQ_DESC_F_WRITE, VIRTQ_DESC_GPA + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_FLAGS_OFFSET
+	movw $0, VIRTQ_DESC_GPA + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_NEXT_OFFSET
+
+	movl $(VIRTIO_RNG_BUFFER_GPA + 2 * VIRTIO_RNG_BUFFER_STRIDE), VIRTQ_DESC_GPA + 2 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET
+	movl $0, VIRTQ_DESC_GPA + 2 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET + 4
+	movl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_DESC_GPA + 2 * VIRTQ_DESC_SIZE + VIRTQ_DESC_LEN_OFFSET
+	movw $VIRTQ_DESC_F_WRITE, VIRTQ_DESC_GPA + 2 * VIRTQ_DESC_SIZE + VIRTQ_DESC_FLAGS_OFFSET
+	movw $0, VIRTQ_DESC_GPA + 2 * VIRTQ_DESC_SIZE + VIRTQ_DESC_NEXT_OFFSET
+
+	movl $(VIRTIO_RNG_BUFFER_GPA + 3 * VIRTIO_RNG_BUFFER_STRIDE), VIRTQ_DESC_GPA + 3 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET
+	movl $0, VIRTQ_DESC_GPA + 3 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET + 4
+	movl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_DESC_GPA + 3 * VIRTQ_DESC_SIZE + VIRTQ_DESC_LEN_OFFSET
+	movw $VIRTQ_DESC_F_WRITE, VIRTQ_DESC_GPA + 3 * VIRTQ_DESC_SIZE + VIRTQ_DESC_FLAGS_OFFSET
+	movw $0, VIRTQ_DESC_GPA + 3 * VIRTQ_DESC_SIZE + VIRTQ_DESC_NEXT_OFFSET
+
+	movl $(VIRTIO_RNG_BUFFER_GPA + 4 * VIRTIO_RNG_BUFFER_STRIDE), VIRTQ_DESC_GPA + 4 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET
+	movl $0, VIRTQ_DESC_GPA + 4 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET + 4
+	movl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_DESC_GPA + 4 * VIRTQ_DESC_SIZE + VIRTQ_DESC_LEN_OFFSET
+	movw $VIRTQ_DESC_F_WRITE, VIRTQ_DESC_GPA + 4 * VIRTQ_DESC_SIZE + VIRTQ_DESC_FLAGS_OFFSET
+	movw $0, VIRTQ_DESC_GPA + 4 * VIRTQ_DESC_SIZE + VIRTQ_DESC_NEXT_OFFSET
+
+	/* Ring slots and descriptor IDs are separate concepts even though this controlled example maps one to one. */
+	movw $1, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_RING_OFFSET + 1 * 2
+	movw $2, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_RING_OFFSET + 2 * 2
+	movw $3, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_RING_OFFSET + 3 * 2
+	movw $4, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_RING_OFFSET + 4 * 2
+	cmpw $1, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_IDX_OFFSET
+	jne fail_queue
+	/* One publication changes pending work from zero to four: avail.idx becomes five while last_avail_idx is one. */
+	mfence
+	movw $VIRTIO_RNG_REQUEST_COUNT, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_IDX_OFFSET
+	mfence
+	/* One QueueNotify announces all four newly published entries rather than describing any one request. */
+	movl $VIRTIO_RNG_QUEUE_INDEX, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY
+
+	movl $VIRTIO_POLL_LIMIT, %ecx
+poll_batch_used_idx:
+	movzwl VIRTQ_USED_GPA + VIRTQ_USED_IDX_OFFSET, %eax
+	cmpl $VIRTIO_RNG_REQUEST_COUNT, %eax
+	je batch_completion_published
+	decl %ecx
+	jnz poll_batch_used_idx
+	jmp fail_timeout
+
+batch_completion_published:
+	/* This acquire fence keeps all four used-element reads after observing used.idx equal five. */
+	lfence
+	cmpl $1, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + 1 * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_ID_OFFSET
+	jne fail_completion
+	cmpl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + 1 * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_LEN_OFFSET
+	jne fail_completion
+	cmpl $2, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + 2 * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_ID_OFFSET
+	jne fail_completion
+	cmpl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + 2 * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_LEN_OFFSET
+	jne fail_completion
+	cmpl $3, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + 3 * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_ID_OFFSET
+	jne fail_completion
+	cmpl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + 3 * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_LEN_OFFSET
+	jne fail_completion
+	cmpl $4, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + 4 * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_ID_OFFSET
+	jne fail_completion
+	cmpl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + 4 * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_LEN_OFFSET
 	jne fail_completion
 
 	/* The VMM treats this port write as explicit success and exits before the following fault instruction. */

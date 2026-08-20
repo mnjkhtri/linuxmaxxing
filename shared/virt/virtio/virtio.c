@@ -101,7 +101,7 @@ static const char *phase_name(const struct virtio_event *event)
 static void write_meta(struct json_writer *jw)
 {
 	json_object_begin(jw);
-	json_u32(jw, "schema_version", 1);
+	json_u32(jw, "schema_version", 2);
 	json_string(jw, "experiment", "virt-paraio");
 	json_string(jw, "kind", "meta");
 	json_string(jw, "source", "ebpf");
@@ -126,7 +126,9 @@ static void write_meta(struct json_writer *jw)
 	json_hex(jw, "used_gpa", VIRTQ_USED_GPA);
 	json_u32(jw, "used_bytes", VIRTQ_USED_BYTES);
 	json_hex(jw, "rng_buffer_gpa", VIRTIO_RNG_BUFFER_GPA);
+	json_hex(jw, "rng_buffer_stride", VIRTIO_RNG_BUFFER_STRIDE);
 	json_u32(jw, "rng_request_length", VIRTIO_RNG_REQUEST_LEN);
+	json_u32(jw, "rng_request_count", VIRTIO_RNG_REQUEST_COUNT);
 	json_string(jw, "negotiated_feature", "VIRTIO_F_VERSION_1");
 	json_string(jw, "completion_mode", "polling");
 	json_bool(jw, "accelerated_notification", false);
@@ -239,22 +241,24 @@ static void write_descriptor(struct json_writer *jw, const struct virtio_descrip
 	json_bool(jw, "present", descriptor->present != 0);
 	if (descriptor->present)
 	{
-		json_u32(jw, "index", 0);
-		json_hex(jw, "addr", descriptor->addr);
-		json_u32(jw, "len", descriptor->len);
-		json_hex(jw, "flags", descriptor->flags);
-		json_bool(jw, "device_writable", (descriptor->flags & VIRTQ_DESC_F_WRITE) != 0);
-		json_u32(jw, "next", descriptor->next);
+		json_array_begin_field(jw, "entries");
+		for (unsigned int i = 0; i < VIRTQ_SIZE; i++)
+		{
+			const struct virtio_descriptor_entry *entry = &descriptor->entries[i];
+
+			json_object_begin(jw);
+			json_u32(jw, "index", i);
+			json_hex(jw, "addr", entry->addr);
+			json_u32(jw, "len", entry->len);
+			json_hex(jw, "flags", entry->flags);
+			json_bool(jw, "device_writable", (entry->flags & VIRTQ_DESC_F_WRITE) != 0);
+			json_u32(jw, "next", entry->next);
+			json_object_end(jw);
+		}
+		json_array_end(jw);
 	}
 	else
-	{
-		json_null(jw, "index");
-		json_null(jw, "addr");
-		json_null(jw, "len");
-		json_null(jw, "flags");
-		json_null(jw, "device_writable");
-		json_null(jw, "next");
-	}
+		json_null(jw, "entries");
 	json_object_end(jw);
 }
 
@@ -266,13 +270,16 @@ static void write_avail(struct json_writer *jw, const struct virtio_avail_state 
 	{
 		json_hex(jw, "flags", avail->flags);
 		json_u32(jw, "idx", avail->idx);
-		json_u32(jw, "ring0", avail->ring0);
+		json_array_begin_field(jw, "ring");
+		for (unsigned int i = 0; i < VIRTQ_SIZE; i++)
+			json_u32_value(jw, avail->ring[i]);
+		json_array_end(jw);
 	}
 	else
 	{
 		json_null(jw, "flags");
 		json_null(jw, "idx");
-		json_null(jw, "ring0");
+		json_null(jw, "ring");
 	}
 	json_object_end(jw);
 }
@@ -285,15 +292,22 @@ static void write_used(struct json_writer *jw, const struct virtio_used_state *u
 	{
 		json_hex(jw, "flags", used->flags);
 		json_u32(jw, "idx", used->idx);
-		json_u32(jw, "ring0_id", used->ring0_id);
-		json_u32(jw, "ring0_len", used->ring0_len);
+		json_array_begin_field(jw, "ring");
+		for (unsigned int i = 0; i < VIRTQ_SIZE; i++)
+		{
+			json_object_begin(jw);
+			json_u32(jw, "slot", i);
+			json_u32(jw, "id", used->ring[i].id);
+			json_u32(jw, "len", used->ring[i].len);
+			json_object_end(jw);
+		}
+		json_array_end(jw);
 	}
 	else
 	{
 		json_null(jw, "flags");
 		json_null(jw, "idx");
-		json_null(jw, "ring0_id");
-		json_null(jw, "ring0_len");
+		json_null(jw, "ring");
 	}
 	json_object_end(jw);
 }
@@ -334,7 +348,7 @@ static void write_state(struct json_writer *jw, const struct virtio_state *state
 static void write_snapshot(struct json_writer *jw, const struct virtio_event *event, unsigned int seq)
 {
 	json_object_begin(jw);
-	json_u32(jw, "schema_version", 1);
+	json_u32(jw, "schema_version", 2);
 	json_string(jw, "experiment", "virt-paraio");
 	json_string(jw, "kind", "snapshot");
 	json_string(jw, "source", "ebpf");

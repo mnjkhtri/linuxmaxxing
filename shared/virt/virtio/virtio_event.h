@@ -3,6 +3,8 @@
 #ifndef VIRTIO_EVENT_H
 #define VIRTIO_EVENT_H
 
+#define VIRTIO_EVENT_QUEUE_SLOTS 8
+
 enum virtio_event_type
 {
 	VIRTIO_EVENT_MMIO = 0,
@@ -56,34 +58,44 @@ struct virtio_queue_state
 	unsigned long long device_addr;
 };
 
-struct virtio_descriptor_state
+struct virtio_descriptor_entry
 {
-	unsigned char present;
-	unsigned char reserved[7];
 	unsigned long long addr;
 	unsigned int len;
 	unsigned short flags;
 	unsigned short next;
 };
 
+struct virtio_descriptor_state
+{
+	unsigned char present; /* present says that every physical descriptor slot was sampled at this boundary. */
+	unsigned char reserved[7];
+	struct virtio_descriptor_entry entries[VIRTIO_EVENT_QUEUE_SLOTS];
+};
+
 struct virtio_avail_state
 {
-	unsigned char present;
+	unsigned char present; /* present distinguishes real zero-valued ring entries from unavailable data. */
 	unsigned char reserved;
 	unsigned short flags;
 	unsigned short idx;
-	unsigned short ring0;
+	unsigned short ring[VIRTIO_EVENT_QUEUE_SLOTS];
+};
+
+struct virtio_used_entry
+{
+	unsigned int id;
+	unsigned int len;
 };
 
 struct virtio_used_state
 {
-	unsigned char present;
+	unsigned char present; /* present says that the complete used-ring snapshot is available. */
 	unsigned char reserved;
 	unsigned short flags;
 	unsigned short idx;
 	unsigned short reserved2;
-	unsigned int ring0_id;
-	unsigned int ring0_len;
+	struct virtio_used_entry ring[VIRTIO_EVENT_QUEUE_SLOTS];
 };
 
 #define VIRTIO_BUFFER_PREVIEW_BYTES 8

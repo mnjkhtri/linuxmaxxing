@@ -6,7 +6,7 @@
     var stamp = Date.now();
     var BPF = "../../shared/_captures/virt-paraio.eBPF.ndjson?v=" + stamp;
     var TRACE = "../../shared/_captures/virt-paraio-Trace.txt?v=" + stamp;
-    var M = { meta: null, events: [], phase: "A", landmarks: {}, setupMmio: 0, notifyMmio: 0 };
+    var M = { meta: null, events: [], phase: "A", landmarks: { notifies: [], begins: [], ends: [] }, setupMmio: 0, notifyMmio: 0 };
     var cursor = 0,
         playTimer = null;
 
@@ -193,11 +193,11 @@
             if (event.source === "ebpf" && event.name === "virtio_mmio") {
                 if (event.info.mmio.register === "QueueNotify") {
                     M.notifyMmio++;
-                    if (missing(M.landmarks.notify)) M.landmarks.notify = index;
+                    M.landmarks.notifies.push(index);
                 } else M.setupMmio++;
             }
-            if (event.source === "ebpf" && event.name === "queue_backend_begin") M.landmarks.begin = index;
-            if (event.source === "ebpf" && event.name === "queue_backend_end") M.landmarks.end = index;
+            if (event.source === "ebpf" && event.name === "queue_backend_begin") M.landmarks.begins.push(index);
+            if (event.source === "ebpf" && event.name === "queue_backend_end") M.landmarks.ends.push(index);
             if (event.source === "tracefs" && event.name === "kvm_userspace_exit" && event.info.reason === "KVM_EXIT_IO") M.landmarks.success = index;
         });
         ["A", "B", "C"].forEach(function (phase) {
@@ -283,46 +283,36 @@
                 size: metaNumber(meta, "guest_code_size"),
                 kind: "context",
                 name: "guest code region",
-                detail: "reported by capture meta",
             },
             {
                 start: metaNumber(meta, "guest_stack_bottom"),
                 size: metaNumber(meta, "guest_stack_top") - metaNumber(meta, "guest_stack_bottom"),
                 kind: "context",
                 name: "stack range",
-                detail: "top " + gpa(metaNumber(meta, "guest_stack_top")) + " · grows downward",
             },
             {
                 start: metaNumber(meta, "descriptor_gpa"),
                 size: pageSize,
                 kind: "descriptor",
                 name: "VIRTQUEUE DESCRIPTOR TABLE",
-                used: metaNumber(meta, "descriptor_bytes"),
-                detail: "virtq_desc[]",
             },
             {
                 start: metaNumber(meta, "avail_gpa"),
                 size: pageSize,
                 kind: "avail",
                 name: "AVAILABLE RING",
-                used: metaNumber(meta, "avail_bytes"),
-                detail: "driver → device",
             },
             {
                 start: metaNumber(meta, "used_gpa"),
                 size: pageSize,
                 kind: "used",
                 name: "USED RING",
-                used: metaNumber(meta, "used_bytes"),
-                detail: "device → driver",
             },
             {
                 start: metaNumber(meta, "rng_buffer_gpa"),
-                size: metaNumber(meta, "rng_request_length"),
+                size: metaNumber(meta, "rng_buffer_stride") * (metaNumber(meta, "rng_request_count") - 1) + metaNumber(meta, "rng_request_length"),
                 kind: "buffer",
-                name: "RNG BUFFER",
-                used: metaNumber(meta, "rng_request_length"),
-                detail: "device-writable bytes",
+                name: "RNG BUFFERS",
             },
         ].sort(function (a, b) {
             return a.start - b.start;
@@ -345,15 +335,9 @@
                         esc(region.name) +
                         "</b><code>GPA " +
                         gpa(region.start) +
-                        "</code></header><h3>" +
-                        byteCount(region.used) +
-                        " used in " +
-                        byteCount(region.size) +
-                        " region · " +
-                        esc(region.detail) +
-                        '</h3><dl id="' +
+                        '</code></header><div class="slot-grid" id="' +
                         fieldId +
-                        '"></dl></article>',
+                        '"></div></article>',
                 );
             }
             cursor = region.start + region.size;
@@ -366,6 +350,17 @@
         $("memory-map").innerHTML = items.join("");
     }
 
+    function slotCells(entries, renderEntry) {
+        var count = M.meta ? metaNumber(M.meta, "queue_size") : 8;
+        return Array.from({ length: count }, function (_, index) {
+            return renderEntry(entries && entries[index], index);
+        }).join("");
+    }
+
+    function emptySlot(index) {
+        return '<div class="queue-slot empty"><b>' + index + '</b><span>not sampled</span></div>';
+    }
+
     /* Render only state sampled at the selected boundary, preserving unavailable values as not sampled. */
     function renderQueue(event) {
         var descriptor = stateGroup(event, "descriptor"),
@@ -373,56 +368,21 @@
             used = stateGroup(event, "used"),
             queue = stateGroup(event, "queue"),
             preview = stateGroup(event, "buffer_preview");
-        dlRows(
-            $("desc-fields"),
-            descriptor
-                ? [
-                      ["addr", descriptor.addr],
-                      ["len", descriptor.len],
-                      ["flags", descriptor.flags],
-                      ["decode", descriptor.device_writable ? "WRITE" : "no WRITE"],
-                      ["next", descriptor.next],
-                  ]
-                : [
-                      ["addr", null],
-                      ["len", null],
-                      ["flags", null],
-                      ["decode", null],
-                      ["next", null],
-                  ],
-        );
-        dlRows(
-            $("avail-fields"),
-            avail
-                ? [
-                      ["flags", avail.flags],
-                      ["idx", avail.idx],
-                      ["ring[0]", avail.ring0],
-                      ["points to", avail.ring0 === 0 ? "desc[0]" : "desc[" + avail.ring0 + "]"],
-                  ]
-                : [
-                      ["flags", null],
-                      ["idx", null],
-                      ["ring[0]", null],
-                      ["points to", null],
-                  ],
-        );
-        dlRows(
-            $("used-fields"),
-            used
-                ? [
-                      ["flags", used.flags],
-                      ["idx", used.idx],
-                      ["ring[0].id", used.ring0_id],
-                      ["ring[0].len", used.ring0_len],
-                  ]
-                : [
-                      ["flags", null],
-                      ["idx", null],
-                      ["ring[0].id", null],
-                      ["ring[0].len", null],
-                  ],
-        );
+        $("desc-fields").innerHTML = slotCells(descriptor && descriptor.entries, function (entry, index) {
+            if (!entry) return emptySlot(index);
+            var populated = hexNumber(entry.addr) !== 0 || entry.len !== 0 || hexNumber(entry.flags) !== 0;
+            return '<div class="queue-slot ' + (populated ? "populated" : "empty") + '"><b>desc ' + index + '</b><code>' + esc(entry.addr) + '</code><span>' + entry.len + " B · " + (entry.device_writable ? "WRITE" : "—") + " · next " + entry.next + "</span></div>";
+        });
+        $("avail-fields").innerHTML = slotCells(avail && avail.ring, function (descriptorId, index) {
+            if (!avail) return emptySlot(index);
+            var published = index < avail.idx;
+            return '<div class="queue-slot ' + (published ? "published" : "empty") + '"><b>slot ' + index + '</b><code>' + (published ? "descriptor " : "raw ") + descriptorId + '</code><span>' + (published ? "published" : "not published") + "</span></div>";
+        });
+        $("used-fields").innerHTML = slotCells(used && used.ring, function (entry, index) {
+            if (!entry) return emptySlot(index);
+            var completed = index < used.idx;
+            return '<div class="queue-slot ' + (completed ? "completed" : "empty") + '"><b>slot ' + index + '</b><code>' + (completed ? "descriptor " : "raw id ") + entry.id + '</code><span>' + (completed ? entry.len + " B completed" : "not published") + "</span></div>";
+        });
         var bytes =
             preview && Array.isArray(preview.bytes)
                 ? preview.bytes
@@ -431,14 +391,13 @@
                       })
                       .join(" ")
                 : null;
-        dlRows($("buffer-fields"), [
-            ["request GPA", descriptor ? descriptor.addr : null],
-            ["request len", descriptor ? descriptor.len : null],
-            ["preview", bytes],
-            ["type", preview ? "raw random data" : null],
-        ]);
-        if (preview) $("buffer-fields").querySelectorAll("dd")[2].classList.add("raw-random");
+        $("buffer-fields").innerHTML = slotCells(descriptor && descriptor.entries, function (entry, index) {
+            if (!entry) return emptySlot(index);
+            var populated = hexNumber(entry.addr) !== 0;
+            return '<div class="queue-slot ' + (populated ? "populated" : "empty") + '"><b>buffer ' + index + '</b><code>' + esc(entry.addr) + '</code><span>' + (index === 0 && bytes ? bytes : populated ? entry.len + " B" : "unused") + "</span></div>";
+        });
         $("last-avail").textContent = queue ? queue.last_avail_idx : "not sampled";
+        $("pending-count").textContent = queue && avail ? avail.idx + " − " + queue.last_avail_idx + " = " + ((avail.idx - queue.last_avail_idx) & 0xffff) : "not sampled";
     }
 
     function eventRows(event) {
@@ -485,10 +444,10 @@
             ["status decode", device ? statusDecode(device.status) : null],
             ["queue ready", queue ? queue.ready : null],
             ["last_avail_idx", queue ? queue.last_avail_idx : null],
-            ["desc flags", descriptor ? descriptor.flags : null],
-            ["desc decode", descriptor && descriptor.device_writable ? "VIRTQ_DESC_F_WRITE" : descriptor ? "no WRITE" : null],
+            ["descriptor entries", descriptor && Array.isArray(descriptor.entries) ? descriptor.entries.filter(function (entry) { return hexNumber(entry.addr) !== 0; }).length : null],
             ["avail.idx", avail ? avail.idx : null],
             ["used.idx", used ? used.idx : null],
+            ["pending", queue && avail ? (avail.idx - queue.last_avail_idx) & 0xffff : null],
         ]);
         dlRows($("observation-fields"), rows);
     }
@@ -503,10 +462,24 @@
             before = previous && previous.state && previous.state[name];
         return Boolean(previous && current && current.present) && JSON.stringify(current) !== JSON.stringify(before || null);
     }
+    function selectedParticipant(event) {
+        if (event.source === "ebpf" && event.name === "queue_backend_begin") return "backend";
+        if (event.source === "ebpf" && event.name === "queue_backend_end") return "backend";
+        if (event.source === "ebpf" && event.name === "virtio_mmio") return "backend";
+        if (event.name === "kvm_mmio" && event.info.register === "QueueNotify") return "notify";
+        if (event.name === "kvm_userspace_exit") return "backend";
+        if (event.name === "kvm_entry" || event.name === "kvm_exit") return "guest";
+        return null;
+    }
     function highlightChanges(event) {
         document.querySelectorAll("[data-node]").forEach(function (node) {
             node.classList.remove("hot");
         });
+        var participant = selectedParticipant(event);
+        if (participant) {
+            var participantNode = document.querySelector('[data-node="' + participant + '"]');
+            if (participantNode) participantNode.classList.add("hot");
+        }
         if (!event.state) return;
         var previous = previousSample(event),
             names = [];
@@ -621,7 +594,7 @@
     }
 
     function renderRoadmap() {
-        var definitions = { A: "VIRTIO BRING-UP", B: "QUEUE CONFIG", C: "SHARED-MEMORY I/O" };
+        var definitions = { A: "VIRTIO BRING-UP", B: "QUEUE CONFIG", C: "PARAVIRTUALIZED I/O" };
         $("roadmap").innerHTML = ["A", "B", "C"]
             .map(function (phase) {
                 var samples = phaseSamples(phase),
@@ -764,9 +737,9 @@
             if (!M.meta || !ebpf.length || !trace.length) throw Error("capture is incomplete");
             renderMemoryMap(M.meta);
             buildModel(ebpf, trace);
-            if (M.notifyMmio !== 1 || missing(M.landmarks.begin) || missing(M.landmarks.end)) throw Error("required Phase-C observations are missing");
+            if (M.landmarks.begins.length !== 2 || M.landmarks.ends.length !== 2 || M.notifyMmio !== M.landmarks.begins.length) throw Error("required Phase-C observations are missing");
             $("scrub").max = M.events.length - 1;
-            $("status").lastElementChild.textContent = M.events.length + " boundaries · one QueueNotify";
+            $("status").lastElementChild.textContent = M.events.length + " boundaries · " + M.notifyMmio + " QueueNotify writes";
             wire();
             select(M.landmarks.phaseC, true);
         })

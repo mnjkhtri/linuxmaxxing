@@ -41,6 +41,7 @@ mkdir -p captures
 ./build/virtio > captures/virt-paraio.eBPF.ndjson 2> captures/virt-paraio-observer.log &
 observer=$!
 trace_instance=""
+kvm_mmio_enabled=0
 
 cleanup()
 {
@@ -85,6 +86,7 @@ if [ -r "$trace_root/events/kvm/kvm_mmio/format" ]; then
 	cat "$trace_root/events/kvm/kvm_mmio/format" >> captures/virt-paraio-trace-formats.log
 	if grep -q 'field:.*gpa' "$trace_root/events/kvm/kvm_mmio/format"; then
 		echo 1 > "$trace_instance/events/kvm/kvm_mmio/enable"
+		kvm_mmio_enabled=1
 		echo "tracefs: enabled optional kvm_mmio with GPA field" >&2
 	fi
 fi
@@ -102,21 +104,51 @@ cleanup
 trap - EXIT
 [ -s captures/virt-paraio-Trace.txt ] && [ -s captures/virt-paraio.eBPF.ndjson ]
 
-python3 -c 'import json,sys; [json.loads(line) for line in open(sys.argv[1]) if line.strip()]' captures/virt-paraio.eBPF.ndjson
-grep -q '"guest_memory_size":"0x20000"' captures/virt-paraio.eBPF.ndjson
-grep -q '"guest_code_size":"0x1000"' captures/virt-paraio.eBPF.ndjson
-grep -q '"guest_stack_bottom":"0x2000"' captures/virt-paraio.eBPF.ndjson
-grep -q '"queue_region_size":"0x1000"' captures/virt-paraio.eBPF.ndjson
-[ "$(grep -c '"register":"QueueNotify"' captures/virt-paraio.eBPF.ndjson)" -eq 1 ]
-begin="$(grep '"event_name":"queue_backend_begin"' captures/virt-paraio.eBPF.ndjson)"
-end="$(grep '"event_name":"queue_backend_end"' captures/virt-paraio.eBPF.ndjson)"
-[ -n "$begin" ] && [ -n "$end" ]
-grep -q '"descriptor":{"present":true,"index":0,"addr":"0x7000","len":32,"flags":"0x2","device_writable":true,"next":0}' <<<"$begin"
-grep -q '"queue":{"present":true,"size":8,"ready":true,"last_avail_idx":0' <<<"$begin"
-grep -q '"avail":{"present":true,"flags":"0x0","idx":1,"ring0":0}' <<<"$begin"
-grep -q '"used":{"present":true,"flags":"0x0","idx":0,"ring0_id":0,"ring0_len":0}' <<<"$begin"
-grep -q '"queue":{"present":true,"size":8,"ready":true,"last_avail_idx":1' <<<"$end"
-grep -q '"used":{"present":true,"flags":"0x0","idx":1,"ring0_id":0,"ring0_len":32}' <<<"$end"
+python3 - captures/virt-paraio.eBPF.ndjson <<'PY'
+import json
+import sys
+
+records = [json.loads(line) for line in open(sys.argv[1]) if line.strip()]
+meta = records[0]
+snapshots = records[1:]
+assert meta["schema_version"] == 2
+assert meta["queue_size"] == 8
+assert meta["rng_request_count"] == 5
+
+notifies = [record for record in snapshots if record["event_info"]["mmio"]["register"] == "QueueNotify"]
+begins = [record for record in snapshots if record["event_info"]["event_name"] == "queue_backend_begin"]
+ends = [record for record in snapshots if record["event_info"]["event_name"] == "queue_backend_end"]
+assert len(notifies) == 2
+assert len(begins) == 2
+assert len(ends) == 2
+
+expected_buffers = [0x7000 + index * 0x100 for index in range(5)]
+for index, address in enumerate(expected_buffers):
+    entry = begins[1]["state"]["descriptor"]["entries"][index]
+    assert int(entry["addr"], 16) == address
+    assert entry["len"] == 32
+    assert entry["flags"] == "0x2"
+    assert entry["next"] == 0
+
+assert begins[0]["state"]["avail"]["idx"] == 1
+assert begins[0]["state"]["queue"]["last_avail_idx"] == 0
+assert begins[0]["state"]["used"]["idx"] == 0
+assert ends[0]["state"]["avail"]["idx"] == 1
+assert ends[0]["state"]["queue"]["last_avail_idx"] == 1
+assert ends[0]["state"]["used"]["idx"] == 1
+
+assert begins[1]["state"]["avail"]["idx"] == 5
+assert begins[1]["state"]["avail"]["ring"][:5] == [0, 1, 2, 3, 4]
+assert begins[1]["state"]["queue"]["last_avail_idx"] == 1
+assert begins[1]["state"]["used"]["idx"] == 1
+assert ends[1]["state"]["avail"]["idx"] == 5
+assert ends[1]["state"]["queue"]["last_avail_idx"] == 5
+assert ends[1]["state"]["used"]["idx"] == 5
+assert [(entry["id"], entry["len"]) for entry in ends[1]["state"]["used"]["ring"][:5]] == [(index, 32) for index in range(5)]
+PY
+if [ "$kvm_mmio_enabled" -eq 1 ]; then
+	[ "$(grep -c 'kvm_mmio:.*gpa 0x10000050' captures/virt-paraio-Trace.txt)" -eq 2 ]
+fi
 REMOTE
 
 fetch_captures

@@ -45,11 +45,12 @@ static int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)
 	struct virtq_used *used;
 	struct virtq_desc request;
 	uint16_t avail_idx;
+	uint16_t pending;
 	uint16_t slot;
 	uint16_t head;
 	uint16_t old_used_idx;
+	uint64_t expected_buffer;
 	uint8_t *buffer;
-	size_t filled = 0;
 
 	if (!dev->queue.ready || dev->queue.size != VIRTQ_SIZE)
 	{
@@ -65,67 +66,72 @@ static int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)
 	avail_idx = avail->idx;
 	/* The acquire fence keeps ring and descriptor reads after observing the guest's avail.idx publication. */
 	atomic_thread_fence(memory_order_acquire);
-	if (avail_idx == dev->queue.last_avail_idx)
+	pending = (uint16_t)(avail_idx - dev->queue.last_avail_idx);
+	if (pending == 0)
 		return 0;
-	if ((uint16_t)(avail_idx - dev->queue.last_avail_idx) != 1)
+	if (pending > VIRTQ_SIZE)
 	{
-		fprintf(stderr, "virtio C: this baseline expects exactly one newly available request\n");
+		fprintf(stderr, "virtio C: available ring contains more entries than the queue can hold\n");
 		return -1;
 	}
-
-	slot = dev->queue.last_avail_idx % VIRTQ_SIZE;
-	head = avail->ring[slot];
-	if (head != 0)
-	{
-		fprintf(stderr, "virtio C: this baseline expects avail[%u] to name descriptor zero\n", slot);
-		return -1;
-	}
-	request = desc[head];
-	if (request.addr != VIRTIO_RNG_BUFFER_GPA || request.len != VIRTIO_RNG_REQUEST_LEN || request.flags != VIRTQ_DESC_F_WRITE || request.next != 0)
-	{
-		fprintf(stderr, "virtio C: descriptor zero is not the expected direct writable entropy buffer\n");
-		return -1;
-	}
-
-	/* A descriptor address is an untrusted GPA rather than a host pointer, so its complete range is checked before translation. */
-	if (request.addr > VIRTIO_GUEST_MEM_SIZE || request.len > VIRTIO_GUEST_MEM_SIZE - request.addr)
-	{
-		fprintf(stderr, "virtio C: descriptor buffer lies outside guest RAM\n");
-		return -1;
-	}
-	buffer = guest_mem + request.addr;
 
 	fprintf(stderr, "virtio C:\n");
-	fprintf(stderr, "  published avail[0]=0 avail.idx=%u\n", avail_idx);
 	fprintf(stderr, "  QueueNotify queue=0\n");
-	fprintf(stderr, "  backend reads desc[0] { gpa=0x%llx len=%u WRITE } from shared RAM\n", (unsigned long long)request.addr, request.len);
-	while (filled < request.len)
+	fprintf(stderr, "  backend avail.idx=%u last_avail_idx=%u pending=%u\n", avail_idx, dev->queue.last_avail_idx, pending);
+	while (dev->queue.last_avail_idx != avail_idx)
 	{
-		ssize_t bytes = getrandom(buffer + filled, request.len - filled, 0);
+		size_t filled = 0;
 
-		if (bytes < 0 && errno == EINTR)
-			continue;
-		if (bytes <= 0)
+		slot = dev->queue.last_avail_idx % VIRTQ_SIZE;
+		head = avail->ring[slot];
+		if (head >= VIRTQ_SIZE)
 		{
-			if (bytes < 0)
-				perror("getrandom");
-			else
-				fprintf(stderr, "getrandom returned zero bytes\n");
+			fprintf(stderr, "virtio C: avail[%u] names descriptor %u outside the table\n", slot, head);
 			return -1;
 		}
-		filled += (size_t)bytes;
-	}
-	fprintf(stderr, "  backend wrote %u bytes to guest GPA 0x%llx\n", request.len, (unsigned long long)request.addr);
+		request = desc[head];
+		expected_buffer = VIRTIO_RNG_BUFFER_GPA + (uint64_t)head * VIRTIO_RNG_BUFFER_STRIDE;
+		if (request.addr != expected_buffer || request.len != VIRTIO_RNG_REQUEST_LEN || request.flags != VIRTQ_DESC_F_WRITE || request.next != 0)
+		{
+			fprintf(stderr, "virtio C: descriptor %u is not the expected direct writable entropy buffer\n", head);
+			return -1;
+		}
 
-	old_used_idx = used->idx;
-	slot = old_used_idx % VIRTQ_SIZE;
-	used->ring[slot].id = head;
-	used->ring[slot].len = request.len;
-	/* The release fence publishes the entropy and used element before used.idx returns ownership to the guest. */
-	atomic_thread_fence(memory_order_release);
-	used->idx = (uint16_t)(old_used_idx + 1);
-	dev->queue.last_avail_idx++;
-	fprintf(stderr, "  backend published used[0] { id=0 len=%u } used.idx=%u\n", request.len, used->idx);
+		/* A descriptor address is an untrusted GPA rather than a host pointer, so its complete range is checked before translation. */
+		if (request.addr > VIRTIO_GUEST_MEM_SIZE || request.len > VIRTIO_GUEST_MEM_SIZE - request.addr)
+		{
+			fprintf(stderr, "virtio C: descriptor %u buffer lies outside guest RAM\n", head);
+			return -1;
+		}
+		buffer = guest_mem + request.addr;
+		fprintf(stderr, "  avail[%u] -> desc[%u] -> GPA 0x%llx\n", slot, head, (unsigned long long)request.addr);
+		while (filled < request.len)
+		{
+			ssize_t bytes = getrandom(buffer + filled, request.len - filled, 0);
+
+			if (bytes < 0 && errno == EINTR)
+				continue;
+			if (bytes <= 0)
+			{
+				if (bytes < 0)
+					perror("getrandom");
+				else
+					fprintf(stderr, "getrandom returned zero bytes\n");
+				return -1;
+			}
+			filled += (size_t)bytes;
+		}
+
+		old_used_idx = used->idx;
+		slot = old_used_idx % VIRTQ_SIZE;
+		used->ring[slot].id = head;
+		used->ring[slot].len = request.len;
+		/* The release fence publishes the entropy and used element before used.idx returns ownership to the guest. */
+		atomic_thread_fence(memory_order_release);
+		used->idx = (uint16_t)(old_used_idx + 1);
+		dev->queue.last_avail_idx++;
+		fprintf(stderr, "  used[%u] { id=%u len=%u } used.idx=%u\n", slot, head, request.len, used->idx);
+	}
 	return 0;
 }
 
@@ -517,37 +523,50 @@ int main(void)
 		fprintf(stderr, "guest signaled success with invalid queue addresses\n");
 		return 1;
 	}
-	if (dev.queue.last_avail_idx != 1)
+	if (dev.queue.last_avail_idx != VIRTIO_RNG_REQUEST_COUNT)
 	{
-		fprintf(stderr, "guest signaled success before the backend consumed one available entry\n");
+		fprintf(stderr, "guest signaled success before the backend consumed all available entries\n");
 		return 1;
 	}
 
-	/* Shared guest RAM must contain exactly one published and completed request. */
-	if (desc[0].addr != VIRTIO_RNG_BUFFER_GPA || desc[0].len != VIRTIO_RNG_REQUEST_LEN || desc[0].flags != VIRTQ_DESC_F_WRITE || desc[0].next != 0)
+	/* Shared guest RAM must contain five published and completed requests in queue order. */
+	for (uint32_t index = 0; index < VIRTIO_RNG_REQUEST_COUNT; index++)
 	{
-		fprintf(stderr, "guest signaled success with an invalid descriptor zero\n");
+		uint64_t expected_buffer = VIRTIO_RNG_BUFFER_GPA + (uint64_t)index * VIRTIO_RNG_BUFFER_STRIDE;
+
+		if (desc[index].addr != expected_buffer || desc[index].len != VIRTIO_RNG_REQUEST_LEN || desc[index].flags != VIRTQ_DESC_F_WRITE || desc[index].next != 0)
+		{
+			fprintf(stderr, "guest signaled success with invalid descriptor %u\n", index);
+			return 1;
+		}
+		if (avail->ring[index] != index)
+		{
+			fprintf(stderr, "guest signaled success with invalid available-ring slot %u\n", index);
+			return 1;
+		}
+		if (used->ring[index].id != index || used->ring[index].len != VIRTIO_RNG_REQUEST_LEN)
+		{
+			fprintf(stderr, "guest signaled success with invalid used-ring slot %u\n", index);
+			return 1;
+		}
+	}
+	if (avail->idx != VIRTIO_RNG_REQUEST_COUNT || used->idx != VIRTIO_RNG_REQUEST_COUNT)
+	{
+		fprintf(stderr, "guest signaled success with invalid published queue indices\n");
 		return 1;
 	}
-	if (avail->ring[0] != 0 || avail->idx != 1)
+	if (queue_notify_exits != 2)
 	{
-		fprintf(stderr, "guest signaled success with an invalid available ring\n");
-		return 1;
-	}
-	if (used->ring[0].id != 0 || used->ring[0].len != VIRTIO_RNG_REQUEST_LEN || used->idx != 1)
-	{
-		fprintf(stderr, "guest signaled success with an invalid used ring\n");
-		return 1;
-	}
-	if (queue_notify_exits != 1)
-	{
-		fprintf(stderr, "guest signaled success without exactly one QueueNotify exit\n");
+		fprintf(stderr, "guest signaled success without exactly two QueueNotify exits\n");
 		return 1;
 	}
 
-	fprintf(stderr, "  guest observed used.idx=1\n");
+	fprintf(stderr, "  C1: one request / one QueueNotify\n");
+	fprintf(stderr, "  C2: four requests / one QueueNotify\n");
+	fprintf(stderr, "  guest observed used.idx=%u\n", used->idx);
 	fprintf(stderr, "  success\n\n");
 	fprintf(stderr, "data path:\n");
+	fprintf(stderr, "  total requests = %u\n", VIRTIO_RNG_REQUEST_COUNT);
 	fprintf(stderr, "  request-description MMIO exits = 0\n");
 	fprintf(stderr, "  QueueNotify MMIO exits = %u\n", queue_notify_exits);
 	fprintf(stderr, "  completion polling MMIO exits = 0\n");

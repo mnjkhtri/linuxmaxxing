@@ -3,11 +3,15 @@
 #include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
-#include "virtio_event.h"
 
 #define __ASSEMBLER__
 #include "virtio.h"
 #undef __ASSEMBLER__
+#include "virtio_event.h"
+
+#if VIRTIO_EVENT_QUEUE_SLOTS != VIRTQ_SIZE
+#error "The observer ABI must match the experiment queue size."
+#endif
 
 char LICENSE[] SEC("license") = "GPL";
 
@@ -160,7 +164,7 @@ static __always_inline int sample_device(struct virtio_event *event, const void 
 /* Queue memory is sampled only after the device state names the controlled guest's fixed queue layout. */
 static __always_inline void sample_queue_memory(struct virtio_event *event, const void *guest_mem)
 {
-	struct observed_virtq_desc desc = {};
+	struct observed_virtq_desc desc[VIRTQ_SIZE] = {};
 	struct observed_virtq_avail avail = {};
 	struct observed_virtq_used used = {};
 
@@ -169,25 +173,35 @@ static __always_inline void sample_queue_memory(struct virtio_event *event, cons
 	if (bpf_probe_read_user(&desc, sizeof(desc), guest_mem + VIRTQ_DESC_GPA) == 0)
 	{
 		event->state.descriptor.present = 1;
-		event->state.descriptor.addr = desc.addr;
-		event->state.descriptor.len = desc.len;
-		event->state.descriptor.flags = desc.flags;
-		event->state.descriptor.next = desc.next;
+#pragma unroll
+		for (int i = 0; i < VIRTQ_SIZE; i++)
+		{
+			event->state.descriptor.entries[i].addr = desc[i].addr;
+			event->state.descriptor.entries[i].len = desc[i].len;
+			event->state.descriptor.entries[i].flags = desc[i].flags;
+			event->state.descriptor.entries[i].next = desc[i].next;
+		}
 	}
 	if (bpf_probe_read_user(&avail, sizeof(avail), guest_mem + VIRTQ_AVAIL_GPA) == 0)
 	{
 		event->state.avail.present = 1;
 		event->state.avail.flags = avail.flags;
 		event->state.avail.idx = avail.idx;
-		event->state.avail.ring0 = avail.ring[0];
+#pragma unroll
+		for (int i = 0; i < VIRTQ_SIZE; i++)
+			event->state.avail.ring[i] = avail.ring[i];
 	}
 	if (bpf_probe_read_user(&used, sizeof(used), guest_mem + VIRTQ_USED_GPA) == 0)
 	{
 		event->state.used.present = 1;
 		event->state.used.flags = used.flags;
 		event->state.used.idx = used.idx;
-		event->state.used.ring0_id = used.ring[0].id;
-		event->state.used.ring0_len = used.ring[0].len;
+#pragma unroll
+		for (int i = 0; i < VIRTQ_SIZE; i++)
+		{
+			event->state.used.ring[i].id = used.ring[i].id;
+			event->state.used.ring[i].len = used.ring[i].len;
+		}
 	}
 }
 
