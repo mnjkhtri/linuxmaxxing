@@ -13,6 +13,7 @@ qemu/seed.iso
 Module.symvers
 modules.order
 shared/_captures/
+shared/_exps/
 qemu/*.raw
 shared/virt/cloudlab
 shared/.cloudlab-known-hosts
