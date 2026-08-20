@@ -8,7 +8,6 @@ enum virtio_event_type
 	VIRTIO_EVENT_MMIO = 0,
 	VIRTIO_EVENT_QUEUE_BACKEND_BEGIN = 1,
 	VIRTIO_EVENT_QUEUE_BACKEND_END = 2,
-	VIRTIO_EVENT_COUNT = 3,
 };
 
 struct virtio_event_info
@@ -36,7 +35,7 @@ struct virtio_context
 
 struct virtio_device_state
 {
-	unsigned char present;
+	unsigned char present; /* present distinguishes an unavailable sample from meaningful zero-valued state. */
 	unsigned char reserved[3];
 	unsigned int status;
 	unsigned int device_features_sel;

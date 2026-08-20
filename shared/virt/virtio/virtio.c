@@ -65,15 +65,35 @@ static const char *register_name(unsigned int offset)
 	}
 }
 
+static int is_queue_configuration_register(unsigned int offset)
+{
+	switch (offset)
+	{
+	case VIRTIO_MMIO_QUEUE_SEL:
+	case VIRTIO_MMIO_QUEUE_SIZE_MAX:
+	case VIRTIO_MMIO_QUEUE_SIZE:
+	case VIRTIO_MMIO_QUEUE_READY:
+	case VIRTIO_MMIO_QUEUE_DESC_LOW:
+	case VIRTIO_MMIO_QUEUE_DESC_HIGH:
+	case VIRTIO_MMIO_QUEUE_DRIVER_LOW:
+	case VIRTIO_MMIO_QUEUE_DRIVER_HIGH:
+	case VIRTIO_MMIO_QUEUE_DEVICE_LOW:
+	case VIRTIO_MMIO_QUEUE_DEVICE_HIGH:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
 static const char *phase_name(const struct virtio_event *event)
 {
 	unsigned int offset = event->event_info.mmio_offset;
 
 	if (event->event_info.event != VIRTIO_EVENT_MMIO || offset == VIRTIO_MMIO_QUEUE_NOTIFY)
 		return "C";
-	if (offset == VIRTIO_MMIO_QUEUE_SEL || offset == VIRTIO_MMIO_QUEUE_SIZE_MAX || offset == VIRTIO_MMIO_QUEUE_SIZE || offset == VIRTIO_MMIO_QUEUE_READY || offset == VIRTIO_MMIO_QUEUE_DESC_LOW || offset == VIRTIO_MMIO_QUEUE_DESC_HIGH || offset == VIRTIO_MMIO_QUEUE_DRIVER_LOW || offset == VIRTIO_MMIO_QUEUE_DRIVER_HIGH || offset == VIRTIO_MMIO_QUEUE_DEVICE_LOW || offset == VIRTIO_MMIO_QUEUE_DEVICE_HIGH)
+	if (is_queue_configuration_register(offset))
 		return "B";
-	if (offset == VIRTIO_MMIO_STATUS && ((event->event_info.mmio_value_present && event->event_info.mmio_value == VIRTIO_STATUS_DRIVER_READY) || (event->state.queue.present && event->state.queue.ready)))
+	if (offset == VIRTIO_MMIO_STATUS && ((event->event_info.mmio_value_present && event->event_info.mmio_value == VIRTIO_STATUS_OPERATIONAL) || (event->state.queue.present && event->state.queue.ready)))
 		return "B";
 	return "A";
 }
@@ -89,13 +109,24 @@ static void write_meta(struct json_writer *jw)
 	json_hex(jw, "virtio_mmio_base", VIRTIO_MMIO_BASE);
 	json_string(jw, "device", "virtio-rng");
 	json_u32(jw, "virtio_version", VIRTIO_VERSION_MODERN);
-	json_u32(jw, "queue_index", VIRTQ_INDEX);
+	json_u32(jw, "queue_index", VIRTIO_RNG_QUEUE_INDEX);
 	json_u32(jw, "queue_size", VIRTQ_SIZE);
-	json_hex(jw, "descriptor_gpa", DESC_GPA);
-	json_hex(jw, "avail_gpa", AVAIL_GPA);
-	json_hex(jw, "used_gpa", USED_GPA);
-	json_hex(jw, "rng_buffer_gpa", RNG_BUFFER_GPA);
-	json_u32(jw, "rng_request_length", RNG_REQUEST_LEN);
+	json_u32(jw, "guest_memory_slot", 0);
+	json_hex(jw, "guest_memory_gpa", 0);
+	json_hex(jw, "guest_memory_size", VIRTIO_GUEST_MEM_SIZE);
+	json_hex(jw, "guest_code_gpa", VIRTIO_GUEST_CODE_GPA);
+	json_hex(jw, "guest_code_size", VIRTIO_GUEST_CODE_LIMIT);
+	json_hex(jw, "guest_stack_bottom", VIRTIO_GUEST_STACK_BOTTOM);
+	json_hex(jw, "guest_stack_top", VIRTIO_GUEST_STACK_TOP);
+	json_hex(jw, "queue_region_size", VIRTQ_PAGE_SIZE);
+	json_hex(jw, "descriptor_gpa", VIRTQ_DESC_GPA);
+	json_u32(jw, "descriptor_bytes", VIRTQ_DESC_BYTES);
+	json_hex(jw, "avail_gpa", VIRTQ_AVAIL_GPA);
+	json_u32(jw, "avail_bytes", VIRTQ_AVAIL_BYTES);
+	json_hex(jw, "used_gpa", VIRTQ_USED_GPA);
+	json_u32(jw, "used_bytes", VIRTQ_USED_BYTES);
+	json_hex(jw, "rng_buffer_gpa", VIRTIO_RNG_BUFFER_GPA);
+	json_u32(jw, "rng_request_length", VIRTIO_RNG_REQUEST_LEN);
 	json_string(jw, "negotiated_feature", "VIRTIO_F_VERSION_1");
 	json_string(jw, "completion_mode", "polling");
 	json_bool(jw, "accelerated_notification", false);
@@ -367,7 +398,10 @@ int main(void)
 		if (err == -EINTR)
 			break;
 		if (err < 0)
-			break;
+		{
+			fprintf(stderr, "virtio: ring-buffer polling failed: %d\n", err);
+			goto out;
+		}
 	}
 	while (ring_buffer__consume(ringbuf) > 0)
 		;

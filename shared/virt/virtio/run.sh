@@ -103,6 +103,10 @@ trap - EXIT
 [ -s captures/virt-paraio-Trace.txt ] && [ -s captures/virt-paraio.eBPF.ndjson ]
 
 python3 -c 'import json,sys; [json.loads(line) for line in open(sys.argv[1]) if line.strip()]' captures/virt-paraio.eBPF.ndjson
+grep -q '"guest_memory_size":"0x20000"' captures/virt-paraio.eBPF.ndjson
+grep -q '"guest_code_size":"0x1000"' captures/virt-paraio.eBPF.ndjson
+grep -q '"guest_stack_bottom":"0x2000"' captures/virt-paraio.eBPF.ndjson
+grep -q '"queue_region_size":"0x1000"' captures/virt-paraio.eBPF.ndjson
 [ "$(grep -c '"register":"QueueNotify"' captures/virt-paraio.eBPF.ndjson)" -eq 1 ]
 begin="$(grep '"event_name":"queue_backend_begin"' captures/virt-paraio.eBPF.ndjson)"
 end="$(grep '"event_name":"queue_backend_end"' captures/virt-paraio.eBPF.ndjson)"

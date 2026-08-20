@@ -164,9 +164,9 @@ static __always_inline void sample_queue_memory(struct virtio_event *event, cons
 	struct observed_virtq_avail avail = {};
 	struct observed_virtq_used used = {};
 
-	if (!guest_mem || !event->state.queue.present || event->state.queue.desc_addr != DESC_GPA || event->state.queue.driver_addr != AVAIL_GPA || event->state.queue.device_addr != USED_GPA)
+	if (!guest_mem || !event->state.queue.present || event->state.queue.desc_addr != VIRTQ_DESC_GPA || event->state.queue.driver_addr != VIRTQ_AVAIL_GPA || event->state.queue.device_addr != VIRTQ_USED_GPA)
 		return;
-	if (bpf_probe_read_user(&desc, sizeof(desc), guest_mem + DESC_GPA) == 0)
+	if (bpf_probe_read_user(&desc, sizeof(desc), guest_mem + VIRTQ_DESC_GPA) == 0)
 	{
 		event->state.descriptor.present = 1;
 		event->state.descriptor.addr = desc.addr;
@@ -174,14 +174,14 @@ static __always_inline void sample_queue_memory(struct virtio_event *event, cons
 		event->state.descriptor.flags = desc.flags;
 		event->state.descriptor.next = desc.next;
 	}
-	if (bpf_probe_read_user(&avail, sizeof(avail), guest_mem + AVAIL_GPA) == 0)
+	if (bpf_probe_read_user(&avail, sizeof(avail), guest_mem + VIRTQ_AVAIL_GPA) == 0)
 	{
 		event->state.avail.present = 1;
 		event->state.avail.flags = avail.flags;
 		event->state.avail.idx = avail.idx;
 		event->state.avail.ring0 = avail.ring[0];
 	}
-	if (bpf_probe_read_user(&used, sizeof(used), guest_mem + USED_GPA) == 0)
+	if (bpf_probe_read_user(&used, sizeof(used), guest_mem + VIRTQ_USED_GPA) == 0)
 	{
 		event->state.used.present = 1;
 		event->state.used.flags = used.flags;
@@ -195,7 +195,7 @@ static __always_inline void sample_buffer_preview(struct virtio_event *event, co
 {
 	if (!guest_mem)
 		return;
-	if (bpf_probe_read_user(event->state.buffer_preview.bytes, VIRTIO_BUFFER_PREVIEW_BYTES, guest_mem + RNG_BUFFER_GPA) == 0)
+	if (bpf_probe_read_user(event->state.buffer_preview.bytes, VIRTIO_BUFFER_PREVIEW_BYTES, guest_mem + VIRTIO_RNG_BUFFER_GPA) == 0)
 	{
 		event->state.buffer_preview.present = 1;
 		event->state.buffer_preview.length = VIRTIO_BUFFER_PREVIEW_BYTES;
@@ -208,8 +208,8 @@ static __always_inline void emit_event(struct virtio_event *event)
 		bpf_ringbuf_output(&events, event, sizeof(*event), 0);
 }
 
-SEC("uprobe/build/vmm:handle_mmio")
-int BPF_UPROBE(observe_handle_mmio, void *dev, void *guest_mem, struct observed_kvm_run *run)
+SEC("uprobe/build/vmm:do_mmio")
+int BPF_UPROBE(observe_do_mmio, void *dev, void *guest_mem, struct observed_kvm_run *run)
 {
 	struct observed_kvm_run observed = {};
 	struct virtio_event *event = new_event(VIRTIO_EVENT_MMIO);

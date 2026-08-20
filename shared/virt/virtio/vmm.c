@@ -19,75 +19,25 @@
 /* Every address in this structure remains a guest physical address. */
 struct virtio_queue
 {
-	uint32_t size; /* QueueSize is the number of descriptor-table entries. */
-	uint32_t ready; /* QueueReady says that this queue's three memory areas are configured. */
+	uint32_t size;          /* QueueSize is the number of descriptor-table entries. */
+	uint32_t ready;         /* QueueReady says that this queue's three memory areas are configured. */
 	uint16_t last_avail_idx; /* The backend has consumed every available entry before this index. */
-	uint64_t desc_addr; /* QueueDesc is the descriptor-table GPA. */
-	uint64_t driver_addr; /* QueueDriver is the available-ring GPA. */
-	uint64_t device_addr; /* QueueDevice is the used-ring GPA. */
+	uint64_t desc_addr;     /* QueueDesc is the descriptor-table GPA. */
+	uint64_t driver_addr;   /* QueueDriver is the available-ring GPA. */
+	uint64_t device_addr;   /* QueueDevice is the used-ring GPA. */
 };
 
 struct virtio_mmio_device
 {
-	uint32_t device_features_sel;
-	uint32_t driver_features_sel;
-	uint32_t driver_features[2];
-	uint32_t status;
-	uint32_t queue_sel;
-	struct virtio_queue queue;
+	uint32_t device_features_sel; /* DeviceFeaturesSel chooses the offered 32-bit feature word. */
+	uint32_t driver_features_sel; /* DriverFeaturesSel chooses the accepted 32-bit feature word. */
+	uint32_t driver_features[2];  /* The controlled guest negotiates only feature words zero and one. */
+	uint32_t status;              /* Status records the modern virtio initialization handshake. */
+	uint32_t queue_sel;           /* QueueSel identifies which queue the following queue registers address. */
+	struct virtio_queue queue;    /* Virtio-rng exposes exactly one split virtqueue in this experiment. */
 };
 
-/* read_register() is the complete readable side of this experiment's virtio-mmio transport. */
-static int read_register(struct virtio_mmio_device *dev, uint32_t offset, uint32_t *value)
-{
-	switch (offset)
-	{
-	case VIRTIO_MMIO_MAGIC_VALUE:
-		*value = VIRTIO_MAGIC_VALUE;
-		return 0;
-	case VIRTIO_MMIO_VERSION:
-		*value = VIRTIO_VERSION_MODERN;
-		return 0;
-	case VIRTIO_MMIO_DEVICE_ID:
-		*value = VIRTIO_DEVICE_ID_ENTROPY;
-		return 0;
-	case VIRTIO_MMIO_VENDOR_ID:
-		*value = VIRTIO_EXPERIMENT_VENDOR_ID;
-		return 0;
-	case VIRTIO_MMIO_DEVICE_FEATURES:
-		/* Word one bit zero is global feature bit 32, VIRTIO_F_VERSION_1. */
-		*value = dev->device_features_sel == VIRTIO_VERSION_1_WORD ? VIRTIO_VERSION_1_WORD_MASK : 0;
-		return 0;
-	case VIRTIO_MMIO_STATUS:
-		*value = dev->status;
-		return 0;
-	case VIRTIO_MMIO_QUEUE_SIZE_MAX:
-		*value = dev->queue_sel == VIRTQ_INDEX ? VIRTQ_SIZE : 0;
-		return 0;
-	case VIRTIO_MMIO_QUEUE_READY:
-		*value = dev->queue_sel == VIRTQ_INDEX ? dev->queue.ready : 0;
-		return 0;
-	case VIRTIO_MMIO_DEVICE_FEATURES_SEL:
-	case VIRTIO_MMIO_DRIVER_FEATURES:
-	case VIRTIO_MMIO_DRIVER_FEATURES_SEL:
-	case VIRTIO_MMIO_QUEUE_SEL:
-	case VIRTIO_MMIO_QUEUE_SIZE:
-	case VIRTIO_MMIO_QUEUE_NOTIFY:
-	case VIRTIO_MMIO_QUEUE_DESC_LOW:
-	case VIRTIO_MMIO_QUEUE_DESC_HIGH:
-	case VIRTIO_MMIO_QUEUE_DRIVER_LOW:
-	case VIRTIO_MMIO_QUEUE_DRIVER_HIGH:
-	case VIRTIO_MMIO_QUEUE_DEVICE_LOW:
-	case VIRTIO_MMIO_QUEUE_DEVICE_HIGH:
-		fprintf(stderr, "virtio-mmio: read from write-only register 0x%03x\n", offset);
-		return -1;
-	default:
-		fprintf(stderr, "virtio-mmio: read from unimplemented offset 0x%03x\n", offset);
-		return -1;
-	}
-}
-
-/* process_queue() is the virtio-rng backend, separate from the MMIO register interface above. */
+/* process_queue() is the virtio-rng backend, separate from the MMIO register interface below. */
 static int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)
 {
 	struct virtq_desc *desc;
@@ -131,7 +81,7 @@ static int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)
 		return -1;
 	}
 	request = desc[head];
-	if (request.addr != RNG_BUFFER_GPA || request.len != RNG_REQUEST_LEN || request.flags != VIRTQ_DESC_F_WRITE || request.next != 0)
+	if (request.addr != VIRTIO_RNG_BUFFER_GPA || request.len != VIRTIO_RNG_REQUEST_LEN || request.flags != VIRTQ_DESC_F_WRITE || request.next != 0)
 	{
 		fprintf(stderr, "virtio C: descriptor zero is not the expected direct writable entropy buffer\n");
 		return -1;
@@ -179,6 +129,56 @@ static int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)
 	return 0;
 }
 
+/* read_register() is the complete readable side of this experiment's virtio-mmio transport. */
+static int read_register(struct virtio_mmio_device *dev, uint32_t offset, uint32_t *value)
+{
+	switch (offset)
+	{
+	case VIRTIO_MMIO_MAGIC_VALUE:
+		*value = VIRTIO_MAGIC_VALUE;
+		return 0;
+	case VIRTIO_MMIO_VERSION:
+		*value = VIRTIO_VERSION_MODERN;
+		return 0;
+	case VIRTIO_MMIO_DEVICE_ID:
+		*value = VIRTIO_DEVICE_ID_ENTROPY;
+		return 0;
+	case VIRTIO_MMIO_VENDOR_ID:
+		*value = VIRTIO_EXPERIMENT_VENDOR_ID;
+		return 0;
+	case VIRTIO_MMIO_DEVICE_FEATURES:
+		/* Word one bit zero is global feature bit 32, VIRTIO_F_VERSION_1. */
+		*value = dev->device_features_sel == VIRTIO_F_VERSION_1_WORD ? VIRTIO_F_VERSION_1_MASK : 0;
+		return 0;
+	case VIRTIO_MMIO_STATUS:
+		*value = dev->status;
+		return 0;
+	case VIRTIO_MMIO_QUEUE_SIZE_MAX:
+		*value = dev->queue_sel == VIRTIO_RNG_QUEUE_INDEX ? VIRTQ_SIZE : 0;
+		return 0;
+	case VIRTIO_MMIO_QUEUE_READY:
+		*value = dev->queue_sel == VIRTIO_RNG_QUEUE_INDEX ? dev->queue.ready : 0;
+		return 0;
+	case VIRTIO_MMIO_DEVICE_FEATURES_SEL:
+	case VIRTIO_MMIO_DRIVER_FEATURES:
+	case VIRTIO_MMIO_DRIVER_FEATURES_SEL:
+	case VIRTIO_MMIO_QUEUE_SEL:
+	case VIRTIO_MMIO_QUEUE_SIZE:
+	case VIRTIO_MMIO_QUEUE_NOTIFY:
+	case VIRTIO_MMIO_QUEUE_DESC_LOW:
+	case VIRTIO_MMIO_QUEUE_DESC_HIGH:
+	case VIRTIO_MMIO_QUEUE_DRIVER_LOW:
+	case VIRTIO_MMIO_QUEUE_DRIVER_HIGH:
+	case VIRTIO_MMIO_QUEUE_DEVICE_LOW:
+	case VIRTIO_MMIO_QUEUE_DEVICE_HIGH:
+		fprintf(stderr, "virtio-mmio: read from write-only register 0x%03x\n", offset);
+		return -1;
+	default:
+		fprintf(stderr, "virtio-mmio: read from unimplemented offset 0x%03x\n", offset);
+		return -1;
+	}
+}
+
 /* write_register() is the complete writable side of this experiment's virtio-mmio transport. */
 static int write_register(struct virtio_mmio_device *dev, uint8_t *guest_mem, uint32_t offset, uint32_t value)
 {
@@ -201,42 +201,42 @@ static int write_register(struct virtio_mmio_device *dev, uint8_t *guest_mem, ui
 		dev->queue_sel = value;
 		return 0;
 	case VIRTIO_MMIO_QUEUE_SIZE:
-		if (dev->queue_sel != VIRTQ_INDEX || dev->queue.ready || value != VIRTQ_SIZE)
+		if (dev->queue_sel != VIRTIO_RNG_QUEUE_INDEX || dev->queue.ready || value != VIRTQ_SIZE)
 			return -1;
 		dev->queue.size = value;
 		return 0;
 	case VIRTIO_MMIO_QUEUE_DESC_LOW:
-		if (dev->queue_sel != VIRTQ_INDEX || dev->queue.ready)
+		if (dev->queue_sel != VIRTIO_RNG_QUEUE_INDEX || dev->queue.ready)
 			return -1;
 		dev->queue.desc_addr = (dev->queue.desc_addr & 0xffffffff00000000ULL) | value;
 		return 0;
 	case VIRTIO_MMIO_QUEUE_DESC_HIGH:
-		if (dev->queue_sel != VIRTQ_INDEX || dev->queue.ready)
+		if (dev->queue_sel != VIRTIO_RNG_QUEUE_INDEX || dev->queue.ready)
 			return -1;
 		dev->queue.desc_addr = (dev->queue.desc_addr & 0x00000000ffffffffULL) | ((uint64_t)value << 32);
 		return 0;
 	case VIRTIO_MMIO_QUEUE_DRIVER_LOW:
-		if (dev->queue_sel != VIRTQ_INDEX || dev->queue.ready)
+		if (dev->queue_sel != VIRTIO_RNG_QUEUE_INDEX || dev->queue.ready)
 			return -1;
 		dev->queue.driver_addr = (dev->queue.driver_addr & 0xffffffff00000000ULL) | value;
 		return 0;
 	case VIRTIO_MMIO_QUEUE_DRIVER_HIGH:
-		if (dev->queue_sel != VIRTQ_INDEX || dev->queue.ready)
+		if (dev->queue_sel != VIRTIO_RNG_QUEUE_INDEX || dev->queue.ready)
 			return -1;
 		dev->queue.driver_addr = (dev->queue.driver_addr & 0x00000000ffffffffULL) | ((uint64_t)value << 32);
 		return 0;
 	case VIRTIO_MMIO_QUEUE_DEVICE_LOW:
-		if (dev->queue_sel != VIRTQ_INDEX || dev->queue.ready)
+		if (dev->queue_sel != VIRTIO_RNG_QUEUE_INDEX || dev->queue.ready)
 			return -1;
 		dev->queue.device_addr = (dev->queue.device_addr & 0xffffffff00000000ULL) | value;
 		return 0;
 	case VIRTIO_MMIO_QUEUE_DEVICE_HIGH:
-		if (dev->queue_sel != VIRTQ_INDEX || dev->queue.ready)
+		if (dev->queue_sel != VIRTIO_RNG_QUEUE_INDEX || dev->queue.ready)
 			return -1;
 		dev->queue.device_addr = (dev->queue.device_addr & 0x00000000ffffffffULL) | ((uint64_t)value << 32);
 		return 0;
 	case VIRTIO_MMIO_QUEUE_READY:
-		if (dev->queue_sel != VIRTQ_INDEX || value > 1)
+		if (dev->queue_sel != VIRTIO_RNG_QUEUE_INDEX || value > 1)
 			return -1;
 		if (value == 0)
 		{
@@ -244,7 +244,7 @@ static int write_register(struct virtio_mmio_device *dev, uint8_t *guest_mem, ui
 			return 0;
 		}
 		/* This educational backend supports only its controlled guest's fixed layout; production backends validate arbitrary driver-provided queue memory. */
-		if (dev->queue.size != VIRTQ_SIZE || dev->queue.desc_addr != DESC_GPA || dev->queue.driver_addr != AVAIL_GPA || dev->queue.device_addr != USED_GPA)
+		if (dev->queue.size != VIRTQ_SIZE || dev->queue.desc_addr != VIRTQ_DESC_GPA || dev->queue.driver_addr != VIRTQ_AVAIL_GPA || dev->queue.device_addr != VIRTQ_USED_GPA)
 		{
 			fprintf(stderr, "virtio B: fixed queue layout rejected\n");
 			return -1;
@@ -252,7 +252,7 @@ static int write_register(struct virtio_mmio_device *dev, uint8_t *guest_mem, ui
 		dev->queue.ready = 1;
 		return 0;
 	case VIRTIO_MMIO_QUEUE_NOTIFY:
-		if (value != VIRTQ_INDEX || dev->status != VIRTIO_STATUS_DRIVER_READY || !dev->queue.ready)
+		if (value != VIRTIO_RNG_QUEUE_INDEX || dev->status != VIRTIO_STATUS_OPERATIONAL || !dev->queue.ready)
 		{
 			fprintf(stderr, "virtio C: QueueNotify requires operational queue zero\n");
 			return -1;
@@ -287,7 +287,7 @@ static int write_register(struct virtio_mmio_device *dev, uint8_t *guest_mem, ui
 		}
 		if ((value & VIRTIO_STATUS_FEATURES_OK) && !(old & VIRTIO_STATUS_FEATURES_OK))
 		{
-			if ((value & (VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER)) != (VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER) || dev->driver_features[0] != 0 || dev->driver_features[1] != VIRTIO_VERSION_1_WORD_MASK)
+			if ((value & (VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER)) != (VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER) || dev->driver_features[0] != 0 || dev->driver_features[1] != VIRTIO_F_VERSION_1_MASK)
 			{
 				accepted &= ~VIRTIO_STATUS_FEATURES_OK;
 				fprintf(stderr, "virtio A: FEATURES_OK rejected\n");
@@ -297,7 +297,7 @@ static int write_register(struct virtio_mmio_device *dev, uint8_t *guest_mem, ui
 		}
 		if ((value & VIRTIO_STATUS_DRIVER_OK) && !(old & VIRTIO_STATUS_DRIVER_OK))
 		{
-			if (!(old & VIRTIO_STATUS_FEATURES_OK) || !dev->queue.ready || dev->queue.size != VIRTQ_SIZE || dev->queue.desc_addr != DESC_GPA || dev->queue.driver_addr != AVAIL_GPA || dev->queue.device_addr != USED_GPA)
+			if (!(old & VIRTIO_STATUS_FEATURES_OK) || !dev->queue.ready || dev->queue.size != VIRTQ_SIZE || dev->queue.desc_addr != VIRTQ_DESC_GPA || dev->queue.driver_addr != VIRTQ_AVAIL_GPA || dev->queue.device_addr != VIRTQ_USED_GPA)
 			{
 				fprintf(stderr, "virtio B: DRIVER_OK requires the fixed ready queue\n");
 				return -1;
@@ -324,7 +324,7 @@ static int write_register(struct virtio_mmio_device *dev, uint8_t *guest_mem, ui
 }
 
 /* Every transport access reaches this decoder as one aligned little-endian 32-bit KVM_EXIT_MMIO. */
-static int handle_mmio(struct virtio_mmio_device *dev, uint8_t *guest_mem, struct kvm_run *run)
+static int do_mmio(struct virtio_mmio_device *dev, uint8_t *guest_mem, struct kvm_run *run)
 {
 	uint64_t address = run->mmio.phys_addr;
 	uint32_t offset;
@@ -466,7 +466,7 @@ int main(void)
 		{
 			if (run->mmio.is_write && run->mmio.phys_addr == VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY)
 				queue_notify_exits++;
-			if (handle_mmio(&dev, guest_mem, run) < 0)
+			if (do_mmio(&dev, guest_mem, run) < 0)
 				return 1;
 			continue;
 		}
@@ -498,22 +498,50 @@ int main(void)
 		return 1;
 	}
 
-	desc = (struct virtq_desc *)(guest_mem + DESC_GPA);
-	avail = (struct virtq_avail *)(guest_mem + AVAIL_GPA);
-	used = (struct virtq_used *)(guest_mem + USED_GPA);
-	if (dev.status != VIRTIO_STATUS_DRIVER_READY || dev.driver_features[0] != 0 || dev.driver_features[1] != VIRTIO_VERSION_1_WORD_MASK)
+	desc = (struct virtq_desc *)(guest_mem + VIRTQ_DESC_GPA);
+	avail = (struct virtq_avail *)(guest_mem + VIRTQ_AVAIL_GPA);
+	used = (struct virtq_used *)(guest_mem + VIRTQ_USED_GPA);
+	if (dev.status != VIRTIO_STATUS_OPERATIONAL || dev.driver_features[0] != 0 || dev.driver_features[1] != VIRTIO_F_VERSION_1_MASK)
 	{
 		fprintf(stderr, "guest signaled success with invalid feature or status state\n");
 		return 1;
 	}
-	if (dev.queue_sel != VIRTQ_INDEX || dev.queue.size != VIRTQ_SIZE || !dev.queue.ready || dev.queue.last_avail_idx != 1 || dev.queue.desc_addr != DESC_GPA || dev.queue.driver_addr != AVAIL_GPA || dev.queue.device_addr != USED_GPA)
+	/* Device-side state must still describe the one live virtio-rng queue. */
+	if (dev.queue_sel != VIRTIO_RNG_QUEUE_INDEX || dev.queue.size != VIRTQ_SIZE || !dev.queue.ready)
 	{
-		fprintf(stderr, "guest signaled success with invalid queue state\n");
+		fprintf(stderr, "guest signaled success with invalid queue selection, size, or readiness\n");
 		return 1;
 	}
-	if (desc[0].addr != RNG_BUFFER_GPA || desc[0].len != RNG_REQUEST_LEN || desc[0].flags != VIRTQ_DESC_F_WRITE || desc[0].next != 0 || avail->ring[0] != 0 || avail->idx != 1 || used->ring[0].id != 0 || used->ring[0].len != RNG_REQUEST_LEN || used->idx != 1 || queue_notify_exits != 1)
+	if (dev.queue.desc_addr != VIRTQ_DESC_GPA || dev.queue.driver_addr != VIRTQ_AVAIL_GPA || dev.queue.device_addr != VIRTQ_USED_GPA)
 	{
-		fprintf(stderr, "guest signaled success with invalid shared-memory request or completion state\n");
+		fprintf(stderr, "guest signaled success with invalid queue addresses\n");
+		return 1;
+	}
+	if (dev.queue.last_avail_idx != 1)
+	{
+		fprintf(stderr, "guest signaled success before the backend consumed one available entry\n");
+		return 1;
+	}
+
+	/* Shared guest RAM must contain exactly one published and completed request. */
+	if (desc[0].addr != VIRTIO_RNG_BUFFER_GPA || desc[0].len != VIRTIO_RNG_REQUEST_LEN || desc[0].flags != VIRTQ_DESC_F_WRITE || desc[0].next != 0)
+	{
+		fprintf(stderr, "guest signaled success with an invalid descriptor zero\n");
+		return 1;
+	}
+	if (avail->ring[0] != 0 || avail->idx != 1)
+	{
+		fprintf(stderr, "guest signaled success with an invalid available ring\n");
+		return 1;
+	}
+	if (used->ring[0].id != 0 || used->ring[0].len != VIRTIO_RNG_REQUEST_LEN || used->idx != 1)
+	{
+		fprintf(stderr, "guest signaled success with an invalid used ring\n");
+		return 1;
+	}
+	if (queue_notify_exits != 1)
+	{
+		fprintf(stderr, "guest signaled success without exactly one QueueNotify exit\n");
 		return 1;
 	}
 

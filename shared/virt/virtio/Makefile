@@ -37,7 +37,7 @@ $(BUILD_DIR):
 
 $(VMM): $(DIR)vmm.c $(CONTRACT) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(DIR) $< -o $@
-	@nm -an $@ | grep -Eq ' [tT] handle_mmio$$' || { echo "VMM lacks handle_mmio symbol" >&2; exit 1; }
+	@nm -an $@ | grep -Eq ' [tT] do_mmio$$' || { echo "VMM lacks do_mmio symbol" >&2; exit 1; }
 	@nm -an $@ | grep -Eq ' [tT] process_queue$$' || { echo "VMM lacks process_queue symbol" >&2; exit 1; }
 
 $(GUEST_OBJ): $(DIR)guest.S $(CONTRACT) | $(BUILD_DIR)

@@ -32,33 +32,38 @@
 #define VIRTIO_DEVICE_ID_ENTROPY 4
 #define VIRTIO_EXPERIMENT_VENDOR_ID 0x4f4f5053
 
-#define VIRTIO_VERSION_1_WORD 1
-#define VIRTIO_VERSION_1_WORD_MASK 1
+#define VIRTIO_F_VERSION_1 32
+#define VIRTIO_F_VERSION_1_WORD (VIRTIO_F_VERSION_1 / 32)
+#define VIRTIO_F_VERSION_1_MASK (1 << (VIRTIO_F_VERSION_1 % 32))
 
 #define VIRTIO_STATUS_ACKNOWLEDGE 0x01
 #define VIRTIO_STATUS_DRIVER 0x02
-#define VIRTIO_STATUS_DRIVER_OK 0x04
 #define VIRTIO_STATUS_FEATURES_OK 0x08
-#define VIRTIO_STATUS_FEATURES_READY 0x0b
-#define VIRTIO_STATUS_DRIVER_READY 0x0f
+#define VIRTIO_STATUS_DRIVER_OK 0x04
+
+/* These experiment convenience values combine the standard status bits above. */
+#define VIRTIO_STATUS_FEATURES_ACCEPTED (VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_FEATURES_OK)
+#define VIRTIO_STATUS_OPERATIONAL (VIRTIO_STATUS_FEATURES_ACCEPTED | VIRTIO_STATUS_DRIVER_OK)
 
 /* Guest memory layout */
 #define VIRTIO_GUEST_MEM_SIZE 0x20000
+#define VIRTIO_GUEST_CODE_GPA 0x0000
 #define VIRTIO_GUEST_CODE_LIMIT 0x1000
+#define VIRTIO_GUEST_STACK_BOTTOM 0x2000
 #define VIRTIO_GUEST_STACK_TOP 0x3000
-#define DESC_GPA 0x4000
-#define AVAIL_GPA 0x5000
-#define USED_GPA 0x6000
-#define RNG_BUFFER_GPA 0x7000
+#define VIRTQ_DESC_GPA 0x4000
+#define VIRTQ_AVAIL_GPA 0x5000
+#define VIRTQ_USED_GPA 0x6000
+#define VIRTIO_RNG_BUFFER_GPA 0x7000
 #define VIRTQ_PAGE_SIZE 0x1000
-#define RNG_REQUEST_LEN 32
+#define VIRTIO_RNG_REQUEST_LEN 32
 #define VIRTIO_POLL_LIMIT 1000000
 
 #define VIRTIO_TEST_SUCCESS_PORT 0x82
 #define VIRTIO_TEST_FAILURE_PORT 0x83
 
 /* Split virtqueue */
-#define VIRTQ_INDEX 0
+#define VIRTIO_RNG_QUEUE_INDEX 0
 #define VIRTQ_SIZE 8
 #define VIRTQ_DESC_F_WRITE 2
 
@@ -85,32 +90,32 @@
 /* Each descriptor names one guest-memory buffer and states whether the device may write it. */
 struct virtq_desc
 {
-	uint64_t addr;
-	uint32_t len;
-	uint16_t flags;
-	uint16_t next;
+	uint64_t addr;  /* addr is the guest physical address of the request buffer. */
+	uint32_t len;   /* len is the number of bytes exposed through this descriptor. */
+	uint16_t flags; /* flags states buffer direction and whether another descriptor follows. */
+	uint16_t next;  /* next is meaningful only when VIRTQ_DESC_F_NEXT is set. */
 };
 
 /* The driver publishes descriptor heads through ring[] and then advances idx. */
 struct virtq_avail
 {
-	uint16_t flags;
-	uint16_t idx;
-	uint16_t ring[VIRTQ_SIZE];
+	uint16_t flags;            /* flags controls notification suppression, which this baseline does not use. */
+	uint16_t idx;              /* idx publishes how many descriptor heads the driver has made available. */
+	uint16_t ring[VIRTQ_SIZE]; /* Each ring entry names the head of an available descriptor chain. */
 };
 
 struct virtq_used_elem
 {
-	uint32_t id;
-	uint32_t len;
+	uint32_t id;  /* id returns the completed descriptor-chain head to the driver. */
+	uint32_t len; /* len reports the number of bytes the device wrote. */
 };
 
 /* The device publishes completed descriptor heads through ring[] and then advances idx. */
 struct virtq_used
 {
-	uint16_t flags;
-	uint16_t idx;
-	struct virtq_used_elem ring[VIRTQ_SIZE];
+	uint16_t flags;                         /* flags controls notification suppression, which this baseline does not use. */
+	uint16_t idx;                           /* idx publishes how many requests the device has completed. */
+	struct virtq_used_elem ring[VIRTQ_SIZE]; /* Each ring entry identifies one completed descriptor chain. */
 };
 
 _Static_assert(sizeof(struct virtq_desc) == 16, "virtq_desc must match the split-ring ABI");

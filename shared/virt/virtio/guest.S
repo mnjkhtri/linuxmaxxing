@@ -51,26 +51,26 @@ protected_mode:
 	movl VIRTIO_MMIO_BASE + VIRTIO_MMIO_DEVICE_FEATURES, %eax
 	testl %eax, %eax
 	jnz fail_features
-	movl $VIRTIO_VERSION_1_WORD, VIRTIO_MMIO_BASE + VIRTIO_MMIO_DEVICE_FEATURES_SEL
+	movl $VIRTIO_F_VERSION_1_WORD, VIRTIO_MMIO_BASE + VIRTIO_MMIO_DEVICE_FEATURES_SEL
 	movl VIRTIO_MMIO_BASE + VIRTIO_MMIO_DEVICE_FEATURES, %eax
-	cmpl $VIRTIO_VERSION_1_WORD_MASK, %eax
+	cmpl $VIRTIO_F_VERSION_1_MASK, %eax
 	jne fail_features
 
 	movl $0, VIRTIO_MMIO_BASE + VIRTIO_MMIO_DRIVER_FEATURES_SEL
 	movl $0, VIRTIO_MMIO_BASE + VIRTIO_MMIO_DRIVER_FEATURES
-	movl $VIRTIO_VERSION_1_WORD, VIRTIO_MMIO_BASE + VIRTIO_MMIO_DRIVER_FEATURES_SEL
-	movl $VIRTIO_VERSION_1_WORD_MASK, VIRTIO_MMIO_BASE + VIRTIO_MMIO_DRIVER_FEATURES
-	movl $VIRTIO_STATUS_FEATURES_READY, VIRTIO_MMIO_BASE + VIRTIO_MMIO_STATUS
+	movl $VIRTIO_F_VERSION_1_WORD, VIRTIO_MMIO_BASE + VIRTIO_MMIO_DRIVER_FEATURES_SEL
+	movl $VIRTIO_F_VERSION_1_MASK, VIRTIO_MMIO_BASE + VIRTIO_MMIO_DRIVER_FEATURES
+	movl $VIRTIO_STATUS_FEATURES_ACCEPTED, VIRTIO_MMIO_BASE + VIRTIO_MMIO_STATUS
 	/* The readback matters because a device clears FEATURES_OK when it rejects the negotiated set. */
 	movl VIRTIO_MMIO_BASE + VIRTIO_MMIO_STATUS, %eax
-	cmpl $VIRTIO_STATUS_FEATURES_READY, %eax
+	cmpl $VIRTIO_STATUS_FEATURES_ACCEPTED, %eax
 	jne fail_features
 
 	/* -------------------------------------------------- */
 	/* PHASE B — CONFIGURE ONE SPLIT VIRTQUEUE */
 	/* Goal: tell the device where the three shared-memory queue regions live. */
 	/* -------------------------------------------------- */
-	movl $VIRTQ_INDEX, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_SEL
+	movl $VIRTIO_RNG_QUEUE_INDEX, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_SEL
 	movl VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_READY, %eax
 	testl %eax, %eax
 	jnz fail_queue
@@ -81,22 +81,22 @@ protected_mode:
 	/* Queue memory belongs to the guest, so the guest explicitly initializes it before sharing its GPAs. */
 	cld
 	xorl %eax, %eax
-	movl $DESC_GPA, %edi
+	movl $VIRTQ_DESC_GPA, %edi
 	movl $(VIRTQ_PAGE_SIZE / 4), %ecx
 	rep stosl
-	movl $AVAIL_GPA, %edi
+	movl $VIRTQ_AVAIL_GPA, %edi
 	movl $(VIRTQ_PAGE_SIZE / 4), %ecx
 	rep stosl
-	movl $USED_GPA, %edi
+	movl $VIRTQ_USED_GPA, %edi
 	movl $(VIRTQ_PAGE_SIZE / 4), %ecx
 	rep stosl
 
 	movl $VIRTQ_SIZE, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_SIZE
-	movl $DESC_GPA, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_DESC_LOW
+	movl $VIRTQ_DESC_GPA, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_DESC_LOW
 	movl $0, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_DESC_HIGH
-	movl $AVAIL_GPA, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_DRIVER_LOW
+	movl $VIRTQ_AVAIL_GPA, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_DRIVER_LOW
 	movl $0, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_DRIVER_HIGH
-	movl $USED_GPA, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_DEVICE_LOW
+	movl $VIRTQ_USED_GPA, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_DEVICE_LOW
 	movl $0, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_DEVICE_HIGH
 	movl $1, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_READY
 	movl VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_READY, %eax
@@ -104,9 +104,9 @@ protected_mode:
 	jne fail_queue
 
 	/* FEATURES_OK means the protocol is agreed, QueueReady means this queue exists, and DRIVER_OK makes the device operational. */
-	movl $VIRTIO_STATUS_DRIVER_READY, VIRTIO_MMIO_BASE + VIRTIO_MMIO_STATUS
+	movl $VIRTIO_STATUS_OPERATIONAL, VIRTIO_MMIO_BASE + VIRTIO_MMIO_STATUS
 	movl VIRTIO_MMIO_BASE + VIRTIO_MMIO_STATUS, %eax
-	cmpl $VIRTIO_STATUS_DRIVER_READY, %eax
+	cmpl $VIRTIO_STATUS_OPERATIONAL, %eax
 	jne fail_driver_ok
 
 	/* -------------------------------------------------- */
@@ -114,28 +114,28 @@ protected_mode:
 	/* Goal: the request itself lives in shared RAM. */
 	/* -------------------------------------------------- */
 	/* Descriptor zero describes 32 device-writable bytes, but the guest still owns the descriptor while preparing it. */
-	movl $RNG_BUFFER_GPA, DESC_GPA + VIRTQ_DESC_ADDR_OFFSET
-	movl $0, DESC_GPA + VIRTQ_DESC_ADDR_OFFSET + 4
-	movl $RNG_REQUEST_LEN, DESC_GPA + VIRTQ_DESC_LEN_OFFSET
-	movw $VIRTQ_DESC_F_WRITE, DESC_GPA + VIRTQ_DESC_FLAGS_OFFSET
-	movw $0, DESC_GPA + VIRTQ_DESC_NEXT_OFFSET
+	movl $VIRTIO_RNG_BUFFER_GPA, VIRTQ_DESC_GPA + VIRTQ_DESC_ADDR_OFFSET
+	movl $0, VIRTQ_DESC_GPA + VIRTQ_DESC_ADDR_OFFSET + 4
+	movl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_DESC_GPA + VIRTQ_DESC_LEN_OFFSET
+	movw $VIRTQ_DESC_F_WRITE, VIRTQ_DESC_GPA + VIRTQ_DESC_FLAGS_OFFSET
+	movw $0, VIRTQ_DESC_GPA + VIRTQ_DESC_NEXT_OFFSET
 
 	/* The ring now points to descriptor zero, but avail.idx is still zero and the device must not consume it. */
-	movw $0, AVAIL_GPA + VIRTQ_AVAIL_FLAGS_OFFSET
-	movw $0, AVAIL_GPA + VIRTQ_AVAIL_IDX_OFFSET
-	movw $0, AVAIL_GPA + VIRTQ_AVAIL_RING_OFFSET
+	movw $0, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_FLAGS_OFFSET
+	movw $0, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_IDX_OFFSET
+	movw $0, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_RING_OFFSET
 	/* This fence makes the descriptor and ring entry visible before avail.idx publishes device ownership. */
 	mfence
-	movw $1, AVAIL_GPA + VIRTQ_AVAIL_IDX_OFFSET
+	movw $1, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_IDX_OFFSET
 	/* This fence orders shared-memory publication before the MMIO doorbell. */
 	mfence
 	/* QueueNotify contains only the queue index; the request GPA, length, and direction are already in shared RAM. */
-	movl $VIRTQ_INDEX, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY
+	movl $VIRTIO_RNG_QUEUE_INDEX, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY
 
 	/* Completion is shared-memory state, so the guest waits with a bounded poll of used.idx. */
 	movl $VIRTIO_POLL_LIMIT, %ecx
 poll_used_idx:
-	movzwl USED_GPA + VIRTQ_USED_IDX_OFFSET, %eax
+	movzwl VIRTQ_USED_GPA + VIRTQ_USED_IDX_OFFSET, %eax
 	cmpl $1, %eax
 	je completion_published
 	decl %ecx
@@ -145,9 +145,9 @@ poll_used_idx:
 completion_published:
 	/* This acquire fence keeps used-element and output-buffer reads after observing the device's used.idx publication. */
 	lfence
-	cmpl $0, USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTQ_USED_ELEM_ID_OFFSET
+	cmpl $0, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTQ_USED_ELEM_ID_OFFSET
 	jne fail_completion
-	cmpl $RNG_REQUEST_LEN, USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTQ_USED_ELEM_LEN_OFFSET
+	cmpl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTQ_USED_ELEM_LEN_OFFSET
 	jne fail_completion
 
 	/* The VMM treats this port write as explicit success and exits before the following fault instruction. */

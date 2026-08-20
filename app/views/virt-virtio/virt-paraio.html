@@ -1,0 +1,107 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0 -->
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>Virtio paravirtual I/O explorer</title>
+        <link rel="stylesheet" href="virt-paraio.css?v=3" />
+    </head>
+    <body>
+        <main class="paraio">
+            <header class="hero">
+                <div>
+                    <div class="eyebrow">TRACE → eBPF SNAPSHOT → VIRTQUEUE STATE</div>
+                    <h1>Paravirtual <span>I/O</span></h1>
+                </div>
+                <div id="status" role="status"><i class="trace-dot"></i><span>loading para-I/O capture…</span></div>
+            </header>
+
+            <section class="laboratory">
+                <nav id="roadmap" class="roadmap panel" aria-label="Virtio phases"></nav>
+
+                <section class="workbench">
+                    <section class="machine panel">
+                        <header class="panel-head">
+                            <div>
+                                <h2>Paravirtual I/O machine</h2>
+                                <span id="machine-caption">Selected capture boundary drives every active state.</span>
+                            </div>
+                            <code id="selected-time">t = —</code>
+                        </header>
+
+                        <div class="topology-stage">
+                            <section class="execution-region region">
+                                <header class="region-title">
+                                    <div><b>EXECUTION CHRONOGRAM</b><span id="timeline-scope">Phase A</span></div>
+                                    <code>TIME ↓</code>
+                                </header>
+                                <div class="lane-head">
+                                    <span>Δt</span>
+                                    <div><b>USERSPACE VMM</b><b>KVM</b><b>GUEST</b></div>
+                                    <span>OBSERVATION</span>
+                                </div>
+                                <div id="timeline" class="timeline"></div>
+                                <footer class="region-foot"><b>SELECTED BOUNDARY</b><span>Captured state changes are highlighted.</span></footer>
+                            </section>
+
+                            <div class="support-stack">
+                                <section class="queue-region region">
+                                    <header class="region-title">
+                                        <div><b>SPLIT VIRTQUEUE</b><span>shared guest RAM is the protocol</span></div>
+                                        <code id="queue-summary">waiting for capture metadata</code>
+                                    </header>
+                                    <div id="protocol-stage" class="protocol-stage">
+                                        <div class="actor guest-actor" data-node="guest">
+                                            <i></i><strong>GUEST DRIVER</strong><small>descriptor + rings in RAM</small>
+                                        </div>
+                                        <div class="participant-link guest-to-doorbell"><span>MMIO write</span></div>
+                                        <div class="doorbell" data-node="notify">
+                                            <i></i><b>MMIO DOORBELL</b><code id="notify-card-value">QueueNotify</code>
+                                        </div>
+                                        <div class="participant-link doorbell-to-backend"><span>dispatch</span></div>
+                                        <div class="actor backend" data-node="backend">
+                                            <i></i><strong>USERSPACE VMM</strong><small>process_queue() backend</small>
+                                        </div>
+                                        <section class="guest-memory">
+                                            <header>
+                                                <div><b>GUEST RAM · KVM MEMORY SLOT</b><span id="guest-memory-summary">waiting for capture metadata</span></div>
+                                                <small>capture metadata</small>
+                                            </header>
+                                            <div id="memory-map" class="memory-map"></div>
+                                        </section>
+                                        <div class="backend-private" data-node="queue"><span>last_avail_idx</span><code id="last-avail">not sampled</code></div>
+                                    </div>
+                                </section>
+                            </div>
+                        </div>
+                    </section>
+                </section>
+
+                <aside class="inspector panel">
+                    <header class="panel-head">
+                        <div>
+                            <h2>Observation notebook</h2>
+                            <span>one boundary · one coherent sample</span>
+                        </div>
+                        <code id="source-badge">—</code>
+                    </header>
+                    <div class="inspector-body">
+                        <div class="selected-kind"><i class="trace-dot"></i><span id="event-kind">—</span></div>
+                        <h2 id="event-title">Select an observation</h2>
+                        <section>
+                            <h3>SELECTED BOUNDARY</h3>
+                            <dl id="observation-fields"></dl>
+                        </section>
+                    </div>
+                    <footer class="toolbar">
+                        <button id="prev" title="Previous observation">←</button><button id="play" title="Play or pause">▶</button
+                        ><button id="next" title="Next observation">→</button>
+                        <input id="scrub" type="range" min="0" value="0" aria-label="Observation scrubber" /><span id="counter">0 / 0</span>
+                    </footer>
+                </aside>
+            </section>
+        </main>
+        <script src="virt-paraio.js?v=3"></script>
+    </body>
+</html>
