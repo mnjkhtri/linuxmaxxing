@@ -79,7 +79,7 @@ code,.mono{font-family:var(--mono)}
 .interrupts.msi .msi-route{display:grid}
 .irq-node{min-width:0;padding:16px 12px;border:1px solid var(--line);border-radius:6px;background:rgba(9,15,21,.95);text-align:center;display:flex;flex-direction:column;justify-content:center;gap:6px;z-index:1;transition:border-color .12s,background .12s}
 .irq-node.hot{border-color:var(--yellow);border-width:2px;background:rgba(169,159,104,.35);box-shadow:0 0 20px rgba(169,159,104,.8),inset 0 0 14px rgba(169,159,104,.28);animation:nodeGlow 1.4s ease-in-out infinite}
-.irq-node b{display:block;color:var(--text);font:800 12px var(--mono);letter-spacing:.04em}
+.irq-node b{display:block;color:var(--text);font:800 10px var(--mono);letter-spacing:.04em}
 .irq-node span{display:block;color:var(--faint);font:8px/1.35 var(--mono);white-space:normal}
 .irq-node.hot b{color:#ffd95e}
 .irq-node.hot span{color:var(--yellow)}
@@ -97,15 +97,15 @@ code,.mono{font-family:var(--mono)}
 .ioapic-group .state-item label{font-size:7px}
 .ioapic-group .state-item .val{font-size:10px}
 .ioapic-group .state-item .sub{font-size:5px}
-.ioapic-group .state-item .val.big{font-size:12px}
+.ioapic-group .state-item .val.big{font-size:11px}
 .state-grid{display:grid;gap:6px;flex:1;min-height:0;grid-auto-rows:minmax(0,1fr)}
 .lapic-group .state-grid{grid-template-columns:1fr 1fr}
 .ioapic-group .state-grid{grid-template-columns:repeat(2,1fr)}
 .state-item{position:relative;padding:8px 6px;border:1px solid var(--line);border-radius:5px;background:rgba(9,15,21,.95);min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column;justify-content:center;transition:border-color .12s,background .12s}
 .state-item label{display:block;color:var(--faint);font:700 8px var(--mono);letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.state-item .val{display:block;margin-top:2px;color:var(--text);font:800 11px var(--mono)}
-.state-item .sub{display:block;margin-top:1px;color:var(--faint);font:5.5px/1.3 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.state-item .val.big{font-size:13px}
+.state-item .val{display:block;margin-top:2px;color:var(--text);font:800 10px var(--mono)}
+.state-item .sub{display:block;margin-top:1px;color:var(--faint);font:6px/1.3 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.state-item .val.big{font-size:11px}
 .state-item.changed{border-color:var(--yellow);border-width:1.5px;background:rgba(169,159,104,.12);box-shadow:0 0 14px rgba(169,159,104,.18)}
 .state-item.changed label{color:var(--yellow)}
 .state-item.changed .val{color:var(--yellow)}
@@ -131,7 +131,7 @@ code,.mono{font-family:var(--mono)}
 .rt-edge.dim:after{border-left-color:rgba(95,147,181,.7)}
 
 /* execution chronogram: phase-scoped sequence rows across three domains */
-.execution .region-title b{font:700 11px var(--mono)}
+.execution .region-title b{font:700 10px var(--mono)}
 .execution .region-title span{font:8.5px/1.3 var(--mono)}
 .exec-html,.seq-head{min-height:0}
 .exec-html{height:100%;margin-top:9px;display:grid;grid-template-rows:44px minmax(0,1fr) auto;overflow:hidden;font-family:var(--mono)}
@@ -197,7 +197,7 @@ code,.mono{font-family:var(--mono)}
 .notebook>.panel-head{padding:7px 9px}
 .note-body{min-height:0;overflow:auto;padding:9px}
 .type{display:flex;align-items:center;gap:7px;color:var(--cyan);font:9px var(--mono);letter-spacing:.06em;text-transform:uppercase}
-.note-body h2{margin:7px 0 5px;font:650 15px/1.18 var(--mono);letter-spacing:-.02em}
+.note-body h2{margin:7px 0 5px;font:650 13px/1.18 var(--mono);letter-spacing:-.02em}
 .fields{display:grid;grid-template-columns:98px minmax(0,1fr);border:1px solid var(--line);border-radius:5px;overflow:hidden}
 .fields dt,.fields dd{margin:0;padding:5px 6px;border-bottom:1px solid var(--line);font:7px var(--mono)}
 .fields dt{color:var(--cyan);background:var(--panel2)}.fields dd{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
