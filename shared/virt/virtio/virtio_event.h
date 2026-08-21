@@ -10,6 +10,7 @@ enum virtio_event_type
 	VIRTIO_EVENT_MMIO = 0,
 	VIRTIO_EVENT_QUEUE_BACKEND_BEGIN = 1,
 	VIRTIO_EVENT_QUEUE_BACKEND_END = 2,
+	VIRTIO_EVENT_IOEVENTFD_KICK = 3,
 };
 
 struct virtio_event_info
@@ -23,8 +24,10 @@ struct virtio_event_info
 	unsigned int mmio_offset;
 	unsigned int mmio_value;
 	unsigned char return_present;
-	unsigned char reserved[3];
+	unsigned char ioeventfd_present;
+	unsigned char reserved[2];
 	int return_value;
+	unsigned long long ioeventfd_count;
 };
 
 struct virtio_context

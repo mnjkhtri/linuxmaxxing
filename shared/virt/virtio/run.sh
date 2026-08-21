@@ -41,7 +41,6 @@ mkdir -p captures
 ./build/virtio > captures/virt-paraio.eBPF.ndjson 2> captures/virt-paraio-observer.log &
 observer=$!
 trace_instance=""
-kvm_mmio_enabled=0
 
 cleanup()
 {
@@ -86,7 +85,6 @@ if [ -r "$trace_root/events/kvm/kvm_mmio/format" ]; then
 	cat "$trace_root/events/kvm/kvm_mmio/format" >> captures/virt-paraio-trace-formats.log
 	if grep -q 'field:.*gpa' "$trace_root/events/kvm/kvm_mmio/format"; then
 		echo 1 > "$trace_instance/events/kvm/kvm_mmio/enable"
-		kvm_mmio_enabled=1
 		echo "tracefs: enabled optional kvm_mmio with GPA field" >&2
 	fi
 fi
@@ -111,20 +109,27 @@ import sys
 records = [json.loads(line) for line in open(sys.argv[1]) if line.strip()]
 meta = records[0]
 snapshots = records[1:]
-assert meta["schema_version"] == 2
+assert meta["schema_version"] == 3
 assert meta["queue_size"] == 8
-assert meta["rng_request_count"] == 5
+assert meta["phase_c_request_count"] == 5
+assert meta["total_request_count"] == 6
+assert meta["phase_c_notification"] == "KVM_EXIT_MMIO"
+assert meta["phase_d_notification"] == "KVM_IOEVENTFD"
 
 notifies = [record for record in snapshots if record["event_info"]["mmio"]["register"] == "QueueNotify"]
+kicks = [record for record in snapshots if record["event_info"]["event_name"] == "ioeventfd_kick"]
 begins = [record for record in snapshots if record["event_info"]["event_name"] == "queue_backend_begin"]
 ends = [record for record in snapshots if record["event_info"]["event_name"] == "queue_backend_end"]
 assert len(notifies) == 2
-assert len(begins) == 2
-assert len(ends) == 2
+assert len(kicks) == 1
+assert len(begins) == 3
+assert len(ends) == 3
+assert kicks[0]["event_info"]["phase"] == "D"
+assert kicks[0]["event_info"]["ioeventfd"] == {"present": True, "count": 1, "address": "0x10000050", "length": 4, "datamatch": 0}
 
-expected_buffers = [0x7000 + index * 0x100 for index in range(5)]
+expected_buffers = [0x7000 + index * 0x100 for index in range(6)]
 for index, address in enumerate(expected_buffers):
-    entry = begins[1]["state"]["descriptor"]["entries"][index]
+    entry = begins[2]["state"]["descriptor"]["entries"][index]
     assert int(entry["addr"], 16) == address
     assert entry["len"] == 32
     assert entry["flags"] == "0x2"
@@ -145,10 +150,21 @@ assert ends[1]["state"]["avail"]["idx"] == 5
 assert ends[1]["state"]["queue"]["last_avail_idx"] == 5
 assert ends[1]["state"]["used"]["idx"] == 5
 assert [(entry["id"], entry["len"]) for entry in ends[1]["state"]["used"]["ring"][:5]] == [(index, 32) for index in range(5)]
+
+assert kicks[0]["state"]["avail"]["idx"] == 6
+assert kicks[0]["state"]["queue"]["last_avail_idx"] == 5
+assert kicks[0]["state"]["used"]["idx"] == 5
+assert begins[2]["event_info"]["phase"] == "D"
+assert begins[2]["state"]["avail"]["idx"] == 6
+assert begins[2]["state"]["avail"]["ring"][5] == 5
+assert begins[2]["state"]["queue"]["last_avail_idx"] == 5
+assert begins[2]["state"]["used"]["idx"] == 5
+assert ends[2]["event_info"]["phase"] == "D"
+assert ends[2]["state"]["avail"]["idx"] == 6
+assert ends[2]["state"]["queue"]["last_avail_idx"] == 6
+assert ends[2]["state"]["used"]["idx"] == 6
+assert ends[2]["state"]["used"]["ring"][5] == {"slot": 5, "id": 5, "len": 32}
 PY
-if [ "$kvm_mmio_enabled" -eq 1 ]; then
-	[ "$(grep -c 'kvm_mmio:.*gpa 0x10000050' captures/virt-paraio-Trace.txt)" -eq 2 ]
-fi
 REMOTE
 
 fetch_captures

@@ -262,6 +262,21 @@ int BPF_UPROBE(observe_process_queue_begin, void *dev, void *guest_mem)
 	return 0;
 }
 
+SEC("uprobe/build/vmm:process_ioeventfd_kick")
+int BPF_UPROBE(observe_ioeventfd_kick, void *dev, void *guest_mem, __u64 eventfd_count)
+{
+	struct virtio_event *event = new_event(VIRTIO_EVENT_IOEVENTFD_KICK);
+
+	if (!event)
+		return 0;
+	event->event_info.ioeventfd_present = 1;
+	event->event_info.ioeventfd_count = eventfd_count;
+	sample_device(event, dev);
+	sample_queue_memory(event, guest_mem);
+	emit_event(event);
+	return 0;
+}
+
 SEC("uretprobe/build/vmm:process_queue")
 int BPF_URETPROBE(observe_process_queue_end, int result)
 {

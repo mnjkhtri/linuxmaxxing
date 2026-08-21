@@ -32,6 +32,8 @@ static const char *event_name(unsigned int event)
 		return "queue_backend_begin";
 	case VIRTIO_EVENT_QUEUE_BACKEND_END:
 		return "queue_backend_end";
+	case VIRTIO_EVENT_IOEVENTFD_KICK:
+		return "ioeventfd_kick";
 	default:
 		return "unknown";
 	}
@@ -89,7 +91,15 @@ static const char *phase_name(const struct virtio_event *event)
 {
 	unsigned int offset = event->event_info.mmio_offset;
 
-	if (event->event_info.event != VIRTIO_EVENT_MMIO || offset == VIRTIO_MMIO_QUEUE_NOTIFY)
+	if (event->event_info.event == VIRTIO_EVENT_IOEVENTFD_KICK)
+		return "D";
+	if (event->event_info.event != VIRTIO_EVENT_MMIO)
+	{
+		if (event->state.avail.present && event->state.avail.idx == VIRTIO_TOTAL_REQUEST_COUNT)
+			return "D";
+		return "C";
+	}
+	if (offset == VIRTIO_MMIO_QUEUE_NOTIFY)
 		return "C";
 	if (is_queue_configuration_register(offset))
 		return "B";
@@ -101,7 +111,7 @@ static const char *phase_name(const struct virtio_event *event)
 static void write_meta(struct json_writer *jw)
 {
 	json_object_begin(jw);
-	json_u32(jw, "schema_version", 2);
+	json_u32(jw, "schema_version", 3);
 	json_string(jw, "experiment", "virt-paraio");
 	json_string(jw, "kind", "meta");
 	json_string(jw, "source", "ebpf");
@@ -128,10 +138,15 @@ static void write_meta(struct json_writer *jw)
 	json_hex(jw, "rng_buffer_gpa", VIRTIO_RNG_BUFFER_GPA);
 	json_hex(jw, "rng_buffer_stride", VIRTIO_RNG_BUFFER_STRIDE);
 	json_u32(jw, "rng_request_length", VIRTIO_RNG_REQUEST_LEN);
-	json_u32(jw, "rng_request_count", VIRTIO_RNG_REQUEST_COUNT);
+	json_u32(jw, "phase_c_request_count", VIRTIO_RNG_REQUEST_COUNT);
+	json_u32(jw, "total_request_count", VIRTIO_TOTAL_REQUEST_COUNT);
 	json_string(jw, "negotiated_feature", "VIRTIO_F_VERSION_1");
 	json_string(jw, "completion_mode", "polling");
-	json_bool(jw, "accelerated_notification", false);
+	json_string(jw, "phase_c_notification", "KVM_EXIT_MMIO");
+	json_string(jw, "phase_d_notification", "KVM_IOEVENTFD");
+	json_hex(jw, "ioeventfd_address", VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY);
+	json_u32(jw, "ioeventfd_length", 4);
+	json_u32(jw, "ioeventfd_datamatch", VIRTIO_RNG_QUEUE_INDEX);
 	json_object_end(jw);
 	json_newline(jw);
 }
@@ -166,6 +181,23 @@ static void write_event_info(struct json_writer *jw, const struct virtio_event *
 		json_null(jw, "direction");
 		json_null(jw, "length");
 		json_null(jw, "value");
+	}
+	json_object_end(jw);
+	json_object_begin_field(jw, "ioeventfd");
+	json_bool(jw, "present", info->ioeventfd_present != 0);
+	if (info->ioeventfd_present)
+	{
+		json_u64(jw, "count", info->ioeventfd_count);
+		json_hex(jw, "address", VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY);
+		json_u32(jw, "length", 4);
+		json_u32(jw, "datamatch", VIRTIO_RNG_QUEUE_INDEX);
+	}
+	else
+	{
+		json_null(jw, "count");
+		json_null(jw, "address");
+		json_null(jw, "length");
+		json_null(jw, "datamatch");
 	}
 	json_object_end(jw);
 	if (info->return_present)
@@ -348,7 +380,7 @@ static void write_state(struct json_writer *jw, const struct virtio_state *state
 static void write_snapshot(struct json_writer *jw, const struct virtio_event *event, unsigned int seq)
 {
 	json_object_begin(jw);
-	json_u32(jw, "schema_version", 2);
+	json_u32(jw, "schema_version", 3);
 	json_string(jw, "experiment", "virt-paraio");
 	json_string(jw, "kind", "snapshot");
 	json_string(jw, "source", "ebpf");

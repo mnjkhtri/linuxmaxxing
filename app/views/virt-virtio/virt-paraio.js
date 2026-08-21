@@ -6,7 +6,7 @@
     var stamp = Date.now();
     var BPF = "../../shared/_captures/virt-paraio.eBPF.ndjson?v=" + stamp;
     var TRACE = "../../shared/_captures/virt-paraio-Trace.txt?v=" + stamp;
-    var M = { meta: null, events: [], phase: "A", landmarks: { notifies: [], begins: [], ends: [] }, setupMmio: 0, notifyMmio: 0 };
+    var M = { meta: null, events: [], phase: "A", landmarks: { notifies: [], kicks: [], begins: [], ends: [] }, setupMmio: 0, notifyMmio: 0, ioeventfdKicks: 0 };
     var cursor = 0,
         playTimer = null;
 
@@ -144,23 +144,33 @@
         return trace[index].timeNs;
     }
 
-    /* Derive tracefs phases from the first queue register and QueueNotify because guest marker exits are intentionally absent. */
-    function classifyTracePhases(trace) {
+    /* Derive tracefs phases from real queue boundaries because guest marker exits are intentionally absent. */
+    function classifyTracePhases(trace, ebpf) {
         var firstB = null,
-            firstC = null;
+            firstC = null,
+            firstD = null;
         trace.forEach(function (event, index) {
             if (event.name !== "kvm_mmio" || missing(event.info.offset)) return;
             if (firstB === null && QUEUE_OFFSETS[event.info.offset]) firstB = previousExitTime(trace, index);
             if (firstC === null && event.info.offset === 0x050) firstC = previousExitTime(trace, index);
         });
+        var kick = ebpf.find(function (event) {
+            return event.name === "ioeventfd_kick";
+        });
+        if (kick) {
+            firstD = kick.timeNs;
+            trace.forEach(function (event) {
+                if (event.name === "kvm_entry" && event.timeNs <= kick.timeNs) firstD = event.timeNs;
+            });
+        }
         trace.forEach(function (event) {
-            event.phase = firstC !== null && event.timeNs >= firstC ? "C" : firstB !== null && event.timeNs >= firstB ? "B" : "A";
+            event.phase = firstD !== null && event.timeNs >= firstD ? "D" : firstC !== null && event.timeNs >= firstC ? "C" : firstB !== null && event.timeNs >= firstB ? "B" : "A";
         });
     }
 
     function lane(event) {
-        if (event.source === "ebpf") return event.name === "virtio_mmio" ? "MMIO" : "VIRTIO BACKEND";
-        if (event.name === "kvm_entry") return "GUEST";
+        if (event.source === "ebpf") return "USERSPACE VMM";
+        if (event.name === "kvm_entry") return "KVM → GUEST";
         if (event.name === "kvm_exit") return "GUEST → KVM";
         if (event.name === "kvm_userspace_exit") return "KVM → VMM";
         if (event.name === "kvm_mmio") return "KVM MMIO";
@@ -178,7 +188,7 @@
 
     /* Fuse both monotonic sources without inventing events for untrapped guest-memory stores. */
     function buildModel(ebpf, trace) {
-        classifyTracePhases(trace);
+        classifyTracePhases(trace, ebpf);
         M.events = ebpf.concat(trace).sort(function (a, b) {
             return a.timeNs - b.timeNs || (a.source === "tracefs" ? -1 : 1);
         });
@@ -198,9 +208,13 @@
             }
             if (event.source === "ebpf" && event.name === "queue_backend_begin") M.landmarks.begins.push(index);
             if (event.source === "ebpf" && event.name === "queue_backend_end") M.landmarks.ends.push(index);
+            if (event.source === "ebpf" && event.name === "ioeventfd_kick") {
+                M.ioeventfdKicks++;
+                M.landmarks.kicks.push(index);
+            }
             if (event.source === "tracefs" && event.name === "kvm_userspace_exit" && event.info.reason === "KVM_EXIT_IO") M.landmarks.success = index;
         });
-        ["A", "B", "C"].forEach(function (phase) {
+        ["A", "B", "C", "D"].forEach(function (phase) {
             for (var i = 0; i < M.events.length; i++)
                 if (M.events[i].phase === phase) {
                     M.landmarks["phase" + phase] = i;
@@ -310,7 +324,7 @@
             },
             {
                 start: metaNumber(meta, "rng_buffer_gpa"),
-                size: metaNumber(meta, "rng_buffer_stride") * (metaNumber(meta, "rng_request_count") - 1) + metaNumber(meta, "rng_request_length"),
+                size: metaNumber(meta, "rng_buffer_stride") * (metaNumber(meta, "total_request_count") - 1) + metaNumber(meta, "rng_request_length"),
                 kind: "buffer",
                 name: "RNG BUFFERS",
             },
@@ -396,8 +410,6 @@
             var populated = hexNumber(entry.addr) !== 0;
             return '<div class="queue-slot ' + (populated ? "populated" : "empty") + '"><b>buffer ' + index + '</b><code>' + esc(entry.addr) + '</code><span>' + (index === 0 && bytes ? bytes : populated ? entry.len + " B" : "unused") + "</span></div>";
         });
-        $("last-avail").textContent = queue ? queue.last_avail_idx : "not sampled";
-        $("pending-count").textContent = queue && avail ? avail.idx + " − " + queue.last_avail_idx + " = " + ((avail.idx - queue.last_avail_idx) & 0xffff) : "not sampled";
     }
 
     function eventRows(event) {
@@ -414,6 +426,13 @@
                 ["register", event.info.mmio.register],
                 ["direction", event.info.mmio.direction],
                 ["value", event.info.mmio.value],
+            );
+        if (event.source === "ebpf" && event.info.ioeventfd && event.info.ioeventfd.present)
+            rows.push(
+                ["ioeventfd address", event.info.ioeventfd.address],
+                ["length", event.info.ioeventfd.length],
+                ["datamatch", event.info.ioeventfd.datamatch],
+                ["counter", event.info.ioeventfd.count],
             );
         if (event.source === "ebpf" && !missing(event.info.return_value)) rows.push(["return", event.info.return_value]);
         if (event.source === "tracefs") {
@@ -465,6 +484,7 @@
     function selectedParticipant(event) {
         if (event.source === "ebpf" && event.name === "queue_backend_begin") return "backend";
         if (event.source === "ebpf" && event.name === "queue_backend_end") return "backend";
+        if (event.source === "ebpf" && event.name === "ioeventfd_kick") return "backend";
         if (event.source === "ebpf" && event.name === "virtio_mmio") return "backend";
         if (event.name === "kvm_mmio" && event.info.register === "QueueNotify") return "notify";
         if (event.name === "kvm_userspace_exit") return "backend";
@@ -487,7 +507,6 @@
         if (sampledGroupChanged(event, previous, "avail")) names.push("avail");
         if (sampledGroupChanged(event, previous, "used")) names.push("used");
         if (sampledGroupChanged(event, previous, "buffer_preview")) names.push("buffer");
-        if (sampledGroupChanged(event, previous, "queue")) names.push("queue");
         names.forEach(function (name) {
             var node = document.querySelector('[data-node="' + name + '"]');
             if (node) node.classList.add("hot");
@@ -496,6 +515,11 @@
 
     function renderMachine(event) {
         highlightChanges(event);
+        var ioeventfd = event.phase === "D";
+        $("doorbell-title").textContent = ioeventfd ? "IOEVENTFD DOORBELL" : "MMIO DOORBELL";
+        $("guest-notify-link").textContent = "MMIO write";
+        $("backend-notify-link").textContent = ioeventfd ? "eventfd wake" : "dispatch";
+        $("backend-role").textContent = ioeventfd ? "worker → process_queue()" : "process_queue() backend";
         $("machine-caption").textContent = event.state
             ? "Highlights show fields changed since the preceding sampled boundary."
             : "Raw chronology boundary; queue fields are not sampled or highlighted.";
@@ -519,14 +543,31 @@
         return before;
     }
 
+    /* Each row shows the execution context of that boundary rather than inheriting an unrelated thread's residency. */
+    function boundaryResidency(event, state) {
+        var residency;
+
+        if (event.source === "ebpf") return { before: "vmm", after: "vmm", continuing: state === "vmm" ? null : state };
+        if (event.name === "kvm_entry") residency = { before: "kvm", after: "guest" };
+        else if (event.name === "kvm_exit") residency = { before: "guest", after: "kvm" };
+        else if (event.name === "kvm_userspace_exit") residency = { before: "kvm", after: "vmm" };
+        else if (event.name === "kvm_mmio") residency = { before: "kvm", after: "kvm" };
+        else residency = { before: state, after: executionStateAfter(event, state) };
+        residency.bridgeFrom = state === residency.before ? null : state;
+        return residency;
+    }
+
     /* Lifelines preserve the same USERSPACE VMM, KVM, GUEST ordering used by the VIRT.IO visualization. */
-    function lifelineMarkup(event, before, after) {
+    function lifelineMarkup(event, residency) {
         var dom =
             '<i class="life guest"></i><i class="life kvm"></i><i class="life vmm"></i><i class="residency top ' +
-            before +
+            residency.before +
             '"></i><i class="residency bottom ' +
-            after +
+            residency.after +
             '"></i>';
+        if (residency.continuing) dom += '<i class="parallel-continuation ' + residency.continuing + '"></i><i class="concurrent-bridge ' + residency.continuing + '-vmm"></i><span class="concurrent-label ' + residency.continuing + '-vmm">concurrent</span>';
+        if (residency.bridgeFrom) dom += '<i class="inferred-bridge ' + residency.bridgeFrom + "-" + residency.before + '"></i>';
+        if (event.name === "ioeventfd_kick") dom += '<i class="eventfd-branch"></i><span class="eventfd-branch-label">eventfd wake</span>';
         if (event.name === "kvm_entry")
             dom +=
                 '<i class="boundary-arrow entry"></i><i class="life-point guest"></i><i class="life-point kvm"></i><span class="boundary-label guest-kvm">kvm_entry</span>';
@@ -557,9 +598,10 @@
             .map(function (event) {
                 var previous = event.index > 0 ? M.events[event.index - 1] : null,
                     delta = previous ? ((event.timeNs - previous.timeNs) / 1000).toFixed(3) : "0.000";
-                var after = executionStateAfter(event, state),
-                    lifelines = lifelineMarkup(event, state, after);
-                state = after;
+                var residency = boundaryResidency(event, state),
+                    lifelines = lifelineMarkup(event, residency),
+                    observation = event.source === "ebpf" ? "" : event.title;
+                if (event.source !== "ebpf") state = residency.after;
                 return (
                     '<button class="timeline-row ' +
                     (event.index === cursor ? "active" : "") +
@@ -570,7 +612,7 @@
                     'µs</span><span class="life-space">' +
                     lifelines +
                     '</span><span class="event-label">' +
-                    esc(event.title) +
+                    esc(observation) +
                     "</span></button>"
                 );
             })
@@ -594,8 +636,8 @@
     }
 
     function renderRoadmap() {
-        var definitions = { A: "VIRTIO BRING-UP", B: "QUEUE CONFIG", C: "PARAVIRTUALIZED I/O" };
-        $("roadmap").innerHTML = ["A", "B", "C"]
+        var definitions = { A: "VIRTIO BRING-UP", B: "QUEUE CONFIG", C: "PARAVIRTUALIZED I/O", D: "IOEVENTFD DOORBELL" };
+        $("roadmap").innerHTML = ["A", "B", "C", "D"]
             .map(function (phase) {
                 var samples = phaseSamples(phase),
                     dots = samples
@@ -737,9 +779,9 @@
             if (!M.meta || !ebpf.length || !trace.length) throw Error("capture is incomplete");
             renderMemoryMap(M.meta);
             buildModel(ebpf, trace);
-            if (M.landmarks.begins.length !== 2 || M.landmarks.ends.length !== 2 || M.notifyMmio !== M.landmarks.begins.length) throw Error("required Phase-C observations are missing");
+            if (M.meta.schema_version !== 3 || M.landmarks.begins.length !== 3 || M.landmarks.ends.length !== 3 || M.notifyMmio !== 2 || M.ioeventfdKicks !== 1) throw Error("required Phase-C and Phase-D observations are missing");
             $("scrub").max = M.events.length - 1;
-            $("status").lastElementChild.textContent = M.events.length + " boundaries · " + M.notifyMmio + " QueueNotify writes";
+            $("status").lastElementChild.textContent = M.events.length + " boundaries · " + M.notifyMmio + " userspace notify exits · " + M.ioeventfdKicks + " ioeventfd kick";
             wire();
             select(M.landmarks.phaseC, true);
         })

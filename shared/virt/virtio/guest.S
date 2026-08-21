@@ -113,7 +113,7 @@ protected_mode:
 	/* PHASE C — PARAVIRTUALIZED I/O THROUGH THE VIRTQUEUE */
 	/* Goal: requests live in shared RAM; QueueNotify only tells the backend that the queue has new work. */
 	/* -------------------------------------------------- */
-	/* C1 — one request: learn the basic descriptor to available ring to notification to used ring path. */
+	/* First, one request demonstrates the basic descriptor to available ring to notification to used ring path. */
 	/* Descriptor zero describes 32 device-writable bytes, but the guest still owns the descriptor while preparing it. */
 	movl $VIRTIO_RNG_BUFFER_GPA, VIRTQ_DESC_GPA + VIRTQ_DESC_ADDR_OFFSET
 	movl $0, VIRTQ_DESC_GPA + VIRTQ_DESC_ADDR_OFFSET + 4
@@ -151,7 +151,7 @@ completion_published:
 	cmpl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTQ_USED_ELEM_LEN_OFFSET
 	jne fail_completion
 
-	/* C2 — batch several requests before ringing the same doorbell once. */
+	/* Next, four requests are batched before ringing the same doorbell once. */
 	/* These four descriptors physically exist while avail.idx remains one, so the device cannot consume them yet. */
 	movl $(VIRTIO_RNG_BUFFER_GPA + 1 * VIRTIO_RNG_BUFFER_STRIDE), VIRTQ_DESC_GPA + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET
 	movl $0, VIRTQ_DESC_GPA + 1 * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET + 4
@@ -218,6 +218,41 @@ batch_completion_published:
 	cmpl $4, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + 4 * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_ID_OFFSET
 	jne fail_completion
 	cmpl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + 4 * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_LEN_OFFSET
+	jne fail_completion
+
+	/* -------------------------------------------------- */
+	/* PHASE D — IOEVENTFD DOORBELL */
+	/* -------------------------------------------------- */
+	/* Requests still live in shared RAM; only the QueueNotify delivery path changes. */
+	movl $(VIRTIO_RNG_BUFFER_GPA + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTIO_RNG_BUFFER_STRIDE), VIRTQ_DESC_GPA + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET
+	movl $0, VIRTQ_DESC_GPA + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET + 4
+	movl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_DESC_GPA + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_DESC_SIZE + VIRTQ_DESC_LEN_OFFSET
+	movw $VIRTQ_DESC_F_WRITE, VIRTQ_DESC_GPA + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_DESC_SIZE + VIRTQ_DESC_FLAGS_OFFSET
+	movw $0, VIRTQ_DESC_GPA + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_DESC_SIZE + VIRTQ_DESC_NEXT_OFFSET
+	movw $VIRTIO_IOEVENTFD_DESC_INDEX, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_RING_OFFSET + VIRTIO_IOEVENTFD_DESC_INDEX * 2
+	cmpw $VIRTIO_RNG_REQUEST_COUNT, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_IDX_OFFSET
+	jne fail_queue
+
+	/* avail.idx remains five while descriptor 5 and available slot 5 are prepared and guest-owned. */
+	mfence
+	movw $VIRTIO_TOTAL_REQUEST_COUNT, VIRTQ_AVAIL_GPA + VIRTQ_AVAIL_IDX_OFFSET
+	/* This fence orders publication before the QueueNotify write handled by KVM_IOEVENTFD. */
+	mfence
+	movl $VIRTIO_RNG_QUEUE_INDEX, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY
+
+	movl $VIRTIO_POLL_LIMIT, %ecx
+.Lpoll_ioeventfd_completion:
+	cmpw $VIRTIO_TOTAL_REQUEST_COUNT, VIRTQ_USED_GPA + VIRTQ_USED_IDX_OFFSET
+	je .Lioeventfd_complete
+	decl %ecx
+	jnz .Lpoll_ioeventfd_completion
+	jmp fail_timeout
+.Lioeventfd_complete:
+	/* The acquire fence keeps completion reads after observing used.idx reach six. */
+	lfence
+	cmpl $VIRTIO_IOEVENTFD_DESC_INDEX, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_ID_OFFSET
+	jne fail_completion
+	cmpl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_LEN_OFFSET
 	jne fail_completion
 
 	/* The VMM treats this port write as explicit success and exits before the following fault instruction. */

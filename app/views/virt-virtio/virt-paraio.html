@@ -5,7 +5,7 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <title>Virtio paravirtual I/O explorer</title>
-        <link rel="stylesheet" href="virt-paraio.css?v=9" />
+        <link rel="stylesheet" href="virt-paraio.css?v=16" />
     </head>
     <body>
         <main class="paraio">
@@ -55,13 +55,13 @@
                                         <div class="actor guest-actor" data-node="guest">
                                             <i></i><strong>GUEST DRIVER</strong><small>descriptor + rings in RAM</small>
                                         </div>
-                                        <div class="participant-link guest-to-doorbell"><span>MMIO write</span></div>
+                                        <div class="participant-link guest-to-doorbell"><span id="guest-notify-link">MMIO write</span></div>
                                         <div class="doorbell" data-node="notify">
-                                            <i></i><b>MMIO DOORBELL</b><code id="notify-card-value">QueueNotify</code>
+                                            <i></i><b id="doorbell-title">MMIO DOORBELL</b><code id="notify-card-value">QueueNotify</code>
                                         </div>
-                                        <div class="participant-link doorbell-to-backend"><span>dispatch</span></div>
+                                        <div class="participant-link doorbell-to-backend"><span id="backend-notify-link">dispatch</span></div>
                                         <div class="actor backend" data-node="backend">
-                                            <i></i><strong>USERSPACE VMM</strong><small>process_queue() backend</small>
+                                            <i></i><strong>USERSPACE VMM</strong><small id="backend-role">process_queue() backend</small>
                                         </div>
                                         <section class="guest-memory">
                                             <header>
@@ -70,7 +70,6 @@
                                             </header>
                                             <div id="memory-map" class="memory-map"></div>
                                         </section>
-                                        <div class="backend-private" data-node="queue"><span>last_avail_idx</span><code id="last-avail">not sampled</code><span>pending</span><code id="pending-count">not sampled</code></div>
                                     </div>
                                 </section>
                             </div>
@@ -102,6 +101,6 @@
                 </aside>
             </section>
         </main>
-        <script src="virt-paraio.js?v=9"></script>
+        <script src="virt-paraio.js?v=19"></script>
     </body>
 </html>

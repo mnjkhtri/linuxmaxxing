@@ -4,12 +4,15 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/kvm.h>
+#include <pthread.h>
+#include <stdbool.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/eventfd.h>
 #include <sys/mman.h>
 #include <sys/random.h>
 #include <unistd.h>
@@ -37,6 +40,16 @@ struct virtio_mmio_device
 	struct virtio_queue queue;    /* Virtio-rng exposes exactly one split virtqueue in this experiment. */
 };
 
+struct ioeventfd_backend
+{
+	struct virtio_mmio_device *dev; /* Both notification paths share the same device state. */
+	uint8_t *guest_mem;             /* The worker translates queue GPAs through this KVM memory-slot mapping. */
+	int kick_fd;                    /* KVM increments this eventfd when QueueNotify writes zero. */
+	atomic_bool stop;               /* Shutdown wakes the worker without creating a guest-kick observation. */
+	uint64_t guest_kicks;           /* This counts eventfd wakes caused by the registered guest doorbell. */
+	int result;                     /* The worker preserves backend failure for the main thread. */
+};
+
 /* process_queue() is the virtio-rng backend, separate from the MMIO register interface below. */
 static int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)
 {
@@ -54,7 +67,7 @@ static int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)
 
 	if (!dev->queue.ready || dev->queue.size != VIRTQ_SIZE)
 	{
-		fprintf(stderr, "virtio C: QueueNotify reached an unconfigured queue\n");
+		fprintf(stderr, "virtqueue backend: notification reached an unconfigured queue\n");
 		return -1;
 	}
 
@@ -71,13 +84,11 @@ static int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)
 		return 0;
 	if (pending > VIRTQ_SIZE)
 	{
-		fprintf(stderr, "virtio C: available ring contains more entries than the queue can hold\n");
+		fprintf(stderr, "virtqueue backend: available ring contains more entries than the queue can hold\n");
 		return -1;
 	}
 
-	fprintf(stderr, "virtio C:\n");
-	fprintf(stderr, "  QueueNotify queue=0\n");
-	fprintf(stderr, "  backend avail.idx=%u last_avail_idx=%u pending=%u\n", avail_idx, dev->queue.last_avail_idx, pending);
+	fprintf(stderr, "virtqueue backend: avail.idx=%u last_avail_idx=%u pending=%u\n", avail_idx, dev->queue.last_avail_idx, pending);
 	while (dev->queue.last_avail_idx != avail_idx)
 	{
 		size_t filled = 0;
@@ -86,21 +97,21 @@ static int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)
 		head = avail->ring[slot];
 		if (head >= VIRTQ_SIZE)
 		{
-			fprintf(stderr, "virtio C: avail[%u] names descriptor %u outside the table\n", slot, head);
+			fprintf(stderr, "virtqueue backend: avail[%u] names descriptor %u outside the table\n", slot, head);
 			return -1;
 		}
 		request = desc[head];
 		expected_buffer = VIRTIO_RNG_BUFFER_GPA + (uint64_t)head * VIRTIO_RNG_BUFFER_STRIDE;
 		if (request.addr != expected_buffer || request.len != VIRTIO_RNG_REQUEST_LEN || request.flags != VIRTQ_DESC_F_WRITE || request.next != 0)
 		{
-			fprintf(stderr, "virtio C: descriptor %u is not the expected direct writable entropy buffer\n", head);
+			fprintf(stderr, "virtqueue backend: descriptor %u is not the expected direct writable entropy buffer\n", head);
 			return -1;
 		}
 
 		/* A descriptor address is an untrusted GPA rather than a host pointer, so its complete range is checked before translation. */
 		if (request.addr > VIRTIO_GUEST_MEM_SIZE || request.len > VIRTIO_GUEST_MEM_SIZE - request.addr)
 		{
-			fprintf(stderr, "virtio C: descriptor %u buffer lies outside guest RAM\n", head);
+			fprintf(stderr, "virtqueue backend: descriptor %u buffer lies outside guest RAM\n", head);
 			return -1;
 		}
 		buffer = guest_mem + request.addr;
@@ -133,6 +144,48 @@ static int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)
 		fprintf(stderr, "  used[%u] { id=%u len=%u } used.idx=%u\n", slot, head, request.len, used->idx);
 	}
 	return 0;
+}
+
+/* This stable boundary exposes an ioeventfd wake before the shared virtqueue backend consumes it. */
+__attribute__((noinline)) static int process_ioeventfd_kick(struct virtio_mmio_device *dev, uint8_t *guest_mem, uint64_t eventfd_count)
+{
+	if (eventfd_count != 1)
+	{
+		fprintf(stderr, "virtio D: unexpected ioeventfd wake count=%llu\n", (unsigned long long)eventfd_count);
+		return -1;
+	}
+	fprintf(stderr, "virtio D:\n");
+	fprintf(stderr, "  ioeventfd wake count=%llu\n", (unsigned long long)eventfd_count);
+	return process_queue(dev, guest_mem);
+}
+
+static void *ioeventfd_worker(void *opaque)
+{
+	struct ioeventfd_backend *backend = opaque;
+	uint64_t count;
+	ssize_t bytes;
+
+	for (;;)
+	{
+		do
+			bytes = read(backend->kick_fd, &count, sizeof(count));
+		while (bytes < 0 && errno == EINTR);
+		if (bytes != sizeof(count))
+		{
+			if (bytes < 0)
+				perror("read ioeventfd");
+			else
+				fprintf(stderr, "virtio D: short ioeventfd read\n");
+			backend->result = -1;
+			return NULL;
+		}
+		if (atomic_load_explicit(&backend->stop, memory_order_acquire))
+			return NULL;
+		backend->guest_kicks += count;
+		backend->result = process_ioeventfd_kick(backend->dev, backend->guest_mem, count);
+		if (backend->result < 0)
+			return NULL;
+	}
 }
 
 /* read_register() is the complete readable side of this experiment's virtio-mmio transport. */
@@ -329,7 +382,7 @@ static int write_register(struct virtio_mmio_device *dev, uint8_t *guest_mem, ui
 	}
 }
 
-/* Every transport access reaches this decoder as one aligned little-endian 32-bit KVM_EXIT_MMIO. */
+/* do_mmio() handles accesses returned to userspace; the Phase-D QueueNotify is intercepted by ioeventfd and never reaches this function. */
 static int do_mmio(struct virtio_mmio_device *dev, uint8_t *guest_mem, struct kvm_run *run)
 {
 	uint64_t address = run->mmio.phys_addr;
@@ -376,9 +429,15 @@ int main(void)
 	struct virtq_desc *desc;
 	struct virtq_avail *avail;
 	struct virtq_used *used;
+	struct ioeventfd_backend backend = {.kick_fd = -1};
+	struct kvm_ioeventfd ioevent = {0};
+	pthread_t backend_thread;
 	uint8_t *guest_mem;
 	size_t guest_size;
 	unsigned int queue_notify_exits = 0;
+	int ioeventfd_registered = 0;
+	int worker_started = 0;
+	int run_result = 1;
 	int kvm;
 	int vm;
 	int vcpu;
@@ -393,6 +452,11 @@ int main(void)
 	if (ioctl(kvm, KVM_GET_API_VERSION, 0) != 12)
 	{
 		fprintf(stderr, "unexpected KVM API version\n");
+		return 1;
+	}
+	if (ioctl(kvm, KVM_CHECK_EXTENSION, KVM_CAP_IOEVENTFD) <= 0)
+	{
+		fprintf(stderr, "KVM_CAP_IOEVENTFD is unavailable\n");
 		return 1;
 	}
 	vm = ioctl(kvm, KVM_CREATE_VM, 0);
@@ -466,14 +530,63 @@ int main(void)
 		if (ioctl(vcpu, KVM_RUN, 0) < 0)
 		{
 			perror("KVM_RUN");
-			return 1;
+			break;
 		}
 		if (run->exit_reason == KVM_EXIT_MMIO)
 		{
 			if (run->mmio.is_write && run->mmio.phys_addr == VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY)
+			{
 				queue_notify_exits++;
+				if (ioeventfd_registered)
+				{
+					fprintf(stderr, "virtio D: QueueNotify unexpectedly reached userspace MMIO\n");
+					break;
+				}
+			}
 			if (do_mmio(&dev, guest_mem, run) < 0)
-				return 1;
+				break;
+			if (queue_notify_exits == 2 && !ioeventfd_registered)
+			{
+				struct virtq_avail *phase_c_avail = (struct virtq_avail *)(guest_mem + VIRTQ_AVAIL_GPA);
+				struct virtq_used *phase_c_used = (struct virtq_used *)(guest_mem + VIRTQ_USED_GPA);
+
+				if (phase_c_avail->idx != VIRTIO_RNG_REQUEST_COUNT || phase_c_used->idx != VIRTIO_RNG_REQUEST_COUNT || dev.queue.last_avail_idx != VIRTIO_RNG_REQUEST_COUNT)
+				{
+					fprintf(stderr, "virtio D: refusing ioeventfd before Phase C completes\n");
+					break;
+				}
+				backend.dev = &dev;
+				backend.guest_mem = guest_mem;
+				backend.kick_fd = eventfd(0, EFD_CLOEXEC);
+				if (backend.kick_fd < 0)
+				{
+					perror("eventfd");
+					break;
+				}
+				atomic_init(&backend.stop, false);
+				ioevent.datamatch = VIRTIO_RNG_QUEUE_INDEX;
+				ioevent.addr = VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY;
+				ioevent.len = 4;
+				ioevent.fd = backend.kick_fd;
+				ioevent.flags = KVM_IOEVENTFD_FLAG_DATAMATCH;
+				if (ioctl(vm, KVM_IOEVENTFD, &ioevent) < 0)
+				{
+					perror("KVM_IOEVENTFD");
+					close(backend.kick_fd);
+					backend.kick_fd = -1;
+					break;
+				}
+				ioeventfd_registered = 1;
+				if (pthread_create(&backend_thread, NULL, ioeventfd_worker, &backend) != 0)
+				{
+					fprintf(stderr, "pthread_create failed\n");
+					break;
+				}
+				worker_started = 1;
+				fprintf(stderr, "virtio D:\n");
+				fprintf(stderr, "  KVM_IOEVENTFD addr=0x%llx len=%u datamatch=%llu\n", (unsigned long long)ioevent.addr, ioevent.len, (unsigned long long)ioevent.datamatch);
+				fprintf(stderr, "  backend worker ready\n");
+			}
 			continue;
 		}
 		if (run->exit_reason == KVM_EXIT_IO)
@@ -483,26 +596,63 @@ int main(void)
 			if (run->io.direction != KVM_EXIT_IO_OUT || run->io.size != 1 || run->io.count != 1)
 			{
 				fprintf(stderr, "unexpected completion-port access\n");
-				return 1;
+				break;
 			}
 			if (run->io.port == VIRTIO_TEST_FAILURE_PORT)
 			{
 				fprintf(stderr, "guest reported failure code %u\n", data[0]);
-				return 1;
+				break;
 			}
 			if (run->io.port != VIRTIO_TEST_SUCCESS_PORT)
 			{
 				fprintf(stderr, "unexpected guest I/O port 0x%x\n", run->io.port);
-				return 1;
+				break;
 			}
+			run_result = 0;
 			break;
 		}
 		if (run->exit_reason == KVM_EXIT_HLT)
 			fprintf(stderr, "guest halted without explicit success\n");
 		else
 			fprintf(stderr, "unexpected KVM exit reason %u\n", run->exit_reason);
-		return 1;
+		break;
 	}
+
+	if (ioeventfd_registered)
+	{
+		struct kvm_ioeventfd deassign = ioevent;
+
+		deassign.flags |= KVM_IOEVENTFD_FLAG_DEASSIGN;
+		if (ioctl(vm, KVM_IOEVENTFD, &deassign) < 0)
+		{
+			perror("KVM_IOEVENTFD deassign");
+			run_result = 1;
+		}
+	}
+	if (worker_started)
+	{
+		uint64_t wake = 1;
+		ssize_t bytes;
+
+		atomic_store_explicit(&backend.stop, true, memory_order_release);
+		do
+			bytes = write(backend.kick_fd, &wake, sizeof(wake));
+		while (bytes < 0 && errno == EINTR);
+		if (bytes != sizeof(wake))
+		{
+			perror("wake ioeventfd worker");
+			run_result = 1;
+		}
+		if (pthread_join(backend_thread, NULL) != 0)
+		{
+			fprintf(stderr, "pthread_join failed\n");
+			run_result = 1;
+		}
+	}
+	if (backend.kick_fd >= 0)
+		close(backend.kick_fd);
+	if (run_result || backend.result < 0)
+		return 1;
 
 	desc = (struct virtq_desc *)(guest_mem + VIRTQ_DESC_GPA);
 	avail = (struct virtq_avail *)(guest_mem + VIRTQ_AVAIL_GPA);
@@ -523,14 +673,14 @@ int main(void)
 		fprintf(stderr, "guest signaled success with invalid queue addresses\n");
 		return 1;
 	}
-	if (dev.queue.last_avail_idx != VIRTIO_RNG_REQUEST_COUNT)
+	if (dev.queue.last_avail_idx != VIRTIO_TOTAL_REQUEST_COUNT)
 	{
 		fprintf(stderr, "guest signaled success before the backend consumed all available entries\n");
 		return 1;
 	}
 
-	/* Shared guest RAM must contain five published and completed requests in queue order. */
-	for (uint32_t index = 0; index < VIRTIO_RNG_REQUEST_COUNT; index++)
+	/* Shared guest RAM must contain six published and completed requests in queue order. */
+	for (uint32_t index = 0; index < VIRTIO_TOTAL_REQUEST_COUNT; index++)
 	{
 		uint64_t expected_buffer = VIRTIO_RNG_BUFFER_GPA + (uint64_t)index * VIRTIO_RNG_BUFFER_STRIDE;
 
@@ -550,7 +700,7 @@ int main(void)
 			return 1;
 		}
 	}
-	if (avail->idx != VIRTIO_RNG_REQUEST_COUNT || used->idx != VIRTIO_RNG_REQUEST_COUNT)
+	if (avail->idx != VIRTIO_TOTAL_REQUEST_COUNT || used->idx != VIRTIO_TOTAL_REQUEST_COUNT)
 	{
 		fprintf(stderr, "guest signaled success with invalid published queue indices\n");
 		return 1;
@@ -560,15 +710,23 @@ int main(void)
 		fprintf(stderr, "guest signaled success without exactly two QueueNotify exits\n");
 		return 1;
 	}
+	if (backend.guest_kicks != 1)
+	{
+		fprintf(stderr, "guest signaled success without exactly one ioeventfd kick\n");
+		return 1;
+	}
 
-	fprintf(stderr, "  C1: one request / one QueueNotify\n");
-	fprintf(stderr, "  C2: four requests / one QueueNotify\n");
-	fprintf(stderr, "  guest observed used.idx=%u\n", used->idx);
+	fprintf(stderr, "  first request: one request / one QueueNotify\n");
+	fprintf(stderr, "  four-request batch: four requests / one QueueNotify\n");
+	fprintf(stderr, "virtio D:\n");
+	fprintf(stderr, "  guest observed completion used.idx=%u\n", used->idx);
 	fprintf(stderr, "  success\n\n");
 	fprintf(stderr, "data path:\n");
-	fprintf(stderr, "  total requests = %u\n", VIRTIO_RNG_REQUEST_COUNT);
+	fprintf(stderr, "  total requests = %u\n", VIRTIO_TOTAL_REQUEST_COUNT);
+	fprintf(stderr, "  guest QueueNotify writes = %u\n", queue_notify_exits + (unsigned int)backend.guest_kicks);
 	fprintf(stderr, "  request-description MMIO exits = 0\n");
-	fprintf(stderr, "  QueueNotify MMIO exits = %u\n", queue_notify_exits);
+	fprintf(stderr, "  QueueNotify userspace MMIO exits = %u\n", queue_notify_exits);
+	fprintf(stderr, "  ioeventfd kicks = %llu\n", (unsigned long long)backend.guest_kicks);
 	fprintf(stderr, "  completion polling MMIO exits = 0\n");
 	return 0;
 }
