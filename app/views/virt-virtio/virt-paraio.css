@@ -102,6 +102,9 @@ code{font-family:var(--mono)}
 .eventfd-branch{position:absolute;left:16.667%;top:50%;width:33.333%;height:1px;z-index:4;border-top:1px dashed var(--green)}
 .eventfd-branch:after{content:"";position:absolute;left:-1px;top:-3px;border-top:3px solid transparent;border-bottom:3px solid transparent;border-right:5px solid var(--green)}
 .eventfd-branch-label{position:absolute;left:33.333%;top:50%;z-index:6;padding:0 2px;transform:translate(-50%,-165%);background:rgba(7,12,18,.82);color:var(--green);font:6.5px var(--mono);white-space:nowrap}
+.irqfd-branch{position:absolute;left:16.667%;top:50%;width:33.333%;height:1px;z-index:4;border-top:1px dashed var(--violet)}
+.irqfd-branch:after{content:"";position:absolute;right:-1px;top:-3px;border-top:3px solid transparent;border-bottom:3px solid transparent;border-left:5px solid var(--violet)}
+.irqfd-branch-label{position:absolute;left:33.333%;top:50%;z-index:6;padding:0 2px;transform:translate(-50%,-165%);background:rgba(7,12,18,.82);color:var(--violet);font:6.5px var(--mono);white-space:nowrap}
 .concurrent-bridge{position:absolute;top:76%;height:1px;z-index:3;border-top:1px dotted var(--linehot)}
 .concurrent-bridge.guest-vmm{left:16.667%;width:66.666%}
 .concurrent-bridge.kvm-vmm{left:16.667%;width:33.333%}
@@ -155,6 +158,10 @@ code{font-family:var(--mono)}
 .queue-region .participant-link span{position:absolute;left:50%;bottom:4px;transform:translateX(-50%);color:var(--faint);font:6.5px var(--mono);white-space:nowrap}
 .queue-region .guest-to-doorbell{left:56%;width:20%}
 .queue-region .doorbell-to-backend{left:24%;width:20%}
+.completion-route{display:none;position:absolute;left:24%;right:24%;top:15%;height:1px;border-top:1px dashed var(--violet);z-index:2}
+.completion-route.visible{display:block}
+.completion-route:after{content:"";position:absolute;right:-1px;top:-3px;border-top:3px solid transparent;border-bottom:3px solid transparent;border-left:5px solid var(--violet)}
+.completion-route span{position:absolute;left:50%;top:3px;transform:translateX(-50%);padding:0 3px;background:#0a1017;color:var(--violet);font:6.5px var(--mono);white-space:nowrap}
 .queue-region .guest-memory{position:absolute;left:2%;right:2%;top:18%;bottom:5%;padding:0 5px 4px;border:1px solid rgba(95,147,181,.5);border-radius:6px;background:rgba(8,14,20,.78)}
 .queue-region .guest-memory>header{height:30px;padding:5px 2px;display:flex;align-items:flex-start;border-bottom:1px solid rgba(95,147,181,.28)}
 .queue-region .guest-memory>header b{display:block;color:var(--blue);font:700 8px var(--mono);letter-spacing:.04em}

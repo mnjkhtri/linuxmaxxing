@@ -221,9 +221,43 @@ batch_completion_published:
 	jne fail_completion
 
 	/* -------------------------------------------------- */
-	/* PHASE D — IOEVENTFD DOORBELL */
+	/* PHASE D — ACCELERATED NOTIFICATION */
 	/* -------------------------------------------------- */
-	/* Requests still live in shared RAM; only the QueueNotify delivery path changes. */
+	/* Queue state remains in shared RAM while ioeventfd and irqfd carry the two wakeups. */
+	/* Install the one IRQ5 gate in the otherwise empty IDT page. */
+	cld
+	xorl %eax, %eax
+	movl $VIRTIO_GUEST_IDT_GPA, %edi
+	movl $(VIRTIO_GUEST_IDT_SIZE / 4), %ecx
+	rep stosl
+	movw $virtio_completion_isr, VIRTIO_GUEST_IDT_GPA + VIRTIO_IRQ_VECTOR * 8
+	movw $0x08, VIRTIO_GUEST_IDT_GPA + VIRTIO_IRQ_VECTOR * 8 + 2
+	movb $0, VIRTIO_GUEST_IDT_GPA + VIRTIO_IRQ_VECTOR * 8 + 4
+	movb $0x8e, VIRTIO_GUEST_IDT_GPA + VIRTIO_IRQ_VECTOR * 8 + 5
+	movw $0, VIRTIO_GUEST_IDT_GPA + VIRTIO_IRQ_VECTOR * 8 + 6
+	lidt idt_descriptor
+
+	/* Remap both PICs and unmask only master IRQ5. */
+	movb $0x11, %al
+	outb %al, $0x20
+	outb %al, $0xa0
+	movb $VIRTIO_PIC_MASTER_VECTOR_BASE, %al
+	outb %al, $0x21
+	movb $VIRTIO_PIC_SLAVE_VECTOR_BASE, %al
+	outb %al, $0xa1
+	movb $0x04, %al
+	outb %al, $0x21
+	movb $0x02, %al
+	outb %al, $0xa1
+	movb $0x01, %al
+	outb %al, $0x21
+	outb %al, $0xa1
+	movb $0xdf, %al
+	outb %al, $0x21
+	movb $0xff, %al
+	outb %al, $0xa1
+	movl $0, VIRTIO_GUEST_COMPLETION_GPA
+
 	movl $(VIRTIO_RNG_BUFFER_GPA + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTIO_RNG_BUFFER_STRIDE), VIRTQ_DESC_GPA + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET
 	movl $0, VIRTQ_DESC_GPA + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_DESC_SIZE + VIRTQ_DESC_ADDR_OFFSET + 4
 	movl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_DESC_GPA + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_DESC_SIZE + VIRTQ_DESC_LEN_OFFSET
@@ -240,16 +274,21 @@ batch_completion_published:
 	mfence
 	movl $VIRTIO_RNG_QUEUE_INDEX, VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY
 
-	movl $VIRTIO_POLL_LIMIT, %ecx
-.Lpoll_ioeventfd_completion:
-	cmpw $VIRTIO_TOTAL_REQUEST_COUNT, VIRTQ_USED_GPA + VIRTQ_USED_IDX_OFFSET
-	je .Lioeventfd_complete
-	decl %ecx
-	jnz .Lpoll_ioeventfd_completion
-	jmp fail_timeout
-.Lioeventfd_complete:
-	/* The acquire fence keeps completion reads after observing used.idx reach six. */
+	/* STI delays interrupt recognition until after HLT begins, closing the test-to-sleep race. */
+.Lwait_for_completion_irq:
+	cli
+	cmpl $0, VIRTIO_GUEST_COMPLETION_GPA
+	jne .Lcompletion_irq_received
+	sti
+	hlt
+	jmp .Lwait_for_completion_irq
+.Lcompletion_irq_received:
+	cmpl $1, VIRTIO_GUEST_COMPLETION_GPA
+	jne fail_interrupt
+	/* The ISR acknowledged the wakeup; the used ring remains the completion record. */
 	lfence
+	cmpw $VIRTIO_TOTAL_REQUEST_COUNT, VIRTQ_USED_GPA + VIRTQ_USED_IDX_OFFSET
+	jne fail_completion
 	cmpl $VIRTIO_IOEVENTFD_DESC_INDEX, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_ID_OFFSET
 	jne fail_completion
 	cmpl $VIRTIO_RNG_REQUEST_LEN, VIRTQ_USED_GPA + VIRTQ_USED_RING_OFFSET + VIRTIO_IOEVENTFD_DESC_INDEX * VIRTQ_USED_ELEM_SIZE + VIRTQ_USED_ELEM_LEN_OFFSET
@@ -280,10 +319,30 @@ fail_timeout:
 	jmp guest_failure
 fail_completion:
 	movb $7, %al
+	jmp guest_failure
+fail_interrupt:
+	movb $8, %al
 
 guest_failure:
 	outb %al, $VIRTIO_TEST_FAILURE_PORT
 	ud2
+
+/* The ISR acknowledges device state before the PIC EOI, then lets the main path inspect the used ring. */
+virtio_completion_isr:
+	pushal
+	movl VIRTIO_MMIO_BASE + VIRTIO_MMIO_INTERRUPT_STATUS, %eax
+	testl $VIRTIO_MMIO_INT_VRING, %eax
+	jz .Lunexpected_interrupt
+	movl $VIRTIO_MMIO_INT_VRING, VIRTIO_MMIO_BASE + VIRTIO_MMIO_INTERRUPT_ACK
+	movl $1, VIRTIO_GUEST_COMPLETION_GPA
+	jmp .Lpic_eoi
+.Lunexpected_interrupt:
+	movl $2, VIRTIO_GUEST_COMPLETION_GPA
+.Lpic_eoi:
+	movb $0x20, %al
+	outb %al, $0x20
+	popal
+	iret
 
 .align 8
 gdt:
@@ -294,3 +353,6 @@ gdt_end:
 gdt_descriptor:
 	.word gdt_end - gdt - 1
 	.long gdt
+idt_descriptor:
+	.word VIRTIO_IRQ_VECTOR * 8 + 7
+	.long VIRTIO_GUEST_IDT_GPA

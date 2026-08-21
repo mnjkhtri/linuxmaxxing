@@ -26,7 +26,7 @@ if [ "${VIRT_FETCH_ONLY:-0}" = 1 ]; then
 fi
 
 ssh "${ssh_opts[@]}" "$TARGET" "mkdir -p -- '$REMOTE_DIR' '$REMOTE_ROOT/shared'"
-scp -p "${ssh_opts[@]}" "$SCRIPT_DIR/vmm.c" "$SCRIPT_DIR/guest.S" "$SCRIPT_DIR/virtio.h" "$SCRIPT_DIR/virtio_event.h" "$SCRIPT_DIR/virtio.bpf.c" "$SCRIPT_DIR/virtio.c" "$SCRIPT_DIR/Makefile" "$TARGET:$REMOTE_DIR/"
+scp -p "${ssh_opts[@]}" "$SCRIPT_DIR/vmm.c" "$SCRIPT_DIR/backend.c" "$SCRIPT_DIR/backend.h" "$SCRIPT_DIR/guest.S" "$SCRIPT_DIR/virtio.h" "$SCRIPT_DIR/virtio_event.h" "$SCRIPT_DIR/virtio.bpf.c" "$SCRIPT_DIR/observer.c" "$SCRIPT_DIR/Makefile" "$TARGET:$REMOTE_DIR/"
 scp -p "${ssh_opts[@]}" "$REPO_ROOT/shared/json_writer.c" "$REPO_ROOT/shared/json_writer.h" "$TARGET:$REMOTE_ROOT/shared/"
 ssh "${ssh_opts[@]}" "$TARGET" "cd '$REMOTE_DIR' && make clean all"
 
@@ -109,23 +109,34 @@ import sys
 records = [json.loads(line) for line in open(sys.argv[1]) if line.strip()]
 meta = records[0]
 snapshots = records[1:]
-assert meta["schema_version"] == 3
+assert meta["schema_version"] == 4
 assert meta["queue_size"] == 8
 assert meta["phase_c_request_count"] == 5
 assert meta["total_request_count"] == 6
-assert meta["phase_c_notification"] == "KVM_EXIT_MMIO"
-assert meta["phase_d_notification"] == "KVM_IOEVENTFD"
+assert meta["phase_c_request_notification"] == "KVM_EXIT_MMIO"
+assert meta["phase_c_completion"] == "polling"
+assert meta["phase_d_request_notification"] == "KVM_IOEVENTFD"
+assert meta["phase_d_completion_notification"] == "KVM_IRQFD"
+assert meta["irqfd_gsi"] == 5
+assert meta["backend_location"] == "userspace"
 
 notifies = [record for record in snapshots if record["event_info"]["mmio"]["register"] == "QueueNotify"]
 kicks = [record for record in snapshots if record["event_info"]["event_name"] == "ioeventfd_kick"]
+calls = [record for record in snapshots if record["event_info"]["event_name"] == "irqfd_signal"]
 begins = [record for record in snapshots if record["event_info"]["event_name"] == "queue_backend_begin"]
 ends = [record for record in snapshots if record["event_info"]["event_name"] == "queue_backend_end"]
+status_reads = [record for record in snapshots if record["event_info"]["mmio"]["register"] == "InterruptStatus"]
+ack_writes = [record for record in snapshots if record["event_info"]["mmio"]["register"] == "InterruptACK"]
 assert len(notifies) == 2
 assert len(kicks) == 1
+assert len(calls) == 1
 assert len(begins) == 3
 assert len(ends) == 3
+assert len(status_reads) == 1
+assert len(ack_writes) == 1
 assert kicks[0]["event_info"]["phase"] == "D"
 assert kicks[0]["event_info"]["ioeventfd"] == {"present": True, "count": 1, "address": "0x10000050", "length": 4, "datamatch": 0}
+assert calls[0]["event_info"]["irqfd"] == {"present": True, "count": 1, "gsi": 5}
 
 expected_buffers = [0x7000 + index * 0x100 for index in range(6)]
 for index, address in enumerate(expected_buffers):
@@ -164,6 +175,17 @@ assert ends[2]["state"]["avail"]["idx"] == 6
 assert ends[2]["state"]["queue"]["last_avail_idx"] == 6
 assert ends[2]["state"]["used"]["idx"] == 6
 assert ends[2]["state"]["used"]["ring"][5] == {"slot": 5, "id": 5, "len": 32}
+assert calls[0]["event_info"]["phase"] == "D"
+assert calls[0]["state"]["device"]["interrupt_status"] == "0x1"
+assert calls[0]["state"]["queue"]["last_avail_idx"] == 6
+assert calls[0]["state"]["used"]["idx"] == 6
+assert status_reads[0]["event_info"]["phase"] == "D"
+assert status_reads[0]["event_info"]["mmio"]["direction"] == "read"
+assert status_reads[0]["event_info"]["mmio"]["value"] == "0x1"
+assert ack_writes[0]["event_info"]["phase"] == "D"
+assert ack_writes[0]["event_info"]["mmio"]["direction"] == "write"
+assert ack_writes[0]["event_info"]["mmio"]["value"] == "0x1"
+assert ack_writes[0]["state"]["device"]["interrupt_status"] == "0x0"
 PY
 REMOTE
 

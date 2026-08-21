@@ -34,6 +34,7 @@ struct observed_virtio_device
 	__u32 driver_features_sel;
 	__u32 driver_features[2];
 	__u32 status;
+	__u32 interrupt_status;
 	__u32 queue_sel;
 	struct observed_virtio_queue queue;
 };
@@ -85,6 +86,13 @@ struct process_args
 	__u64 guest_mem;
 };
 
+struct mmio_args
+{
+	__u64 dev;
+	__u64 guest_mem;
+	__u64 run;
+};
+
 struct
 {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
@@ -100,6 +108,14 @@ struct
 	__type(key, __u64);
 	__type(value, struct process_args);
 } active_process SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 64);
+	__type(key, __u64);
+	__type(value, struct mmio_args);
+} active_mmio SEC(".maps");
 
 struct
 {
@@ -146,6 +162,7 @@ static __always_inline int sample_device(struct virtio_event *event, const void 
 		return -1;
 	event->state.device.present = 1;
 	event->state.device.status = dev.status;
+	event->state.device.interrupt_status = dev.interrupt_status;
 	event->state.device.device_features_sel = dev.device_features_sel;
 	event->state.device.driver_features_sel = dev.driver_features_sel;
 	event->state.device.driver_features[0] = dev.driver_features[0];
@@ -225,7 +242,9 @@ static __always_inline void emit_event(struct virtio_event *event)
 SEC("uprobe/build/vmm:do_mmio")
 int BPF_UPROBE(observe_do_mmio, void *dev, void *guest_mem, struct observed_kvm_run *run)
 {
+	__u64 key = bpf_get_current_pid_tgid();
 	struct observed_kvm_run observed = {};
+	struct mmio_args args = {.dev = (__u64)dev, .guest_mem = (__u64)guest_mem, .run = (__u64)run};
 	struct virtio_event *event = new_event(VIRTIO_EVENT_MMIO);
 
 	if (!event || !run || bpf_probe_read_user(&observed, sizeof(observed), run) != 0)
@@ -235,6 +254,12 @@ int BPF_UPROBE(observe_do_mmio, void *dev, void *guest_mem, struct observed_kvm_
 	event->event_info.mmio_offset = (__u32)(observed.mmio.phys_addr - VIRTIO_MMIO_BASE);
 	event->event_info.mmio_length = observed.mmio.len;
 	event->event_info.mmio_is_write = observed.mmio.is_write != 0;
+	/* Status reads and ACK writes are emitted on return so the event contains the returned value or cleared state. */
+	if ((event->event_info.mmio_offset == VIRTIO_MMIO_INTERRUPT_STATUS && !observed.mmio.is_write) || (event->event_info.mmio_offset == VIRTIO_MMIO_INTERRUPT_ACK && observed.mmio.is_write))
+	{
+		bpf_map_update_elem(&active_mmio, &key, &args, BPF_ANY);
+		return 0;
+	}
 	if (observed.mmio.is_write)
 	{
 		event->event_info.mmio_value_present = 1;
@@ -243,6 +268,36 @@ int BPF_UPROBE(observe_do_mmio, void *dev, void *guest_mem, struct observed_kvm_
 	sample_device(event, dev);
 	sample_queue_memory(event, guest_mem);
 	emit_event(event);
+	return 0;
+}
+
+SEC("uretprobe/build/vmm:do_mmio")
+int BPF_URETPROBE(observe_do_mmio_end, int result)
+{
+	__u64 key = bpf_get_current_pid_tgid();
+	struct mmio_args *args = bpf_map_lookup_elem(&active_mmio, &key);
+	struct observed_kvm_run observed = {};
+	struct virtio_event *event;
+
+	if (!args)
+		return 0;
+	event = new_event(VIRTIO_EVENT_MMIO);
+	if (event && bpf_probe_read_user(&observed, sizeof(observed), (const void *)args->run) == 0)
+	{
+		event->event_info.mmio_present = 1;
+		event->event_info.mmio_address = observed.mmio.phys_addr;
+		event->event_info.mmio_offset = (__u32)(observed.mmio.phys_addr - VIRTIO_MMIO_BASE);
+		event->event_info.mmio_length = observed.mmio.len;
+		event->event_info.mmio_is_write = observed.mmio.is_write != 0;
+		event->event_info.mmio_value_present = 1;
+		__builtin_memcpy(&event->event_info.mmio_value, observed.mmio.data, sizeof(event->event_info.mmio_value));
+		event->event_info.return_present = 1;
+		event->event_info.return_value = result;
+		sample_device(event, (const void *)args->dev);
+		sample_queue_memory(event, (const void *)args->guest_mem);
+		emit_event(event);
+	}
+	bpf_map_delete_elem(&active_mmio, &key);
 	return 0;
 }
 
@@ -263,14 +318,31 @@ int BPF_UPROBE(observe_process_queue_begin, void *dev, void *guest_mem)
 }
 
 SEC("uprobe/build/vmm:process_ioeventfd_kick")
-int BPF_UPROBE(observe_ioeventfd_kick, void *dev, void *guest_mem, __u64 eventfd_count)
+int BPF_UPROBE(observe_ioeventfd_kick, void *dev, void *guest_mem, void *backend, __u64 eventfd_count)
 {
 	struct virtio_event *event = new_event(VIRTIO_EVENT_IOEVENTFD_KICK);
 
+	(void)backend;
 	if (!event)
 		return 0;
 	event->event_info.ioeventfd_present = 1;
 	event->event_info.ioeventfd_count = eventfd_count;
+	sample_device(event, dev);
+	sample_queue_memory(event, guest_mem);
+	emit_event(event);
+	return 0;
+}
+
+SEC("uprobe/build/vmm:signal_irqfd_completion")
+int BPF_UPROBE(observe_irqfd_signal, void *dev, void *guest_mem, void *backend, __u64 call_count)
+{
+	struct virtio_event *event = new_event(VIRTIO_EVENT_IRQFD_SIGNAL);
+
+	(void)backend;
+	if (!event)
+		return 0;
+	event->event_info.irqfd_present = 1;
+	event->event_info.irqfd_count = call_count;
 	sample_device(event, dev);
 	sample_queue_memory(event, guest_mem);
 	emit_event(event);

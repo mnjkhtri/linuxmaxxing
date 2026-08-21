@@ -5,7 +5,7 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <title>Virtio paravirtual I/O explorer</title>
-        <link rel="stylesheet" href="virt-paraio.css?v=16" />
+        <link rel="stylesheet" href="virt-paraio.css?v=17" />
     </head>
     <body>
         <main class="paraio">
@@ -61,8 +61,9 @@
                                         </div>
                                         <div class="participant-link doorbell-to-backend"><span id="backend-notify-link">dispatch</span></div>
                                         <div class="actor backend" data-node="backend">
-                                            <i></i><strong>USERSPACE VMM</strong><small id="backend-role">process_queue() backend</small>
+                                            <i></i><strong id="backend-title">USERSPACE VMM</strong><small id="backend-role">virtio-mmio control plane</small>
                                         </div>
+                                        <div id="completion-route" class="completion-route"><span>call_fd → KVM_IRQFD → guest IRQ</span></div>
                                         <section class="guest-memory">
                                             <header>
                                                 <div><b>GUEST RAM · KVM MEMORY SLOT</b><span id="guest-memory-summary">waiting for capture metadata</span></div>
@@ -101,6 +102,6 @@
                 </aside>
             </section>
         </main>
-        <script src="virt-paraio.js?v=19"></script>
+        <script src="virt-paraio.js?v=20"></script>
     </body>
 </html>

@@ -76,7 +76,7 @@ $(BPF_OBJ): $(BPF_SRC) $(EVENT_HDR) $(VMLINUX) $(KVM_TYPES) $(KVM_COMPAT) | $(BU
 $(SKEL): $(BPF_OBJ) | $(BUILD_DIR)
 	$(BPFTOOL) gen skeleton $< > $@
 
-$(EPT): $(DIR)ept.c $(SKEL) $(EVENT_HDR) $(JSON_WRITER_SRC) $(JSON_WRITER_HDR) | $(BUILD_DIR)
+$(EPT): $(DIR)observer.c $(SKEL) $(EVENT_HDR) $(JSON_WRITER_SRC) $(JSON_WRITER_HDR) | $(BUILD_DIR)
 	$(CC) $(EPT_CFLAGS) -o $@ $< $(JSON_WRITER_SRC) $(shell $(PKG_CONFIG) --libs libbpf) -lelf -lz
 
 clean-ept:

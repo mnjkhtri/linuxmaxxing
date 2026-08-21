@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* This header is the binary ring-buffer ABI shared by virtio.bpf.c and virtio.c. */
+/* This header is the binary ring-buffer ABI shared by virtio.bpf.c and observer.c. */
 #ifndef VIRTIO_EVENT_H
 #define VIRTIO_EVENT_H
 
@@ -11,6 +11,7 @@ enum virtio_event_type
 	VIRTIO_EVENT_QUEUE_BACKEND_BEGIN = 1,
 	VIRTIO_EVENT_QUEUE_BACKEND_END = 2,
 	VIRTIO_EVENT_IOEVENTFD_KICK = 3,
+	VIRTIO_EVENT_IRQFD_SIGNAL = 4,
 };
 
 struct virtio_event_info
@@ -25,9 +26,11 @@ struct virtio_event_info
 	unsigned int mmio_value;
 	unsigned char return_present;
 	unsigned char ioeventfd_present;
-	unsigned char reserved[2];
+	unsigned char irqfd_present;
+	unsigned char reserved;
 	int return_value;
 	unsigned long long ioeventfd_count;
+	unsigned long long irqfd_count;
 };
 
 struct virtio_context
@@ -43,6 +46,7 @@ struct virtio_device_state
 	unsigned char present; /* present distinguishes an unavailable sample from meaningful zero-valued state. */
 	unsigned char reserved[3];
 	unsigned int status;
+	unsigned int interrupt_status;
 	unsigned int device_features_sel;
 	unsigned int driver_features_sel;
 	unsigned int driver_features[2];

@@ -22,7 +22,7 @@ fi
 # Stage the experiment as a mirrored tree on the remote.
 # The Makefile SHARED_DIR (.. from shared/virt/ept) then resolves to the shared/ dir holding json_writer.c.
 ssh "${ssh_opts[@]}" "$TARGET" "mkdir -p -- '$EPT_DIR' '$REMOTE_DIR/shared'"
-scp -p "${ssh_opts[@]}" "$SCRIPT_DIR/vmm.c" "$SCRIPT_DIR/guest.S" "$SCRIPT_DIR/ept.c" "$SCRIPT_DIR/ept.bpf.c" "$SCRIPT_DIR/ept_event.h" "$SCRIPT_DIR/Makefile" "$TARGET:$EPT_DIR/"
+scp -p "${ssh_opts[@]}" "$SCRIPT_DIR/vmm.c" "$SCRIPT_DIR/guest.S" "$SCRIPT_DIR/observer.c" "$SCRIPT_DIR/ept.bpf.c" "$SCRIPT_DIR/ept_event.h" "$SCRIPT_DIR/Makefile" "$TARGET:$EPT_DIR/"
 scp -p "${ssh_opts[@]}" "$REPO_ROOT/shared/json_writer.c" "$REPO_ROOT/shared/json_writer.h" "$TARGET:$REMOTE_DIR/shared/"
 ssh "${ssh_opts[@]}" "$TARGET" "cd '$EPT_DIR' && make all"
 ssh "${ssh_opts[@]}" "$TARGET" "sudo -n bash -s -- '$EPT_DIR'" <<'REMOTE'

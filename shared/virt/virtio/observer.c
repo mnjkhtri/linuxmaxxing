@@ -34,6 +34,8 @@ static const char *event_name(unsigned int event)
 		return "queue_backend_end";
 	case VIRTIO_EVENT_IOEVENTFD_KICK:
 		return "ioeventfd_kick";
+	case VIRTIO_EVENT_IRQFD_SIGNAL:
+		return "irqfd_signal";
 	default:
 		return "unknown";
 	}
@@ -56,6 +58,8 @@ static const char *register_name(unsigned int offset)
 	case VIRTIO_MMIO_QUEUE_SIZE: return "QueueSize";
 	case VIRTIO_MMIO_QUEUE_READY: return "QueueReady";
 	case VIRTIO_MMIO_QUEUE_NOTIFY: return "QueueNotify";
+	case VIRTIO_MMIO_INTERRUPT_STATUS: return "InterruptStatus";
+	case VIRTIO_MMIO_INTERRUPT_ACK: return "InterruptACK";
 	case VIRTIO_MMIO_STATUS: return "Status";
 	case VIRTIO_MMIO_QUEUE_DESC_LOW: return "QueueDescLow";
 	case VIRTIO_MMIO_QUEUE_DESC_HIGH: return "QueueDescHigh";
@@ -91,7 +95,7 @@ static const char *phase_name(const struct virtio_event *event)
 {
 	unsigned int offset = event->event_info.mmio_offset;
 
-	if (event->event_info.event == VIRTIO_EVENT_IOEVENTFD_KICK)
+	if (event->event_info.event == VIRTIO_EVENT_IOEVENTFD_KICK || event->event_info.event == VIRTIO_EVENT_IRQFD_SIGNAL)
 		return "D";
 	if (event->event_info.event != VIRTIO_EVENT_MMIO)
 	{
@@ -101,6 +105,8 @@ static const char *phase_name(const struct virtio_event *event)
 	}
 	if (offset == VIRTIO_MMIO_QUEUE_NOTIFY)
 		return "C";
+	if (offset == VIRTIO_MMIO_INTERRUPT_STATUS || offset == VIRTIO_MMIO_INTERRUPT_ACK)
+		return "D";
 	if (is_queue_configuration_register(offset))
 		return "B";
 	if (offset == VIRTIO_MMIO_STATUS && ((event->event_info.mmio_value_present && event->event_info.mmio_value == VIRTIO_STATUS_OPERATIONAL) || (event->state.queue.present && event->state.queue.ready)))
@@ -111,7 +117,7 @@ static const char *phase_name(const struct virtio_event *event)
 static void write_meta(struct json_writer *jw)
 {
 	json_object_begin(jw);
-	json_u32(jw, "schema_version", 3);
+	json_u32(jw, "schema_version", 4);
 	json_string(jw, "experiment", "virt-paraio");
 	json_string(jw, "kind", "meta");
 	json_string(jw, "source", "ebpf");
@@ -126,6 +132,9 @@ static void write_meta(struct json_writer *jw)
 	json_hex(jw, "guest_memory_size", VIRTIO_GUEST_MEM_SIZE);
 	json_hex(jw, "guest_code_gpa", VIRTIO_GUEST_CODE_GPA);
 	json_hex(jw, "guest_code_size", VIRTIO_GUEST_CODE_LIMIT);
+	json_hex(jw, "guest_idt_gpa", VIRTIO_GUEST_IDT_GPA);
+	json_hex(jw, "guest_idt_size", VIRTIO_GUEST_IDT_SIZE);
+	json_hex(jw, "guest_completion_flag_gpa", VIRTIO_GUEST_COMPLETION_GPA);
 	json_hex(jw, "guest_stack_bottom", VIRTIO_GUEST_STACK_BOTTOM);
 	json_hex(jw, "guest_stack_top", VIRTIO_GUEST_STACK_TOP);
 	json_hex(jw, "queue_region_size", VIRTQ_PAGE_SIZE);
@@ -141,12 +150,15 @@ static void write_meta(struct json_writer *jw)
 	json_u32(jw, "phase_c_request_count", VIRTIO_RNG_REQUEST_COUNT);
 	json_u32(jw, "total_request_count", VIRTIO_TOTAL_REQUEST_COUNT);
 	json_string(jw, "negotiated_feature", "VIRTIO_F_VERSION_1");
-	json_string(jw, "completion_mode", "polling");
-	json_string(jw, "phase_c_notification", "KVM_EXIT_MMIO");
-	json_string(jw, "phase_d_notification", "KVM_IOEVENTFD");
+	json_string(jw, "phase_c_request_notification", "KVM_EXIT_MMIO");
+	json_string(jw, "phase_c_completion", "polling");
+	json_string(jw, "phase_d_request_notification", "KVM_IOEVENTFD");
+	json_string(jw, "phase_d_completion_notification", "KVM_IRQFD");
 	json_hex(jw, "ioeventfd_address", VIRTIO_MMIO_BASE + VIRTIO_MMIO_QUEUE_NOTIFY);
 	json_u32(jw, "ioeventfd_length", 4);
 	json_u32(jw, "ioeventfd_datamatch", VIRTIO_RNG_QUEUE_INDEX);
+	json_u32(jw, "irqfd_gsi", VIRTIO_IRQ_GSI);
+	json_string(jw, "backend_location", "userspace");
 	json_object_end(jw);
 	json_newline(jw);
 }
@@ -200,6 +212,19 @@ static void write_event_info(struct json_writer *jw, const struct virtio_event *
 		json_null(jw, "datamatch");
 	}
 	json_object_end(jw);
+	json_object_begin_field(jw, "irqfd");
+	json_bool(jw, "present", info->irqfd_present != 0);
+	if (info->irqfd_present)
+	{
+		json_u64(jw, "count", info->irqfd_count);
+		json_u32(jw, "gsi", VIRTIO_IRQ_GSI);
+	}
+	else
+	{
+		json_null(jw, "count");
+		json_null(jw, "gsi");
+	}
+	json_object_end(jw);
 	if (info->return_present)
 		json_i64(jw, "return_value", info->return_value);
 	else
@@ -224,6 +249,7 @@ static void write_device(struct json_writer *jw, const struct virtio_device_stat
 	if (device->present)
 	{
 		json_hex(jw, "status", device->status);
+		json_hex(jw, "interrupt_status", device->interrupt_status);
 		json_u32(jw, "device_features_sel", device->device_features_sel);
 		json_u32(jw, "driver_features_sel", device->driver_features_sel);
 		json_hex(jw, "driver_features_word0", device->driver_features[0]);
@@ -233,6 +259,7 @@ static void write_device(struct json_writer *jw, const struct virtio_device_stat
 	else
 	{
 		json_null(jw, "status");
+		json_null(jw, "interrupt_status");
 		json_null(jw, "device_features_sel");
 		json_null(jw, "driver_features_sel");
 		json_null(jw, "driver_features_word0");
@@ -380,7 +407,7 @@ static void write_state(struct json_writer *jw, const struct virtio_state *state
 static void write_snapshot(struct json_writer *jw, const struct virtio_event *event, unsigned int seq)
 {
 	json_object_begin(jw);
-	json_u32(jw, "schema_version", 3);
+	json_u32(jw, "schema_version", 4);
 	json_string(jw, "experiment", "virt-paraio");
 	json_string(jw, "kind", "snapshot");
 	json_string(jw, "source", "ebpf");

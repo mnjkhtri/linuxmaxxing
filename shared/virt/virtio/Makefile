@@ -35,11 +35,12 @@ all: $(VMM) $(GUEST_BIN) $(OBSERVER)
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(VMM): $(DIR)vmm.c $(CONTRACT) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -pthread -I$(DIR) $< -o $@
+$(VMM): $(DIR)vmm.c $(DIR)backend.c $(DIR)backend.h $(CONTRACT) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -pthread -I$(DIR) $(DIR)vmm.c $(DIR)backend.c -o $@
 	@nm -an $@ | grep -Eq ' [tT] do_mmio$$' || { echo "VMM lacks do_mmio symbol" >&2; exit 1; }
 	@nm -an $@ | grep -Eq ' [tT] process_queue$$' || { echo "VMM lacks process_queue symbol" >&2; exit 1; }
 	@nm -an $@ | grep -Eq ' [tT] process_ioeventfd_kick$$' || { echo "VMM lacks process_ioeventfd_kick symbol" >&2; exit 1; }
+	@nm -an $@ | grep -Eq ' [tT] signal_irqfd_completion$$' || { echo "VMM lacks signal_irqfd_completion symbol" >&2; exit 1; }
 
 $(GUEST_OBJ): $(DIR)guest.S $(CONTRACT) | $(BUILD_DIR)
 	$(CC) -m32 -I$(DIR) -c $< -o $@
@@ -57,7 +58,7 @@ $(BPF_OBJ): $(BPF_SRC) $(EVENT_HDR) $(CONTRACT) $(VMLINUX) | $(BUILD_DIR)
 $(SKEL): $(BPF_OBJ) | $(BUILD_DIR)
 	$(BPFTOOL) gen skeleton $< > $@
 
-$(OBSERVER): $(DIR)virtio.c $(SKEL) $(EVENT_HDR) $(CONTRACT) $(JSON_WRITER_SRC) $(JSON_WRITER_HDR) | $(BUILD_DIR)
+$(OBSERVER): $(DIR)observer.c $(SKEL) $(EVENT_HDR) $(CONTRACT) $(JSON_WRITER_SRC) $(JSON_WRITER_HDR) | $(BUILD_DIR)
 	$(CC) $(OBSERVER_CFLAGS) -o $@ $< $(JSON_WRITER_SRC) $(shell $(PKG_CONFIG) --libs libbpf) -lelf -lz
 
 clean:

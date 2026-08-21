@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Ring-buffer ABI shared between the BPF side (io.bpf.c) and the userspace loader (io.c).
+ * Ring-buffer ABI shared between the BPF side (io.bpf.c) and the userspace loader (observer.c).
  * This is the binary format only: the loader serializes it into the canonical NDJSON envelope.
  *
  * One interrupt-virtualization boundary snapshot, grouped into three semantic facts:

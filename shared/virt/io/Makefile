@@ -88,7 +88,7 @@ $(BPF_OBJ): $(BPF_SRC) $(EVENT_HDR) $(DEVICE_HDR) $(VMLINUX) $(KVM_TYPES) $(KVM_
 $(SKEL): $(BPF_OBJ) | $(BUILD_DIR)
 	$(BPFTOOL) gen skeleton $< > $@
 
-$(IO): $(DIR)io.c $(SKEL) $(EVENT_HDR) $(DEVICE_HDR) $(KVM_COMPAT) $(JSON_WRITER_SRC) $(JSON_WRITER_HDR) | $(BUILD_DIR)
+$(IO): $(DIR)observer.c $(SKEL) $(EVENT_HDR) $(DEVICE_HDR) $(KVM_COMPAT) $(JSON_WRITER_SRC) $(JSON_WRITER_HDR) | $(BUILD_DIR)
 	$(CC) $(IO_CFLAGS) -o $@ $< $(JSON_WRITER_SRC) $(shell $(PKG_CONFIG) --libs libbpf) -lelf -lz
 
 clean-io:
