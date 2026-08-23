@@ -208,11 +208,12 @@
         byId("setup-management-group").textContent = management.iommu_group || "not sampled";
         byId("setup-candidate-group").textContent = candidate.iommu_group || "not sampled";
         byId("setup-tracepoints").textContent = availableHooks.join(" · ") || "not sampled";
-        byId("group-summary").textContent = Object.keys(groups).length + " groups · group " +
-            (management.iommu_group || "—") + " ≠ group " + (candidate.iommu_group || "—");
-        byId("group-map").innerHTML = Object.keys(groups).sort(function (left, right) {
+        var groupIds = Object.keys(groups).sort(function (left, right) {
             return Number(left) - Number(right);
-        }).map(function (group) {
+        });
+        byId("group-summary").textContent = groupIds.length + " groups · group " +
+            (management.iommu_group || "—") + " ≠ group " + (candidate.iommu_group || "—");
+        byId("group-map").innerHTML = groupIds.slice(0, 64).map(function (group) {
             var className = group === management.iommu_group ? " management" :
                 (group === candidate.iommu_group ? " candidate" : "");
             var devices = groups[group];
@@ -309,15 +310,14 @@
     function renderGuestProof(physical, guest) {
         var bars = Array.isArray(guest.bars) ? guest.bars : [];
 
-        if (guest.present !== true) {
-            byId("host-bdf-proof").textContent = physical.host_bdf || "not sampled";
-            byId("guest-bdf-proof").textContent = "not present";
-            byId("guest-bars").innerHTML = "<span class=\"bar-empty\">The function is not present in guest PCI topology at this boundary.</span>";
-            return;
-        }
         byId("host-bdf-proof").textContent = physical.host_bdf || "not sampled";
-        byId("guest-bdf-proof").textContent = guest.guest_bdf || "not sampled";
+        byId("guest-bdf-proof").textContent = guest.present === true ? (guest.guest_bdf || "not sampled") : "not present";
         byId("guest-bars").innerHTML = bars.map(renderBar).join("");
+    }
+
+    function renderGuestProofVisible(record) {
+        var show = selectedPhase === "A" && record.kind === "guest_visible";
+        byId("guest-proof").classList.toggle("hidden", !show);
     }
 
     function renderPhaseA(record) {
@@ -494,8 +494,7 @@
             return "<dt>" + escapeHtml(key) + "</dt><dd title=\"" + escapeHtml(fields[key]) + "\">" + escapeHtml(fields[key]) + "</dd>";
         }).join("");
         byId("source-badge").textContent = compactLabel(record.source);
-        byId("event-kind").textContent = timelineTitleFor(record);
-        byId("event-title").textContent = compactSubjectFor(record);
+        byId("event-title").textContent = timelineTitleFor(record);
     }
 
     function selectRecord(index) {
@@ -512,6 +511,7 @@
         else
             renderPhaseB(record);
         renderInspector(record);
+        renderGuestProofVisible(record);
         renderRoadmap();
         byId("counter").textContent = (selectedIndex + 1) + " / " + phaseRecords.length;
     }

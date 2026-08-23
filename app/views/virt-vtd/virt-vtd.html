@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>VT·D</title>
     <link rel="stylesheet" href="../../theme.css">
-    <link rel="stylesheet" href="virt-vtd.css?v=20">
+    <link rel="stylesheet" href="virt-vtd.css?v=24">
 </head>
 <body>
 <main class="vtd">
@@ -81,7 +81,7 @@
                                     <small id="candidate-detail">—</small>
                                 </div>
                             </aside>
-                            <section id="guest-proof" class="guest-proof">
+                            <section id="guest-proof" class="guest-proof hidden">
                                 <header>HOST BDF → GUEST PCI TOPOLOGY</header>
                                 <div class="bdf-identity">
                                     <div><span>HOST BDF</span><b id="host-bdf-proof">—</b></div>
@@ -94,7 +94,7 @@
 
                         <section class="host-evidence-column">
                             <section class="host-foundation">
-                                <header>HOST FOUNDATION · SETUP INVENTORY</header>
+                                <header>HOST FOUNDATION</header>
                                 <dl class="foundation-list">
                                     <dt>host</dt><dd id="setup-host">—</dd>
                                     <dt>kernel</dt><dd id="setup-kernel">—</dd>
@@ -200,8 +200,7 @@
                 <code id="source-badge">—</code>
             </header>
             <div class="inspector-body">
-                <div class="selected-kind"><i class="trace-dot"></i><span id="event-kind">—</span></div>
-                <h2 id="event-title">Select a boundary</h2>
+                <h2 class="selected-kind"><i class="trace-dot"></i><span id="event-title">Select a boundary</span></h2>
                 <dl id="fields" class="fields"></dl>
             </div>
             <footer class="toolbar">
@@ -212,6 +211,6 @@
         </aside>
     </section>
 </main>
-    <script src="virt-vtd.js?v=17"></script>
+    <script src="virt-vtd.js?v=22"></script>
 </body>
 </html>
