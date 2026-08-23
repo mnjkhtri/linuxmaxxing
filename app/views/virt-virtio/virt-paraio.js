@@ -4,8 +4,8 @@
     "use strict";
 
     var stamp = Date.now();
-    var BPF = "../../shared/_captures/virt-paraio.eBPF.ndjson?v=" + stamp;
-    var TRACE = "../../shared/_captures/virt-paraio-Trace.txt?v=" + stamp;
+    var BPF = "../../shared/_captures/virt-virtio.eBPF.ndjson?v=" + stamp;
+    var TRACE = "../../shared/_captures/virt-virtio-Trace.txt?v=" + stamp;
     var M = { meta: null, events: [], phase: "A", landmarks: { notifies: [], kicks: [], calls: [], begins: [], ends: [] }, setupMmio: 0, notifyMmio: 0, ioeventfdKicks: 0, irqfdSignals: 0 };
     var cursor = 0,
         playTimer = null;
@@ -544,7 +544,7 @@
         $("backend-notify-link").textContent = ioeventfd ? "kick_fd" : "dispatch";
         $("backend-title").textContent = dataPlane ? "USERSPACE BACKEND" : "USERSPACE VMM";
         $("backend-role").textContent = dataPlane ? "backend.c · process_queue()" : "virtio-mmio control plane";
-        $("completion-route").firstElementChild.textContent = "call_fd → KVM_IRQFD → guest IRQ → ISR → InterruptACK";
+        $("completion-route").firstElementChild.innerHTML = ["call_fd", "KVM_IRQFD", "guest IRQ", "ISR", "InterruptACK"].map(function(step){return "<b>" + step + "</b>"}).join("<i>→</i>");
         $("completion-route").classList.toggle("visible", ioeventfd);
         $("machine-caption").textContent = event.state
             ? "Highlights show fields changed since the preceding sampled boundary."
@@ -686,9 +686,9 @@
                     (phase === M.phase ? "active" : "") +
                     '" data-phase="' +
                     phase +
-                    '" style="--phase-height:' +
-                    Math.max(50, samples.length * 9 + 16) +
-                    'px"><span class="phase-letter">' +
+                    '" style="--phase-weight:' +
+                    Math.max(1, samples.length) +
+                    '"><span class="phase-letter">' +
                     phase +
                     '</span><div class="phase-copy"><h2>' +
                     definitions[phase] +

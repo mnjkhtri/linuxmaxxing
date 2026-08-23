@@ -1,0 +1,217 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0 -->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>VT·D</title>
+    <link rel="stylesheet" href="../../theme.css">
+    <link rel="stylesheet" href="virt-vtd.css?v=20">
+</head>
+<body>
+<main class="vtd">
+    <header class="hero">
+        <div>
+            <div class="eyebrow">DIRECT PCIe ASSIGNMENT · DMA REMAPPING</div>
+            <h1>VT·D</h1>
+            <p>Physical PCIe ownership, guest enumeration, and VT-d translation from one assignment run.</p>
+        </div>
+        <div id="status" role="status"><i class="trace-dot"></i><span>loading captures…</span></div>
+    </header>
+
+    <section class="laboratory">
+        <nav id="roadmap" class="roadmap panel" aria-label="VT-d phases and execution boundaries"></nav>
+
+        <section class="machine panel">
+            <header class="panel-head">
+                <div>
+                    <h2 id="machine-title">Device assignment</h2>
+                    <span id="machine-caption">One physical function, changing software ownership.</span>
+                </div>
+                <code id="selected-time">t = —</code>
+            </header>
+
+            <div class="machine-body">
+                <section class="mechanism region">
+                    <header class="region-title">
+                        <div><b id="mechanism-title">OWNERSHIP MECHANISM</b><span id="mechanism-subtitle">host → VFIO → guest</span></div>
+                        <code id="event-count">—</code>
+                    </header>
+
+                    <div id="phase-a-state" class="phase-state ownership-state">
+                        <section class="assignment-column">
+                            <div class="physical-device">
+                                <span>THE SAME PHYSICAL PCIe FUNCTION</span>
+                                <strong id="physical-bdf">—</strong>
+                                <small id="physical-name">—</small>
+                            </div>
+                            <div class="ownership-path">
+                                <div class="domain-title">SOFTWARE OWNER</div>
+                                <div id="host-owner" class="node owner-node">
+                                    <b>HOST ixgbe</b>
+                                    <span id="host-interface">—</span>
+                                </div>
+                                <div class="connector"></div>
+                                <div id="vfio-owner" class="node owner-node">
+                                    <b>vfio-pci</b>
+                                    <span>assignment holding driver</span>
+                                </div>
+                                <div class="connector"></div>
+                                <div id="qemu-owner" class="node owner-node">
+                                    <b>QEMU · q35</b>
+                                    <span>guest PCIe topology</span>
+                                </div>
+                                <div class="connector"></div>
+                                <div id="guest-owner" class="node owner-node">
+                                    <b>GUEST ixgbe</b>
+                                    <span id="guest-interface">not present</span>
+                                </div>
+                            </div>
+                            <aside class="isolation-view">
+                                <header>ASSIGNMENT ISOLATION</header>
+                                <div class="isolation-function protected">
+                                    <span>MANAGEMENT · ALWAYS HOST OWNED</span>
+                                    <b id="management-bdf">—</b>
+                                    <small id="management-detail">—</small>
+                                </div>
+                                <div class="group-separation"><span>different Linux IOMMU groups</span></div>
+                                <div class="isolation-function candidate">
+                                    <span>ASSIGNED FUNCTION · OWNER CHANGES</span>
+                                    <b id="candidate-bdf">—</b>
+                                    <small id="candidate-detail">—</small>
+                                </div>
+                            </aside>
+                            <section id="guest-proof" class="guest-proof">
+                                <header>HOST BDF → GUEST PCI TOPOLOGY</header>
+                                <div class="bdf-identity">
+                                    <div><span>HOST BDF</span><b id="host-bdf-proof">—</b></div>
+                                    <i>same physical function</i>
+                                    <div><span>GUEST BDF</span><b id="guest-bdf-proof">—</b></div>
+                                </div>
+                                <div id="guest-bars" class="bar-list"></div>
+                            </section>
+                        </section>
+
+                        <section class="host-evidence-column">
+                            <section class="host-foundation">
+                                <header>HOST FOUNDATION · SETUP INVENTORY</header>
+                                <dl class="foundation-list">
+                                    <dt>host</dt><dd id="setup-host">—</dd>
+                                    <dt>kernel</dt><dd id="setup-kernel">—</dd>
+                                    <dt>DMAR</dt><dd id="setup-dmar">—</dd>
+                                    <dt>QEMU</dt><dd id="setup-qemu">—</dd>
+                                    <dt>KVM</dt><dd id="setup-kvm">—</dd>
+                                    <dt>kernel command line</dt><dd id="setup-cmdline">—</dd>
+                                    <dt>management route</dt><dd id="setup-route">—</dd>
+                                    <dt>management link</dt><dd id="setup-management-link">—</dd>
+                                    <dt>candidate link</dt><dd id="setup-candidate-link">—</dd>
+                                    <dt>candidate reset</dt><dd id="setup-reset">—</dd>
+                                    <dt>management group</dt><dd id="setup-management-group">—</dd>
+                                    <dt>candidate group</dt><dd id="setup-candidate-group">—</dd>
+                                </dl>
+                            </section>
+
+                            <section class="group-topology">
+                                <div class="group-heading">
+                                    <span>LINUX IOMMU ISOLATION GROUPS</span>
+                                    <code id="group-summary">—</code>
+                                </div>
+                                <div id="group-map" class="group-map"></div>
+                            </section>
+                        </section>
+                    </div>
+
+                    <div id="phase-b-state" class="phase-state dma-state hidden">
+                        <div class="mapping-picker">
+                            <label for="map-select">VFIO MAPPING REQUEST</label>
+                            <select id="map-select"></select>
+                            <span id="map-summary">—</span>
+                        </div>
+
+                        <div class="translation-workbench">
+                            <section class="setup-path">
+                                <header>SOFTWARE SETUP · OBSERVED</header>
+                                <div id="qemu-map" class="node map-node">
+                                    <b>QEMU PROCESS</b>
+                                    <span id="hva-value">HVA —</span>
+                                </div>
+                                <div class="connector labeled"><span>VFIO_IOMMU_MAP_DMA</span></div>
+                                <div id="vfio-map" class="node map-node">
+                                    <b>VFIO MAP REQUEST</b>
+                                    <span id="vfio-iova">IOVA —</span>
+                                    <span id="vfio-size">size —</span>
+                                    <span id="vfio-permissions">permissions —</span>
+                                </div>
+                                <div class="connector labeled"><span>Linux installs translations</span></div>
+                                <div id="iommu-domain" class="node map-node domain-node">
+                                    <b>IOMMU DOMAIN</b>
+                                    <span id="domain-state">attachment not selected</span>
+                                </div>
+                            </section>
+
+                            <section class="runtime-path">
+                                <header>DEVICE DMA PATH · ARCHITECTURE</header>
+                                <div id="requester" class="node requester-node">
+                                    <b id="requester-name">—</b>
+                                    <span id="requester-bdf">—</span>
+                                </div>
+                                <div class="connector labeled"><span id="runtime-iova">IOVA —</span></div>
+                                <div id="vtd-translation" class="node vtd-node">
+                                    <b>INTEL VT-d</b>
+                                    <span>hardware address translation</span>
+                                </div>
+                                <div class="connector labeled"><span>translated address</span></div>
+                                <div id="host-page" class="node memory-node">
+                                    <b id="hpa-value">HPA —</b>
+                                    <span id="chunk-size">not sampled at this boundary</span>
+                                </div>
+                                <div class="connector"></div>
+                                <div class="node dram-node"><b>HOST DRAM</b><span>memory backing the VM</span></div>
+                            </section>
+                        </div>
+
+                        <section class="chunk-view">
+                            <header>
+                                <div><b>VFIO RANGE → IOMMU MAPPING CHUNKS</b><span id="chunk-caption">Select a captured mapping.</span></div>
+                                <code id="chunk-count">—</code>
+                            </header>
+                            <div id="chunk-list" class="chunk-list"></div>
+                        </section>
+
+                        <div class="address-spaces">
+                            <div><span>CPU REFERENCE</span><b>GVA → GPA → EPT → HPA</b><small>architectural context; not sampled here</small></div>
+                            <i></i>
+                            <div><span>DEVICE PATH</span><b>IOVA → VT-d → HPA</b><small>mapping installation directly observed</small></div>
+                            <p><b>HVA</b> is QEMU virtual memory. The NIC issues <b>IOVA</b>. VT-d resolves it to <b>HPA</b>.</p>
+                        </div>
+
+                        <div class="tracepoint-evidence">
+                            <span>AVAILABLE IOMMU HOOKS · SETUP INVENTORY</span>
+                            <code id="setup-tracepoints">—</code>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </section>
+
+        <aside class="inspector panel">
+            <header class="panel-head">
+                <div><h2>BOUNDARY</h2><span>SELECTED EVENT</span></div>
+                <code id="source-badge">—</code>
+            </header>
+            <div class="inspector-body">
+                <div class="selected-kind"><i class="trace-dot"></i><span id="event-kind">—</span></div>
+                <h2 id="event-title">Select a boundary</h2>
+                <dl id="fields" class="fields"></dl>
+            </div>
+            <footer class="toolbar">
+                <button id="prev" type="button" aria-label="previous boundary">←</button>
+                <button id="next" type="button" aria-label="next boundary">→</button>
+                <span id="counter">0 / 0</span>
+            </footer>
+        </aside>
+    </section>
+</main>
+    <script src="virt-vtd.js?v=17"></script>
+</body>
+</html>

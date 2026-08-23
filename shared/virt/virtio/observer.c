@@ -118,7 +118,7 @@ static void write_meta(struct json_writer *jw)
 {
 	json_object_begin(jw);
 	json_u32(jw, "schema_version", 4);
-	json_string(jw, "experiment", "virt-paraio");
+	json_string(jw, "experiment", "virt-virtio");
 	json_string(jw, "kind", "meta");
 	json_string(jw, "source", "ebpf");
 	json_string(jw, "clock", "monotonic");
@@ -408,7 +408,7 @@ static void write_snapshot(struct json_writer *jw, const struct virtio_event *ev
 {
 	json_object_begin(jw);
 	json_u32(jw, "schema_version", 4);
-	json_string(jw, "experiment", "virt-paraio");
+	json_string(jw, "experiment", "virt-virtio");
 	json_string(jw, "kind", "snapshot");
 	json_string(jw, "source", "ebpf");
 	json_u32(jw, "seq", seq);
@@ -464,7 +464,7 @@ int main(void)
 	json_writer_init(&jw, stdout);
 	write_meta(&jw);
 	fflush(stdout);
-	fprintf(stderr, "LX_READY experiment=virt-paraio observer=virtio\n");
+	fprintf(stderr, "LX_READY experiment=virt-virtio observer=virtio\n");
 	while (!exiting)
 	{
 		err = ring_buffer__poll(ringbuf, 250);
@@ -485,6 +485,6 @@ out:
 	virtio_bpf__destroy(skel);
 	if (err)
 		return 1;
-	fprintf(stderr, "LX_DONE experiment=virt-paraio observer=virtio records=%u\n", record_count);
+	fprintf(stderr, "LX_DONE experiment=virt-virtio observer=virtio records=%u\n", record_count);
 	return 0;
 }

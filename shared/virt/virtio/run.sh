@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
 CAPTURE_ROOT="$REPO_ROOT/shared/_captures"
 TARGET_FILE="$SCRIPT_DIR/../cloudlab"
-REMOTE_ROOT="kernel-oops-virt-paraio"
+REMOTE_ROOT="kernel-oops-virt-virtio"
 REMOTE_DIR="$REMOTE_ROOT/shared/virt/virtio"
 TARGET="$(sed -n '1{/^[[:space:]]*#/d; s/^[[:space:]]*//; s/[[:space:]]*$//; p; q}' "$TARGET_FILE")"
 ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o StrictHostKeyChecking=no)
@@ -15,9 +15,9 @@ mkdir -p "$CAPTURE_ROOT"
 
 fetch_captures()
 {
-	scp -p "${ssh_opts[@]}" "$TARGET:$REMOTE_DIR/captures/virt-paraio.eBPF.ndjson" "$CAPTURE_ROOT/virt-paraio.eBPF.ndjson"
-	scp -p "${ssh_opts[@]}" "$TARGET:$REMOTE_DIR/captures/virt-paraio-Trace.txt" "$CAPTURE_ROOT/virt-paraio-Trace.txt"
-	scp -p "${ssh_opts[@]}" "$TARGET:$REMOTE_DIR/captures/virt-paraio-observer.log" "$CAPTURE_ROOT/virt-paraio-observer.log"
+	scp -p "${ssh_opts[@]}" "$TARGET:$REMOTE_DIR/captures/virt-virtio.eBPF.ndjson" "$CAPTURE_ROOT/virt-virtio.eBPF.ndjson"
+	scp -p "${ssh_opts[@]}" "$TARGET:$REMOTE_DIR/captures/virt-virtio-Trace.txt" "$CAPTURE_ROOT/virt-virtio-Trace.txt"
+	scp -p "${ssh_opts[@]}" "$TARGET:$REMOTE_DIR/captures/virt-virtio-observer.log" "$CAPTURE_ROOT/virt-virtio-observer.log"
 }
 
 if [ "${VIRT_FETCH_ONLY:-0}" = 1 ]; then
@@ -38,7 +38,7 @@ cd "$REMOTE_DIR"
 rm -rf captures
 mkdir -p captures
 
-./build/virtio > captures/virt-paraio.eBPF.ndjson 2> captures/virt-paraio-observer.log &
+./build/virtio > captures/virt-virtio.eBPF.ndjson 2> captures/virt-virtio-observer.log &
 observer=$!
 trace_instance=""
 
@@ -54,11 +54,11 @@ cleanup()
 trap cleanup EXIT
 
 for _ in $(seq 1 50); do
-	grep -q '^LX_READY experiment=virt-paraio observer=virtio$' captures/virt-paraio-observer.log 2>/dev/null && break
-	kill -0 "$observer" 2>/dev/null || { cat captures/virt-paraio-observer.log >&2; exit 1; }
+	grep -q '^LX_READY experiment=virt-virtio observer=virtio$' captures/virt-virtio-observer.log 2>/dev/null && break
+	kill -0 "$observer" 2>/dev/null || { cat captures/virt-virtio-observer.log >&2; exit 1; }
 	sleep 0.1
 done
-grep -q '^LX_READY experiment=virt-paraio observer=virtio$' captures/virt-paraio-observer.log || { cat captures/virt-paraio-observer.log >&2; exit 1; }
+grep -q '^LX_READY experiment=virt-virtio observer=virtio$' captures/virt-virtio-observer.log || { cat captures/virt-virtio-observer.log >&2; exit 1; }
 
 mountpoint -q /sys/kernel/tracing || mount -t tracefs nodev /sys/kernel/tracing 2>/dev/null || true
 mountpoint -q /sys/kernel/debug || mount -t debugfs nodev /sys/kernel/debug 2>/dev/null || true
@@ -68,21 +68,21 @@ for root in /sys/kernel/tracing /sys/kernel/debug/tracing; do
 done
 [ -n "$trace_root" ] || { echo "error: KVM tracepoints not found" >&2; exit 1; }
 
-instance_name="kernel-oops-virt-paraio-$$"
+instance_name="kernel-oops-virt-virtio-$$"
 mkdir "$trace_root/instances/$instance_name"
 trace_instance="$trace_root/instances/$instance_name"
 grep -qw mono "$trace_instance/trace_clock" || { echo "error: mono trace clock unavailable" >&2; exit 1; }
 echo mono > "$trace_instance/trace_clock"
 
-: > captures/virt-paraio-trace-formats.log
+: > captures/virt-virtio-trace-formats.log
 for event in kvm_entry kvm_exit kvm_userspace_exit; do
 	[ -r "$trace_root/events/kvm/$event/format" ] || { echo "error: missing $event format" >&2; exit 1; }
-	cat "$trace_root/events/kvm/$event/format" >> captures/virt-paraio-trace-formats.log
+	cat "$trace_root/events/kvm/$event/format" >> captures/virt-virtio-trace-formats.log
 	echo 1 > "$trace_instance/events/kvm/$event/enable"
 done
 
 if [ -r "$trace_root/events/kvm/kvm_mmio/format" ]; then
-	cat "$trace_root/events/kvm/kvm_mmio/format" >> captures/virt-paraio-trace-formats.log
+	cat "$trace_root/events/kvm/kvm_mmio/format" >> captures/virt-virtio-trace-formats.log
 	if grep -q 'field:.*gpa' "$trace_root/events/kvm/kvm_mmio/format"; then
 		echo 1 > "$trace_instance/events/kvm/kvm_mmio/enable"
 		echo "tracefs: enabled optional kvm_mmio with GPA field" >&2
@@ -92,17 +92,17 @@ fi
 echo 1 > "$trace_instance/tracing_on"
 ./build/vmm
 echo 0 > "$trace_instance/tracing_on"
-cat "$trace_instance/trace" > captures/virt-paraio-Trace.txt
+cat "$trace_instance/trace" > captures/virt-virtio-Trace.txt
 
 kill -INT "$observer"
 wait "$observer"
-grep -q '^LX_DONE experiment=virt-paraio observer=virtio records=' captures/virt-paraio-observer.log
+grep -q '^LX_DONE experiment=virt-virtio observer=virtio records=' captures/virt-virtio-observer.log
 
 cleanup
 trap - EXIT
-[ -s captures/virt-paraio-Trace.txt ] && [ -s captures/virt-paraio.eBPF.ndjson ]
+[ -s captures/virt-virtio-Trace.txt ] && [ -s captures/virt-virtio.eBPF.ndjson ]
 
-python3 - captures/virt-paraio.eBPF.ndjson <<'PY'
+python3 - captures/virt-virtio.eBPF.ndjson <<'PY'
 import json
 import sys
 

@@ -5,7 +5,7 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <title>Virtio paravirtual I/O explorer</title>
-        <link rel="stylesheet" href="virt-paraio.css?v=17" />
+        <link rel="stylesheet" href="virt-paraio.css?v=24" />
     </head>
     <body>
         <main class="paraio">
@@ -13,6 +13,7 @@
                 <div>
                     <div class="eyebrow">TRACE → eBPF SNAPSHOT → VIRTQUEUE STATE</div>
                     <h1>Paravirtual <span>I/O</span></h1>
+                    <p>Descriptor rings, MMIO doorbells, and irqfd completions from one virtqueue run.</p>
                 </div>
                 <div id="status" role="status"><i class="trace-dot"></i><span>loading para-I/O capture…</span></div>
             </header>
@@ -102,6 +103,6 @@
                 </aside>
             </section>
         </main>
-        <script src="virt-paraio.js?v=20"></script>
+        <script src="virt-paraio.js?v=22"></script>
     </body>
 </html>
