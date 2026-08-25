@@ -2,12 +2,15 @@
 #ifndef VTD_EVENT_H
 #define VTD_EVENT_H
 
+#define VTD_COMM_LEN 16
 #define VTD_DEVICE_NAME_LEN 64
+#define VTD_ACTION_NAME_LEN 64
 
 enum vtd_operation {
     VTD_OP_NONE,
-    VTD_OP_MAP,
-    VTD_OP_UNMAP,
+    VTD_OP_VFIO_MAP,
+    VTD_OP_VFIO_UNMAP,
+    VTD_OP_KVM_MEMORY_REGION,
 };
 
 enum vtd_event_kind {
@@ -16,35 +19,93 @@ enum vtd_event_kind {
     VTD_EVENT_IOMMU_UNMAP,
     VTD_EVENT_DEVICE_ATTACH,
     VTD_EVENT_IOCTL_EXIT,
+    VTD_EVENT_VFIO_MAP_ENTER,
+    VTD_EVENT_VFIO_MAP_EXIT,
+    VTD_EVENT_PAGE_PIN_ENTER,
+    VTD_EVENT_PAGE_PIN_EXIT,
+    VTD_EVENT_PAGE_UNPIN_ENTER,
+    VTD_EVENT_PAGE_UNPIN_EXIT,
+    VTD_EVENT_VFIO_MSI_ENTRY,
+    VTD_EVENT_VFIO_MSI_EXIT,
+    VTD_EVENT_VFIO_INTX_ENTRY,
+    VTD_EVENT_VFIO_INTX_EXIT,
+    VTD_EVENT_IRQFD_WAKEUP,
+    VTD_EVENT_KVM_MSI_ROUTE,
+    VTD_EVENT_KVM_APIC_ACCEPT,
+    VTD_EVENT_KVM_MMIO,
+    VTD_EVENT_GUEST_DIAG_ENTRY,
+    VTD_EVENT_GUEST_LOOPBACK_ENTRY,
+    VTD_EVENT_GUEST_LOOPBACK_EXIT,
+    VTD_EVENT_GUEST_RUN_ENTRY,
+    VTD_EVENT_GUEST_RUN_EXIT,
+    VTD_EVENT_GUEST_XMIT_ENTRY,
+    VTD_EVENT_GUEST_TX_MAP_ENTRY,
+    VTD_EVENT_GUEST_DMA_MAP_ENTRY,
+    VTD_EVENT_GUEST_DMA_MAP_EXIT,
+    VTD_EVENT_GUEST_TX_MAP_EXIT,
+    VTD_EVENT_GUEST_CLEAN_ENTRY,
+    VTD_EVENT_GUEST_DMA_UNMAP,
+    VTD_EVENT_GUEST_DMA_SYNC_CPU,
+    VTD_EVENT_GUEST_DMA_SYNC_DEVICE,
+    VTD_EVENT_GUEST_CLEAN_EXIT,
+    VTD_EVENT_GUEST_IRQ_ENTRY,
 };
 
-/* Event information identifies the observed syscall or IOMMU boundary. */
+enum vtd_sample_status {
+    VTD_SAMPLE_COMPLETE,
+    VTD_SAMPLE_READ_FAILED,
+    VTD_SAMPLE_INVALID_ARGUMENT,
+};
+
+/* Event information identifies the observed syscall, function, or IOMMU boundary. */
 struct vtd_event_info {
     unsigned int kind;
     unsigned int operation;
     unsigned int fd;
     unsigned int flags;
+    unsigned int argsz;
+    unsigned int slot;
     unsigned long long command;
+    unsigned long long request_id;
     long long result;
     unsigned char correlated;
-    unsigned char reserved[7];
+    unsigned char sample_status;
+    unsigned char reserved[6];
 };
 
 /* Context identifies the host task executing the observed boundary. */
 struct vtd_context {
     unsigned int pid;
     unsigned int tid;
+    char comm[VTD_COMM_LEN];
 };
 
 /* State contains the address-space facts sampled at that boundary. */
 struct vtd_state {
     unsigned long long hva;
+    unsigned long long gpa;
     unsigned long long iova;
     unsigned long long hpa;
     unsigned long long size;
+    unsigned long long returned_size;
     unsigned long long parent_iova;
     unsigned long long parent_size;
+    unsigned long long page_count;
+    unsigned long long user_argument;
+    unsigned long long dma_address;
+    unsigned long long data_length;
+    unsigned long long interrupt_address;
+    unsigned long long interrupt_data;
+    unsigned long long mmio_value;
+    unsigned int dma_direction;
+    unsigned int irq;
+    unsigned int vector;
+    unsigned int apic_id;
+    unsigned int count;
+    unsigned int mmio_length;
+    unsigned int mmio_type;
     char device[VTD_DEVICE_NAME_LEN];
+    char action[VTD_ACTION_NAME_LEN];
 };
 
 struct vtd_event {

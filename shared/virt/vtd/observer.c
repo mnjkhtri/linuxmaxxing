@@ -1,46 +1,318 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 #include <errno.h>
 #include <signal.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
-#include <unistd.h>
+#include <string.h>
+#include <time.h>
 
+#include <bpf/bpf.h>
 #include <bpf/libbpf.h>
 
 #include "json_writer.h"
 #include "vtd.skel.h"
 #include "vtd_event.h"
 
+#define VTD_SCHEMA_VERSION 4
+#define MAX_LINKS 40
+
+enum capture_mode {
+    CAPTURE_HOST,
+    CAPTURE_GUEST,
+};
+
+struct capture_features {
+    bool vfio_type1_map_enter;
+    bool vfio_type1_map_exit;
+    bool page_pin_enter;
+    bool page_pin_exit;
+    bool page_unpin_enter;
+    bool page_unpin_exit;
+    bool vfio_msi;
+    bool vfio_intx;
+    bool irqfd_wakeup;
+    bool kvm_msi_route;
+    bool kvm_apic_accept;
+    bool kvm_mmio;
+    bool guest_diag;
+    bool guest_loopback;
+    bool guest_run_loopback;
+    bool guest_xmit;
+    bool guest_tx_map;
+    bool guest_dma_map;
+    bool guest_clean;
+    bool guest_dma_unmap;
+    bool guest_dma_sync_cpu;
+    bool guest_dma_sync_device;
+    bool guest_irq;
+};
+
 static volatile sig_atomic_t stop_requested;
-static unsigned int record_count;
+static volatile sig_atomic_t gate_request = -1;
+static unsigned int sequence;
+static unsigned int event_count;
+static unsigned int short_record_count;
+static enum capture_mode current_mode = CAPTURE_HOST;
+static const char *guest_interface = "";
 
 static void on_signal(int signal_number)
 {
-    (void)signal_number;
-    stop_requested = 1;
+    if (signal_number == SIGUSR1)
+        gate_request = 1;
+    else if (signal_number == SIGUSR2)
+        gate_request = 0;
+    else
+        stop_requested = 1;
+}
+
+static uint64_t monotonic_time_ns(void)
+{
+    struct timespec now = {};
+
+    if (clock_gettime(CLOCK_MONOTONIC, &now))
+        return 0;
+    return (uint64_t)now.tv_sec * 1000000000ULL + (uint64_t)now.tv_nsec;
+}
+
+static const char *operation_name(unsigned int operation)
+{
+    if (operation == VTD_OP_VFIO_MAP)
+        return "vfio_dma_map";
+    if (operation == VTD_OP_VFIO_UNMAP)
+        return "vfio_dma_unmap";
+    if (operation == VTD_OP_KVM_MEMORY_REGION)
+        return "kvm_memory_region";
+    return "none";
+}
+
+static const char *sample_status_name(unsigned int status)
+{
+    if (status == VTD_SAMPLE_READ_FAILED)
+        return "read_failed";
+    if (status == VTD_SAMPLE_INVALID_ARGUMENT)
+        return "invalid_argument";
+    return "complete";
 }
 
 static const char *event_name(const struct vtd_event *event)
 {
-    if (event->event_info.kind == VTD_EVENT_IOCTL_ENTER)
-        return event->event_info.operation == VTD_OP_MAP ? "vfio_dma_map_enter" : "vfio_dma_unmap_enter";
-    if (event->event_info.kind == VTD_EVENT_IOCTL_EXIT)
-        return event->event_info.operation == VTD_OP_MAP ? "vfio_dma_map_exit" : "vfio_dma_unmap_exit";
-    if (event->event_info.kind == VTD_EVENT_IOMMU_MAP)
+    switch (event->event_info.kind) {
+    case VTD_EVENT_IOCTL_ENTER:
+        if (event->event_info.operation == VTD_OP_KVM_MEMORY_REGION)
+            return "kvm_memory_region_enter";
+        return event->event_info.operation == VTD_OP_VFIO_MAP ? "vfio_dma_map_enter" : "vfio_dma_unmap_enter";
+    case VTD_EVENT_IOCTL_EXIT:
+        if (event->event_info.operation == VTD_OP_KVM_MEMORY_REGION)
+            return "kvm_memory_region_exit";
+        return event->event_info.operation == VTD_OP_VFIO_MAP ? "vfio_dma_map_exit" : "vfio_dma_unmap_exit";
+    case VTD_EVENT_IOMMU_MAP:
         return "iommu_map";
-    if (event->event_info.kind == VTD_EVENT_IOMMU_UNMAP)
+    case VTD_EVENT_IOMMU_UNMAP:
         return "iommu_unmap";
-    return "iommu_device_attach";
+    case VTD_EVENT_DEVICE_ATTACH:
+        return "iommu_device_attach";
+    case VTD_EVENT_VFIO_MAP_ENTER:
+        return "vfio_type1_map_enter";
+    case VTD_EVENT_VFIO_MAP_EXIT:
+        return "vfio_type1_map_exit";
+    case VTD_EVENT_PAGE_PIN_ENTER:
+        return "vfio_page_pin_enter";
+    case VTD_EVENT_PAGE_PIN_EXIT:
+        return "vfio_page_pin_exit";
+    case VTD_EVENT_PAGE_UNPIN_ENTER:
+        return "vfio_page_unpin_enter";
+    case VTD_EVENT_PAGE_UNPIN_EXIT:
+        return "vfio_page_unpin_exit";
+    case VTD_EVENT_VFIO_MSI_ENTRY:
+        return "vfio_msi_handler_entry";
+    case VTD_EVENT_VFIO_MSI_EXIT:
+        return "vfio_msi_handler_exit";
+    case VTD_EVENT_VFIO_INTX_ENTRY:
+        return "vfio_intx_handler_entry";
+    case VTD_EVENT_VFIO_INTX_EXIT:
+        return "vfio_intx_handler_exit";
+    case VTD_EVENT_IRQFD_WAKEUP:
+        return "kvm_irqfd_wakeup";
+    case VTD_EVENT_KVM_MSI_ROUTE:
+        return "kvm_msi_route";
+    case VTD_EVENT_KVM_APIC_ACCEPT:
+        return "kvm_apic_accept_irq";
+    case VTD_EVENT_KVM_MMIO:
+        return "kvm_mmio";
+    case VTD_EVENT_GUEST_DIAG_ENTRY:
+        return "guest_ixgbe_diag_entry";
+    case VTD_EVENT_GUEST_LOOPBACK_ENTRY:
+        return "guest_ixgbe_loopback_entry";
+    case VTD_EVENT_GUEST_LOOPBACK_EXIT:
+        return "guest_ixgbe_loopback_exit";
+    case VTD_EVENT_GUEST_RUN_ENTRY:
+        return "guest_ixgbe_run_loopback_entry";
+    case VTD_EVENT_GUEST_RUN_EXIT:
+        return "guest_ixgbe_run_loopback_exit";
+    case VTD_EVENT_GUEST_XMIT_ENTRY:
+        return "guest_ixgbe_xmit_entry";
+    case VTD_EVENT_GUEST_TX_MAP_ENTRY:
+        return "guest_ixgbe_tx_map_entry";
+    case VTD_EVENT_GUEST_DMA_MAP_ENTRY:
+        return "guest_dma_map_entry";
+    case VTD_EVENT_GUEST_DMA_MAP_EXIT:
+        return "guest_dma_map_exit";
+    case VTD_EVENT_GUEST_TX_MAP_EXIT:
+        return "guest_ixgbe_tx_map_exit";
+    case VTD_EVENT_GUEST_CLEAN_ENTRY:
+        return "guest_ixgbe_clean_entry";
+    case VTD_EVENT_GUEST_DMA_UNMAP:
+        return "guest_dma_unmap";
+    case VTD_EVENT_GUEST_DMA_SYNC_CPU:
+        return "guest_dma_sync_for_cpu";
+    case VTD_EVENT_GUEST_DMA_SYNC_DEVICE:
+        return "guest_dma_sync_for_device";
+    case VTD_EVENT_GUEST_CLEAN_EXIT:
+        return "guest_ixgbe_clean_exit";
+    case VTD_EVENT_GUEST_IRQ_ENTRY:
+        return "guest_irq_handler_entry";
+    default:
+        return "unknown";
+    }
 }
 
 static const char *event_hook(const struct vtd_event *event)
 {
-    if (event->event_info.kind == VTD_EVENT_IOMMU_MAP)
+    switch (event->event_info.kind) {
+    case VTD_EVENT_IOMMU_MAP:
         return "iommu:map";
-    if (event->event_info.kind == VTD_EVENT_IOMMU_UNMAP)
+    case VTD_EVENT_IOMMU_UNMAP:
         return "iommu:unmap";
-    if (event->event_info.kind == VTD_EVENT_DEVICE_ATTACH)
+    case VTD_EVENT_DEVICE_ATTACH:
         return "iommu:attach_device_to_domain";
-    return event->event_info.kind == VTD_EVENT_IOCTL_EXIT ? "syscalls:sys_exit_ioctl" : "syscalls:sys_enter_ioctl";
+    case VTD_EVENT_VFIO_MAP_ENTER:
+        return "kprobe:vfio_iommu_type1_map_dma";
+    case VTD_EVENT_VFIO_MAP_EXIT:
+        return "kretprobe:vfio_iommu_type1_map_dma";
+    case VTD_EVENT_PAGE_PIN_ENTER:
+        return "kprobe:vfio_pin_pages_remote";
+    case VTD_EVENT_PAGE_PIN_EXIT:
+        return "kretprobe:vfio_pin_pages_remote";
+    case VTD_EVENT_PAGE_UNPIN_ENTER:
+        return "kprobe:vfio_unpin_pages_remote";
+    case VTD_EVENT_PAGE_UNPIN_EXIT:
+        return "kretprobe:vfio_unpin_pages_remote";
+    case VTD_EVENT_VFIO_MSI_ENTRY:
+        return "kprobe:vfio_msihandler";
+    case VTD_EVENT_VFIO_MSI_EXIT:
+        return "kretprobe:vfio_msihandler";
+    case VTD_EVENT_VFIO_INTX_ENTRY:
+        return "kprobe:vfio_intx_handler";
+    case VTD_EVENT_VFIO_INTX_EXIT:
+        return "kretprobe:vfio_intx_handler";
+    case VTD_EVENT_IRQFD_WAKEUP:
+        return "kprobe:irqfd_wakeup";
+    case VTD_EVENT_KVM_MSI_ROUTE:
+        return "kvm:kvm_msi_set_irq";
+    case VTD_EVENT_KVM_APIC_ACCEPT:
+        return "kvm:kvm_apic_accept_irq";
+    case VTD_EVENT_KVM_MMIO:
+        return "kvm:kvm_mmio";
+    case VTD_EVENT_GUEST_DIAG_ENTRY:
+        return "kprobe:ixgbe_diag_test";
+    case VTD_EVENT_GUEST_LOOPBACK_ENTRY:
+        return "kprobe:ixgbe_loopback_test";
+    case VTD_EVENT_GUEST_LOOPBACK_EXIT:
+        return "kretprobe:ixgbe_loopback_test";
+    case VTD_EVENT_GUEST_RUN_ENTRY:
+        return "kprobe:ixgbe_run_loopback_test";
+    case VTD_EVENT_GUEST_RUN_EXIT:
+        return "kretprobe:ixgbe_run_loopback_test";
+    case VTD_EVENT_GUEST_XMIT_ENTRY:
+        return "kprobe:ixgbe_xmit_frame_ring";
+    case VTD_EVENT_GUEST_TX_MAP_ENTRY:
+        return "kprobe:ixgbe_tx_map";
+    case VTD_EVENT_GUEST_DMA_MAP_ENTRY:
+        return "kprobe:dma_map_page_attrs";
+    case VTD_EVENT_GUEST_DMA_MAP_EXIT:
+        return "kretprobe:dma_map_page_attrs";
+    case VTD_EVENT_GUEST_TX_MAP_EXIT:
+        return "kretprobe:ixgbe_tx_map";
+    case VTD_EVENT_GUEST_CLEAN_ENTRY:
+        return "kprobe:ixgbe_clean_test_rings";
+    case VTD_EVENT_GUEST_DMA_UNMAP:
+        return "kprobe:dma_unmap_page_attrs";
+    case VTD_EVENT_GUEST_DMA_SYNC_CPU:
+        return "kprobe:dma_sync_single_for_cpu";
+    case VTD_EVENT_GUEST_DMA_SYNC_DEVICE:
+        return "kprobe:dma_sync_single_for_device";
+    case VTD_EVENT_GUEST_CLEAN_EXIT:
+        return "kretprobe:ixgbe_clean_test_rings";
+    case VTD_EVENT_GUEST_IRQ_ENTRY:
+        return "irq:irq_handler_entry";
+    default:
+        return event->event_info.kind == VTD_EVENT_IOCTL_EXIT ? "syscalls:sys_exit_ioctl" : "syscalls:sys_enter_ioctl";
+    }
+}
+
+static void begin_record(struct json_writer *writer, const char *kind, const char *source, uint64_t time_ns)
+{
+    json_object_begin(writer);
+    json_u32(writer, "schema_version", VTD_SCHEMA_VERSION);
+    json_string(writer, "experiment", "virt-vtd");
+    json_string(writer, "kind", kind);
+    json_string(writer, "source", source);
+    json_u32(writer, "seq", ++sequence);
+    json_u64(writer, "time_ns", time_ns);
+    json_string(writer, "clock", "monotonic");
+}
+
+static int emit_meta(const struct capture_features *features)
+{
+    struct json_writer writer;
+
+    json_writer_init(&writer, stdout);
+    begin_record(&writer, "capture_meta", "observer", monotonic_time_ns());
+    json_object_begin_field(&writer, "event_info");
+    json_string(&writer, "observer", current_mode == CAPTURE_HOST ? "host-ebpf" : "guest-ebpf");
+    json_string(&writer, "filter", current_mode == CAPTURE_HOST ? "qemu-control + gated-vfio-irq-chain" : guest_interface);
+    json_object_end(&writer);
+    json_object_begin_field(&writer, "context");
+    json_null(&writer, "pid");
+    json_null(&writer, "tid");
+    json_null(&writer, "comm");
+    json_object_end(&writer);
+    json_object_begin_field(&writer, "state");
+    json_object_begin_field(&writer, "hooks");
+    json_bool(&writer, "syscall_ioctl", current_mode == CAPTURE_HOST);
+    json_bool(&writer, "iommu_map", current_mode == CAPTURE_HOST);
+    json_bool(&writer, "iommu_unmap", current_mode == CAPTURE_HOST);
+    json_bool(&writer, "iommu_device_attach", current_mode == CAPTURE_HOST);
+    json_bool(&writer, "vfio_type1_map_enter", features->vfio_type1_map_enter);
+    json_bool(&writer, "vfio_type1_map_exit", features->vfio_type1_map_exit);
+    json_bool(&writer, "page_pin_enter", features->page_pin_enter);
+    json_bool(&writer, "page_pin_exit", features->page_pin_exit);
+    json_bool(&writer, "page_unpin_enter", features->page_unpin_enter);
+    json_bool(&writer, "page_unpin_exit", features->page_unpin_exit);
+    json_bool(&writer, "vfio_msi", features->vfio_msi);
+    json_bool(&writer, "vfio_intx", features->vfio_intx);
+    json_bool(&writer, "irqfd_wakeup", features->irqfd_wakeup);
+    json_bool(&writer, "kvm_msi_route", features->kvm_msi_route);
+    json_bool(&writer, "kvm_apic_accept", features->kvm_apic_accept);
+    json_bool(&writer, "kvm_mmio", features->kvm_mmio);
+    json_bool(&writer, "guest_diag", features->guest_diag);
+    json_bool(&writer, "guest_loopback", features->guest_loopback);
+    json_bool(&writer, "guest_run_loopback", features->guest_run_loopback);
+    json_bool(&writer, "guest_xmit", features->guest_xmit);
+    json_bool(&writer, "guest_tx_map", features->guest_tx_map);
+    json_bool(&writer, "guest_dma_map", features->guest_dma_map);
+    json_bool(&writer, "guest_clean", features->guest_clean);
+    json_bool(&writer, "guest_dma_unmap", features->guest_dma_unmap);
+    json_bool(&writer, "guest_dma_sync_cpu", features->guest_dma_sync_cpu);
+    json_bool(&writer, "guest_dma_sync_device", features->guest_dma_sync_device);
+    json_bool(&writer, "guest_irq", features->guest_irq);
+    json_object_end(&writer);
+    json_object_end(&writer);
+    json_object_end(&writer);
+    json_newline(&writer);
+    fflush(stdout);
+    return json_writer_ok(&writer) ? 0 : -EIO;
 }
 
 static int emit_record(void *ctx, void *data, size_t size)
@@ -49,90 +321,287 @@ static int emit_record(void *ctx, void *data, size_t size)
     const struct vtd_event *event = data;
 
     (void)ctx;
-    if (size != sizeof(*event))
+    if (size < sizeof(*event)) {
+        short_record_count++;
         return 0;
+    }
 
     json_writer_init(&writer, stdout);
-    json_object_begin(&writer);
-    json_u32(&writer, "schema_version", 2);
-    json_string(&writer, "experiment", "virt-vtd");
-    json_string(&writer, "kind", event_name(event));
-    json_string(&writer, "source", "ebpf");
-    json_u32(&writer, "seq", ++record_count);
-    json_u64(&writer, "time_ns", event->time_ns);
-
+    begin_record(&writer, event_name(event), current_mode == CAPTURE_HOST ? "host-ebpf" : "guest-ebpf", event->time_ns);
     json_object_begin_field(&writer, "event_info");
     json_string(&writer, "hook", event_hook(event));
+    json_string(&writer, "operation", operation_name(event->event_info.operation));
+    json_u64(&writer, "request_id", event->event_info.request_id);
     json_bool(&writer, "correlated", event->event_info.correlated);
+    json_string(&writer, "sample_status", sample_status_name(event->event_info.sample_status));
+    json_u32(&writer, "fd", event->event_info.fd);
     json_hex(&writer, "command", event->event_info.command);
-    json_hex(&writer, "hva", event->state.hva);
-    json_hex(&writer, "iova", event->state.iova);
-    json_hex(&writer, "hpa", event->state.hpa);
-    json_hex(&writer, "size", event->state.size);
-    json_hex(&writer, "parent_iova", event->state.parent_iova);
-    json_hex(&writer, "parent_size", event->state.parent_size);
+    json_u32(&writer, "argsz", event->event_info.argsz);
     json_u32(&writer, "flags", event->event_info.flags);
+    json_u32(&writer, "slot", event->event_info.slot);
     json_i64(&writer, "result", event->event_info.result);
-    json_string(&writer, "device", event->state.device);
     json_object_end(&writer);
 
     json_object_begin_field(&writer, "context");
     json_u32(&writer, "pid", event->context.pid);
     json_u32(&writer, "tid", event->context.tid);
+    json_string_n(&writer, "comm", event->context.comm, sizeof(event->context.comm));
     json_object_end(&writer);
 
     json_object_begin_field(&writer, "state");
+    if (event->event_info.kind <= VTD_EVENT_PAGE_UNPIN_EXIT) {
+        json_object_begin_field(&writer, "address_space");
+        json_hex(&writer, "hva", event->state.hva);
+        json_hex(&writer, "gpa", event->state.gpa);
+        json_hex(&writer, "iova", event->state.iova);
+        json_hex(&writer, "hpa", event->state.hpa);
+        json_hex(&writer, "size", event->state.size);
+        json_hex(&writer, "returned_size", event->state.returned_size);
+        json_hex(&writer, "parent_iova", event->state.parent_iova);
+        json_hex(&writer, "parent_size", event->state.parent_size);
+        json_u64(&writer, "page_count", event->state.page_count);
+        json_object_end(&writer);
+        json_string_n(&writer, "device", event->state.device, sizeof(event->state.device));
+    }
+    if (event->event_info.kind >= VTD_EVENT_GUEST_XMIT_ENTRY && event->event_info.kind <= VTD_EVENT_GUEST_CLEAN_EXIT) {
+        json_object_begin_field(&writer, "dma");
+        json_hex(&writer, "address", event->state.dma_address);
+        json_u64(&writer, "length", event->state.data_length);
+        json_u32(&writer, "direction", event->state.dma_direction);
+        json_u32(&writer, "completed_descriptors", event->state.count);
+        json_object_end(&writer);
+    }
+    if ((event->event_info.kind >= VTD_EVENT_VFIO_MSI_ENTRY && event->event_info.kind <= VTD_EVENT_KVM_APIC_ACCEPT) || event->event_info.kind == VTD_EVENT_GUEST_IRQ_ENTRY) {
+        json_object_begin_field(&writer, "interrupt");
+        json_u32(&writer, "irq", event->state.irq);
+        json_u32(&writer, "vector", event->state.vector);
+        json_u32(&writer, "apic_id", event->state.apic_id);
+        json_hex(&writer, "address", event->state.interrupt_address);
+        json_hex(&writer, "data", event->state.interrupt_data);
+        json_string_n(&writer, "action", event->state.action, sizeof(event->state.action));
+        json_object_end(&writer);
+    }
+    if (event->event_info.kind == VTD_EVENT_KVM_MMIO) {
+        json_object_begin_field(&writer, "mmio");
+        json_hex(&writer, "gpa", event->state.gpa);
+        json_hex(&writer, "value", event->state.mmio_value);
+        json_u32(&writer, "length", event->state.mmio_length);
+        json_u32(&writer, "type", event->state.mmio_type);
+        json_object_end(&writer);
+    }
     json_object_end(&writer);
     json_object_end(&writer);
     json_newline(&writer);
     fflush(stdout);
+    if (!json_writer_ok(&writer))
+        return -EIO;
+    event_count++;
     return 0;
 }
 
-int main(void)
+static int emit_summary(uint64_t dropped)
 {
-    struct vtd_bpf *skeleton;
-    struct ring_buffer *ring_buffer;
-    struct bpf_link *links[5] = {};
+    struct json_writer writer;
+
+    json_writer_init(&writer, stdout);
+    begin_record(&writer, "capture_summary", "observer", monotonic_time_ns());
+    json_object_begin_field(&writer, "event_info");
+    json_string(&writer, "observer", current_mode == CAPTURE_HOST ? "host-ebpf" : "guest-ebpf");
+    json_object_end(&writer);
+    json_object_begin_field(&writer, "context");
+    json_null(&writer, "pid");
+    json_null(&writer, "tid");
+    json_null(&writer, "comm");
+    json_object_end(&writer);
+    json_object_begin_field(&writer, "state");
+    json_u32(&writer, "events", event_count);
+    json_u64(&writer, "ringbuf_dropped", dropped);
+    json_u32(&writer, "short_records", short_record_count);
+    json_object_end(&writer);
+    json_object_end(&writer);
+    json_newline(&writer);
+    fflush(stdout);
+    return json_writer_ok(&writer) ? 0 : -EIO;
+}
+
+static struct bpf_link *attach_required(struct bpf_program *program)
+{
+    struct bpf_link *link = bpf_program__attach(program);
+
+    if (libbpf_get_error(link))
+        return NULL;
+    return link;
+}
+
+static struct bpf_link *attach_optional(struct bpf_program *program, bool return_probe, const char *symbol, bool *available)
+{
+    struct bpf_link *link = bpf_program__attach_kprobe(program, return_probe, symbol);
+
+    if (libbpf_get_error(link)) {
+        *available = false;
+        return NULL;
+    }
+    *available = true;
+    return link;
+}
+
+static struct bpf_link *attach_optional_program(struct bpf_program *program, bool *available)
+{
+    struct bpf_link *link = bpf_program__attach(program);
+
+    if (libbpf_get_error(link)) {
+        *available = false;
+        return NULL;
+    }
+    *available = true;
+    return link;
+}
+
+static struct bpf_link *attach_optional_symbol_pair(struct bpf_program *program, bool return_probe, const char *primary, const char *fallback, bool *available)
+{
+    struct bpf_link *link = bpf_program__attach_kprobe(program, return_probe, primary);
+
+    if (libbpf_get_error(link) && fallback)
+        link = bpf_program__attach_kprobe(program, return_probe, fallback);
+    if (libbpf_get_error(link)) {
+        *available = false;
+        return NULL;
+    }
+    *available = true;
+    return link;
+}
+
+static int attach_host_programs(struct vtd_bpf *skeleton, struct bpf_link **links, unsigned int *link_count, struct capture_features *features)
+{
+    unsigned int required_start = *link_count;
+
+    links[(*link_count)++] = attach_required(skeleton->progs.enter_ioctl);
+    links[(*link_count)++] = attach_required(skeleton->progs.exit_ioctl);
+    links[(*link_count)++] = attach_required(skeleton->progs.iommu_map);
+    links[(*link_count)++] = attach_required(skeleton->progs.iommu_unmap);
+    links[(*link_count)++] = attach_required(skeleton->progs.attach_device);
+    for (unsigned int index = required_start; index < *link_count; index++) {
+        if (!links[index])
+            return -ENOENT;
+    }
+    links[(*link_count)++] = attach_optional(skeleton->progs.vfio_map_enter, false, "vfio_iommu_type1_map_dma", &features->vfio_type1_map_enter);
+    links[(*link_count)++] = attach_optional(skeleton->progs.vfio_map_exit, true, "vfio_iommu_type1_map_dma", &features->vfio_type1_map_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.vfio_pin_enter, false, "vfio_pin_pages_remote", &features->page_pin_enter);
+    links[(*link_count)++] = attach_optional(skeleton->progs.vfio_pin_exit, true, "vfio_pin_pages_remote", &features->page_pin_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.vfio_unpin_enter, false, "vfio_unpin_pages_remote", &features->page_unpin_enter);
+    links[(*link_count)++] = attach_optional(skeleton->progs.vfio_unpin_exit, true, "vfio_unpin_pages_remote", &features->page_unpin_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_vfio_msi_entry, false, "vfio_msihandler", &features->vfio_msi);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_vfio_msi_exit, true, "vfio_msihandler", &features->vfio_msi);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_vfio_intx_entry, false, "vfio_intx_handler", &features->vfio_intx);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_vfio_intx_exit, true, "vfio_intx_handler", &features->vfio_intx);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_irqfd_wakeup, false, "irqfd_wakeup", &features->irqfd_wakeup);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.host_kvm_msi_route, &features->kvm_msi_route);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.host_kvm_apic_accept, &features->kvm_apic_accept);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.host_kvm_mmio, &features->kvm_mmio);
+    return 0;
+}
+
+static int attach_guest_programs(struct vtd_bpf *skeleton, struct bpf_link **links, unsigned int *link_count, struct capture_features *features)
+{
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_diag_entry, false, "ixgbe_diag_test", &features->guest_diag);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_loopback_entry, false, "ixgbe_loopback_test", &features->guest_loopback);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_loopback_exit, true, "ixgbe_loopback_test", &features->guest_loopback);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_run_entry, false, "ixgbe_run_loopback_test", &features->guest_run_loopback);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_run_exit, true, "ixgbe_run_loopback_test", &features->guest_run_loopback);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_xmit_entry, false, "ixgbe_xmit_frame_ring", &features->guest_xmit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_tx_map_entry, false, "ixgbe_tx_map", &features->guest_tx_map);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_tx_map_exit, true, "ixgbe_tx_map", &features->guest_tx_map);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_map_entry, false, "dma_map_page_attrs", &features->guest_dma_map);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_map_exit, true, "dma_map_page_attrs", &features->guest_dma_map);
+    links[(*link_count)++] = attach_optional_symbol_pair(skeleton->progs.guest_clean_entry, false, "ixgbe_clean_test_rings.constprop.0", "ixgbe_clean_test_rings", &features->guest_clean);
+    links[(*link_count)++] = attach_optional_symbol_pair(skeleton->progs.guest_clean_exit, true, "ixgbe_clean_test_rings.constprop.0", "ixgbe_clean_test_rings", &features->guest_clean);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_unmap, false, "dma_unmap_page_attrs", &features->guest_dma_unmap);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_sync_cpu, false, "dma_sync_single_for_cpu", &features->guest_dma_sync_cpu);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_sync_device, false, "dma_sync_single_for_device", &features->guest_dma_sync_device);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_irq_entry, &features->guest_irq);
+    if (!features->guest_diag || !features->guest_loopback || !features->guest_run_loopback || !features->guest_xmit ||
+        !features->guest_tx_map || !features->guest_dma_map || !features->guest_clean || !features->guest_irq)
+        return -ENOENT;
+    return 0;
+}
+
+int main(int argc, char **argv)
+{
+    struct capture_features features = {};
+    struct vtd_bpf *skeleton = NULL;
+    struct ring_buffer *ring_buffer = NULL;
+    struct bpf_link *links[MAX_LINKS] = {};
+    unsigned int link_count = 0;
+    uint64_t dropped = 0;
+    uint32_t map_key = 0;
     int poll_result = 0;
+    int status = 1;
+
+    if (argc == 3 && !strcmp(argv[1], "--guest")) {
+        current_mode = CAPTURE_GUEST;
+        guest_interface = argv[2];
+    } else if (argc != 1) {
+        fprintf(stderr, "usage: %s [--guest interface]\n", argv[0]);
+        return 2;
+    }
 
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
+    signal(SIGUSR1, on_signal);
+    signal(SIGUSR2, on_signal);
     libbpf_set_strict_mode(LIBBPF_STRICT_ALL);
 
-    skeleton = vtd_bpf__open_and_load();
+    skeleton = vtd_bpf__open();
+    if (skeleton && current_mode == CAPTURE_GUEST)
+        snprintf(skeleton->rodata->target_interface, sizeof(skeleton->rodata->target_interface), "%s", guest_interface);
+    if (!skeleton || vtd_bpf__load(skeleton)) {
+        vtd_bpf__destroy(skeleton);
+        skeleton = NULL;
+    }
     if (!skeleton) {
         fprintf(stderr, "vtd observer: open/load failed\n");
-        return 1;
+        goto cleanup;
     }
 
-    links[0] = bpf_program__attach(skeleton->progs.enter_ioctl);
-    links[1] = bpf_program__attach(skeleton->progs.exit_ioctl);
-    links[2] = bpf_program__attach(skeleton->progs.iommu_map);
-    links[3] = bpf_program__attach(skeleton->progs.iommu_unmap);
-    links[4] = bpf_program__attach(skeleton->progs.attach_device);
-    for (size_t index = 0; index < 5; index++) {
-        if (!links[index]) {
-            fprintf(stderr, "vtd observer: attach failed\n");
-            return 1;
-        }
+    if ((current_mode == CAPTURE_HOST && attach_host_programs(skeleton, links, &link_count, &features)) ||
+        (current_mode == CAPTURE_GUEST && attach_guest_programs(skeleton, links, &link_count, &features))) {
+        fprintf(stderr, "vtd observer: required %s hooks unavailable\n", current_mode == CAPTURE_HOST ? "host" : "guest");
+        goto cleanup;
     }
 
     ring_buffer = ring_buffer__new(bpf_map__fd(skeleton->maps.events), emit_record, NULL, NULL);
-    if (!ring_buffer)
-        return 1;
+    if (!ring_buffer) {
+        fprintf(stderr, "vtd observer: ring buffer creation failed\n");
+        goto cleanup;
+    }
+    if (emit_meta(&features))
+        goto cleanup;
 
-    fprintf(stderr, "LX_READY experiment=virt-vtd observer=vtd\n");
+    fprintf(stderr, "LX_READY experiment=virt-vtd observer=%s clock=monotonic\n", current_mode == CAPTURE_HOST ? "host" : "guest");
     while (!stop_requested) {
         poll_result = ring_buffer__poll(ring_buffer, 250);
         if (poll_result < 0 && poll_result != -EINTR)
             break;
-    }
+        if (current_mode == CAPTURE_HOST && gate_request >= 0) {
+            uint32_t enabled = gate_request;
 
+            if (bpf_map_update_elem(bpf_map__fd(skeleton->maps.runtime_gate), &map_key, &enabled, BPF_ANY))
+                break;
+            fprintf(stderr, "LX_GATE enabled=%u\n", enabled);
+            fflush(stderr);
+            gate_request = -1;
+        }
+    }
+    bpf_map_lookup_elem(bpf_map__fd(skeleton->maps.dropped_events), &map_key, &dropped);
+    if (emit_summary(dropped))
+        goto cleanup;
+    status = poll_result < 0 && poll_result != -EINTR;
+
+cleanup:
     ring_buffer__free(ring_buffer);
-    for (size_t index = 0; index < 5; index++)
+    for (unsigned int index = 0; index < link_count; index++)
         bpf_link__destroy(links[index]);
     vtd_bpf__destroy(skeleton);
-    fprintf(stderr, "LX_DONE experiment=virt-vtd observer=vtd records=%u\n", record_count);
-    return poll_result < 0 ? 1 : 0;
+    fprintf(stderr, "LX_DONE experiment=virt-vtd observer=%s events=%u dropped=%llu short=%u\n", current_mode == CAPTURE_HOST ? "host" : "guest", event_count, (unsigned long long)dropped, short_record_count);
+    return status;
 }

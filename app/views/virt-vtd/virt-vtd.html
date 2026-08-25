@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>VT·D</title>
     <link rel="stylesheet" href="../../theme.css">
-    <link rel="stylesheet" href="virt-vtd.css?v=24">
+    <link rel="stylesheet" href="virt-vtd.css?v=26">
 </head>
 <body>
 <main class="vtd">
@@ -32,12 +32,7 @@
             </header>
 
             <div class="machine-body">
-                <section class="mechanism region">
-                    <header class="region-title">
-                        <div><b id="mechanism-title">OWNERSHIP MECHANISM</b><span id="mechanism-subtitle">host → VFIO → guest</span></div>
-                        <code id="event-count">—</code>
-                    </header>
-
+                <section class="mechanism">
                     <div id="phase-a-state" class="phase-state ownership-state">
                         <section class="assignment-column">
                             <div class="physical-device">
@@ -48,7 +43,7 @@
                             <div class="ownership-path">
                                 <div class="domain-title">SOFTWARE OWNER</div>
                                 <div id="host-owner" class="node owner-node">
-                                    <b>HOST ixgbe</b>
+                                    <b id="host-driver-label">HOST DRIVER</b>
                                     <span id="host-interface">—</span>
                                 </div>
                                 <div class="connector"></div>
@@ -63,7 +58,7 @@
                                 </div>
                                 <div class="connector"></div>
                                 <div id="guest-owner" class="node owner-node">
-                                    <b>GUEST ixgbe</b>
+                                    <b id="guest-driver-label">GUEST DRIVER</b>
                                     <span id="guest-interface">not present</span>
                                 </div>
                             </div>
@@ -122,73 +117,37 @@
                     </div>
 
                     <div id="phase-b-state" class="phase-state dma-state hidden">
-                        <div class="mapping-picker">
-                            <label for="map-select">VFIO MAPPING REQUEST</label>
-                            <select id="map-select"></select>
-                            <span id="map-summary">—</span>
-                        </div>
+                        <section class="mapping-console">
+                            <div class="mapping-picker">
+                                <label for="map-select">VFIO MAP</label>
+                                <select id="map-select"></select>
+                                <span id="map-summary">—</span>
+                            </div>
+                        </section>
 
-                        <div class="translation-workbench">
-                            <section class="setup-path">
-                                <header>SOFTWARE SETUP · OBSERVED</header>
-                                <div id="qemu-map" class="node map-node">
-                                    <b>QEMU PROCESS</b>
-                                    <span id="hva-value">HVA —</span>
+                        <section class="interaction-view">
+                            <header class="interaction-head">
+                                <div><b>ADDRESS-SPACE REGISTRATION AND DMA USE</b><span id="flow-caption">Select a message to inspect its captured boundary.</span></div>
+                                <div class="evidence-key" aria-label="Evidence legend">
+                                    <span class="observed-key"><i></i>captured</span>
+                                    <span class="architecture-key"><i></i>architecture</span>
                                 </div>
-                                <div class="connector labeled"><span>VFIO_IOMMU_MAP_DMA</span></div>
-                                <div id="vfio-map" class="node map-node">
-                                    <b>VFIO MAP REQUEST</b>
-                                    <span id="vfio-iova">IOVA —</span>
-                                    <span id="vfio-size">size —</span>
-                                    <span id="vfio-permissions">permissions —</span>
-                                </div>
-                                <div class="connector labeled"><span>Linux installs translations</span></div>
-                                <div id="iommu-domain" class="node map-node domain-node">
-                                    <b>IOMMU DOMAIN</b>
-                                    <span id="domain-state">attachment not selected</span>
-                                </div>
-                            </section>
-
-                            <section class="runtime-path">
-                                <header>DEVICE DMA PATH · ARCHITECTURE</header>
-                                <div id="requester" class="node requester-node">
-                                    <b id="requester-name">—</b>
-                                    <span id="requester-bdf">—</span>
-                                </div>
-                                <div class="connector labeled"><span id="runtime-iova">IOVA —</span></div>
-                                <div id="vtd-translation" class="node vtd-node">
-                                    <b>INTEL VT-d</b>
-                                    <span>hardware address translation</span>
-                                </div>
-                                <div class="connector labeled"><span>translated address</span></div>
-                                <div id="host-page" class="node memory-node">
-                                    <b id="hpa-value">HPA —</b>
-                                    <span id="chunk-size">not sampled at this boundary</span>
-                                </div>
-                                <div class="connector"></div>
-                                <div class="node dram-node"><b>HOST DRAM</b><span>memory backing the VM</span></div>
-                            </section>
-                        </div>
+                            </header>
+                            <div id="actor-row" class="actor-row"></div>
+                            <div class="interaction-canvas">
+                                <div id="lifeline-lines" class="lifeline-lines" aria-hidden="true"></div>
+                                <div id="interaction-rows" class="interaction-rows"></div>
+                            </div>
+                        </section>
 
                         <section class="chunk-view">
                             <header>
-                                <div><b>VFIO RANGE → IOMMU MAPPING CHUNKS</b><span id="chunk-caption">Select a captured mapping.</span></div>
+                                <div><b>ONE VFIO RANGE · IOMMU MAP RECORDS</b><span id="chunk-caption">Select a captured mapping.</span></div>
                                 <code id="chunk-count">—</code>
                             </header>
+                            <div class="range-axis"><code id="range-start">—</code><span>IOVA range</span><code id="range-end">—</code></div>
                             <div id="chunk-list" class="chunk-list"></div>
                         </section>
-
-                        <div class="address-spaces">
-                            <div><span>CPU REFERENCE</span><b>GVA → GPA → EPT → HPA</b><small>architectural context; not sampled here</small></div>
-                            <i></i>
-                            <div><span>DEVICE PATH</span><b>IOVA → VT-d → HPA</b><small>mapping installation directly observed</small></div>
-                            <p><b>HVA</b> is QEMU virtual memory. The NIC issues <b>IOVA</b>. VT-d resolves it to <b>HPA</b>.</p>
-                        </div>
-
-                        <div class="tracepoint-evidence">
-                            <span>AVAILABLE IOMMU HOOKS · SETUP INVENTORY</span>
-                            <code id="setup-tracepoints">—</code>
-                        </div>
                     </div>
                 </section>
             </div>
@@ -197,10 +156,10 @@
         <aside class="inspector panel">
             <header class="panel-head">
                 <div><h2>BOUNDARY</h2><span>SELECTED EVENT</span></div>
-                <code id="source-badge">—</code>
+                <code id="source-badge">no selection</code>
             </header>
             <div class="inspector-body">
-                <h2 class="selected-kind"><i class="trace-dot"></i><span id="event-title">Select a boundary</span></h2>
+                <h2 class="selected-kind"><i class="trace-dot"></i><span id="event-title">select a boundary</span></h2>
                 <dl id="fields" class="fields"></dl>
             </div>
             <footer class="toolbar">
@@ -211,6 +170,6 @@
         </aside>
     </section>
 </main>
-    <script src="virt-vtd.js?v=22"></script>
+    <script src="virt-vtd.js?v=26"></script>
 </body>
 </html>

@@ -20,6 +20,7 @@ JSON_WRITER_SRC := $(SHARED_DIR)/json_writer.c
 JSON_WRITER_HDR := $(SHARED_DIR)/json_writer.h
 
 OBSERVER_CFLAGS := -O2 -g -Wall -Wextra -I$(BUILD_DIR) -I$(DIR) -I$(SHARED_DIR)
+OBSERVER_LDLIBS := $(shell $(PKG_CONFIG) --static --libs libbpf)
 BPF_CFLAGS := -O2 -g -target bpf -D__TARGET_ARCH_x86 -I$(BUILD_DIR) -I$(DIR)
 
 .PHONY: all clean
@@ -39,7 +40,7 @@ $(SKEL): $(BPF_OBJ) | $(BUILD_DIR)
 	$(BPFTOOL) gen skeleton $< > $@
 
 $(OBSERVER): $(OBSERVER_SRC) $(SKEL) $(EVENT_HDR) $(JSON_WRITER_SRC) $(JSON_WRITER_HDR) | $(BUILD_DIR)
-	$(CC) $(OBSERVER_CFLAGS) -o $@ $< $(JSON_WRITER_SRC) $(shell $(PKG_CONFIG) --libs libbpf) -lelf -lz
+	$(CC) $(OBSERVER_CFLAGS) -static -o $@ $< $(JSON_WRITER_SRC) $(OBSERVER_LDLIBS)
 
 clean:
 	rm -rf $(BUILD_DIR)
