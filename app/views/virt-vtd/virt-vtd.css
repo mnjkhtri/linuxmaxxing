@@ -1079,13 +1079,17 @@ body {
     min-width: 770px;
     min-height: 0;
     position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
     overflow-y: auto;
     scrollbar-width: thin;
 }
 
 .lifeline-lines {
-    position: absolute;
-    inset: 0;
+    min-height: 100%;
+    position: relative;
+    grid-area: 1 / 1;
     z-index: 0;
     pointer-events: none;
 }
@@ -1100,6 +1104,7 @@ body {
 
 .interaction-rows {
     position: relative;
+    grid-area: 1 / 1;
     z-index: 1;
 }
 

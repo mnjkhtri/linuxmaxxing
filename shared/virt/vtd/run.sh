@@ -59,7 +59,7 @@ dispatch_to_cloudlab()
             any(.[]; .kind == "vfio_dma_map_enter") and
             any(.[]; .kind == "iommu_map") and
             any(.[]; .kind == "vfio_dma_map_exit") and
-            .[-1].state.ringbuf_dropped == 0 and
+        .[-1].state.ringbuf_dropped == 0 and
             .[-1].state.short_records == 0
     ' "$repo_root/shared/_captures/virt-vtd.eBPF.ndjson" >/dev/null || {
         echo "capture validation failed: Phase-B evidence is incomplete" >&2
@@ -68,11 +68,14 @@ dispatch_to_cloudlab()
     jq -e -s '
             .[0].kind == "capture_meta" and
             .[-1].kind == "capture_summary" and
+            any(.[]; .kind == "guest_ixgbe_run_loopback_entry") and
             any(.[]; .kind == "guest_ixgbe_xmit_entry") and
             any(.[]; .kind == "guest_dma_map_exit") and
-            any(.[]; .kind == "guest_ixgbe_tx_map_exit" and .event_info.result == 0) and
+            any(.[]; .kind == "guest_ixgbe_xmit_exit" and .event_info.result == 0) and
             any(.[]; .kind == "guest_ixgbe_clean_exit" and .state.dma.completed_descriptors >= 64) and
             any(.[]; .kind == "guest_ixgbe_run_loopback_exit" and .event_info.result == 0) and
+            ([.[] | select(.kind == "guest_irq_handler_entry")] | length) > 1 and
+            ([.[] | select(.kind == "guest_irq_handler_exit")] | length) == ([.[] | select(.kind == "guest_irq_handler_entry")] | length) and
             .[-1].state.ringbuf_dropped == 0 and
             .[-1].state.short_records == 0
     ' "$repo_root/shared/_captures/virt-vtd.guest.ndjson" >/dev/null || {
@@ -649,11 +652,14 @@ GUEST
     jq -e -s '
         .[0].kind == "capture_meta" and
         .[-1].kind == "capture_summary" and
+        any(.[]; .kind == "guest_ixgbe_run_loopback_entry") and
         any(.[]; .kind == "guest_ixgbe_xmit_entry") and
         any(.[]; .kind == "guest_dma_map_exit") and
-        any(.[]; .kind == "guest_ixgbe_tx_map_exit" and .event_info.result == 0) and
+        any(.[]; .kind == "guest_ixgbe_xmit_exit" and .event_info.result == 0) and
         any(.[]; .kind == "guest_ixgbe_clean_exit" and .state.dma.completed_descriptors >= 64) and
         any(.[]; .kind == "guest_ixgbe_run_loopback_exit" and .event_info.result == 0) and
+        ([.[] | select(.kind == "guest_irq_handler_entry")] | length) > 1 and
+        ([.[] | select(.kind == "guest_irq_handler_exit")] | length) == ([.[] | select(.kind == "guest_irq_handler_entry")] | length) and
         .[-1].state.ringbuf_dropped == 0 and
         .[-1].state.short_records == 0
     ' "$guest_capture" >/dev/null || {

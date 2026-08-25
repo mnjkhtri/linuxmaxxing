@@ -105,6 +105,10 @@ struct guest_dma_call {
     __u32 capture;
 };
 
+struct guest_irq_state {
+    char action[VTD_ACTION_NAME_LEN];
+};
+
 const volatile char target_interface[VTD_COMM_LEN];
 
 struct {
@@ -162,6 +166,13 @@ struct {
     __type(key, __u64);
     __type(value, struct guest_dma_call);
 } guest_dma_calls SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 256);
+    __type(key, __u64);
+    __type(value, struct guest_irq_state);
+} guest_active_irqs SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
@@ -739,47 +750,6 @@ int host_kvm_mmio(struct trace_event_raw_kvm_mmio *context)
     return 0;
 }
 
-SEC("kprobe/ixgbe_diag_test")
-int BPF_KPROBE(guest_diag_entry)
-{
-    struct vtd_event *event;
-
-    if (!claim_guest_once(0))
-        return 0;
-    event = reserve_unfiltered_event(VTD_EVENT_GUEST_DIAG_ENTRY);
-    if (event)
-        bpf_ringbuf_submit(event, 0);
-    return 0;
-}
-
-SEC("kprobe/ixgbe_loopback_test")
-int BPF_KPROBE(guest_loopback_entry)
-{
-    struct vtd_event *event;
-
-    if (!claim_guest_once(1))
-        return 0;
-    event = reserve_unfiltered_event(VTD_EVENT_GUEST_LOOPBACK_ENTRY);
-    if (event)
-        bpf_ringbuf_submit(event, 0);
-    return 0;
-}
-
-SEC("kretprobe/ixgbe_loopback_test")
-int BPF_KRETPROBE(guest_loopback_exit, long result)
-{
-    struct vtd_event *event;
-
-    if (!claim_guest_once(2))
-        return 0;
-    event = reserve_unfiltered_event(VTD_EVENT_GUEST_LOOPBACK_EXIT);
-    if (!event)
-        return 0;
-    event->event_info.result = result;
-    bpf_ringbuf_submit(event, 0);
-    return 0;
-}
-
 SEC("kprobe/ixgbe_run_loopback_test")
 int BPF_KPROBE(guest_run_entry)
 {
@@ -788,7 +758,7 @@ int BPF_KPROBE(guest_run_entry)
     struct vtd_event *event;
 
     bpf_map_update_elem(&guest_loopback_active, &key, &enabled, BPF_ANY);
-    if (!claim_guest_once(3))
+    if (!claim_guest_once(0))
         return 0;
     event = reserve_unfiltered_event(VTD_EVENT_GUEST_RUN_ENTRY);
     if (event)
@@ -804,7 +774,7 @@ int BPF_KRETPROBE(guest_run_exit, long result)
     struct vtd_event *event;
 
     bpf_map_update_elem(&guest_loopback_active, &key, &disabled, BPF_ANY);
-    if (!claim_guest_once(4))
+    if (!claim_guest_once(1))
         return 0;
     event = reserve_unfiltered_event(VTD_EVENT_GUEST_RUN_EXIT);
     if (!event)
@@ -814,36 +784,20 @@ int BPF_KRETPROBE(guest_run_exit, long result)
     return 0;
 }
 
-SEC("kprobe/ixgbe_tx_map")
-int BPF_KPROBE(guest_tx_map_entry, void *ring, void *first, unsigned int header_length)
+SEC("kprobe/ixgbe_xmit_frame_ring")
+int BPF_KPROBE(guest_xmit_entry, struct sk_buff *skb, void *adapter, void *ring)
 {
     __u64 key = bpf_get_current_pid_tgid();
     struct guest_path_state path = {};
     struct vtd_event *event;
 
-    (void)ring;
-    (void)first;
-    (void)header_length;
-    if (!guest_loopback_is_active())
-        return 0;
-    path.capture_tx = claim_guest_once(5);
-    bpf_map_update_elem(&guest_paths, &key, &path, BPF_ANY);
-    if (!path.capture_tx)
-        return 0;
-    event = reserve_unfiltered_event(VTD_EVENT_GUEST_TX_MAP_ENTRY);
-    if (event)
-        bpf_ringbuf_submit(event, 0);
-    return 0;
-}
-
-SEC("kprobe/ixgbe_xmit_frame_ring")
-int BPF_KPROBE(guest_xmit_entry, struct sk_buff *skb, void *adapter, void *ring)
-{
-    struct vtd_event *event;
-
     (void)adapter;
     (void)ring;
-    if (!guest_loopback_is_active() || !claim_guest_once(12))
+    if (!guest_loopback_is_active())
+        return 0;
+    path.capture_tx = claim_guest_once(2);
+    bpf_map_update_elem(&guest_paths, &key, &path, BPF_ANY);
+    if (!path.capture_tx)
         return 0;
     event = reserve_unfiltered_event(VTD_EVENT_GUEST_XMIT_ENTRY);
     if (!event)
@@ -865,7 +819,7 @@ int BPF_KPROBE(guest_dma_map_entry, void *device, void *page, unsigned long offs
     (void)page;
     (void)offset;
     (void)attrs;
-    if (!path || !path->capture_tx || !claim_guest_once(6))
+    if (!path || !path->capture_tx || !claim_guest_once(3))
         return 0;
     call.size = size;
     call.direction = direction;
@@ -900,15 +854,15 @@ int BPF_KRETPROBE(guest_dma_map_exit, unsigned long long dma_address)
     return 0;
 }
 
-SEC("kretprobe/ixgbe_tx_map")
-int BPF_KRETPROBE(guest_tx_map_exit, long result)
+SEC("kretprobe/ixgbe_xmit_frame_ring")
+int BPF_KRETPROBE(guest_xmit_exit, long result)
 {
     __u64 key = bpf_get_current_pid_tgid();
     struct guest_path_state *path = bpf_map_lookup_elem(&guest_paths, &key);
     struct vtd_event *event;
 
     if (path && path->capture_tx) {
-        event = reserve_unfiltered_event(VTD_EVENT_GUEST_TX_MAP_EXIT);
+        event = reserve_unfiltered_event(VTD_EVENT_GUEST_XMIT_EXIT);
         if (event) {
             event->event_info.result = result;
             bpf_ringbuf_submit(event, 0);
@@ -925,7 +879,7 @@ int BPF_KPROBE(guest_clean_entry)
     struct guest_path_state path = {};
     struct vtd_event *event;
 
-    path.capture_clean = claim_guest_once(7);
+    path.capture_clean = claim_guest_once(4);
     bpf_map_update_elem(&guest_paths, &key, &path, BPF_ANY);
     if (!path.capture_clean)
         return 0;
@@ -958,21 +912,21 @@ int BPF_KPROBE(guest_dma_unmap, void *device, unsigned long long dma_address, un
 {
     (void)device;
     (void)attrs;
-    return emit_guest_dma_boundary(VTD_EVENT_GUEST_DMA_UNMAP, dma_address, size, direction, 8);
+    return emit_guest_dma_boundary(VTD_EVENT_GUEST_DMA_UNMAP, dma_address, size, direction, 5);
 }
 
 SEC("kprobe/dma_sync_single_for_cpu")
 int BPF_KPROBE(guest_dma_sync_cpu, void *device, unsigned long long dma_address, unsigned long size, unsigned int direction)
 {
     (void)device;
-    return emit_guest_dma_boundary(VTD_EVENT_GUEST_DMA_SYNC_CPU, dma_address, size, direction, 9);
+    return emit_guest_dma_boundary(VTD_EVENT_GUEST_DMA_SYNC_CPU, dma_address, size, direction, 6);
 }
 
 SEC("kprobe/dma_sync_single_for_device")
 int BPF_KPROBE(guest_dma_sync_device, void *device, unsigned long long dma_address, unsigned long size, unsigned int direction)
 {
     (void)device;
-    return emit_guest_dma_boundary(VTD_EVENT_GUEST_DMA_SYNC_DEVICE, dma_address, size, direction, 10);
+    return emit_guest_dma_boundary(VTD_EVENT_GUEST_DMA_SYNC_DEVICE, dma_address, size, direction, 7);
 }
 
 SEC("kretprobe/ixgbe_clean_test_rings")
@@ -997,19 +951,42 @@ int BPF_KRETPROBE(guest_clean_exit, long result)
 SEC("tracepoint/irq/irq_handler_entry")
 int guest_irq_entry(struct trace_event_raw_irq_handler_entry *context)
 {
-    char action[VTD_ACTION_NAME_LEN] = {};
+    struct guest_irq_state state = {};
     struct vtd_event *event;
+    __u64 key;
     __u32 offset;
 
     offset = context->__data_loc_name & 0xffff;
-    bpf_probe_read_str(action, sizeof(action), (void *)context + offset);
-    if (!guest_irq_name_matches(action) || !claim_guest_once(11))
+    bpf_probe_read_str(state.action, sizeof(state.action), (void *)context + offset);
+    if (!guest_irq_name_matches(state.action))
         return 0;
+    key = ((__u64)bpf_get_smp_processor_id() << 32) | (__u32)context->irq;
     event = reserve_unfiltered_event(VTD_EVENT_GUEST_IRQ_ENTRY);
     if (!event)
         return 0;
     event->state.irq = context->irq;
-    __builtin_memcpy(event->state.action, action, sizeof(action));
+    __builtin_memcpy(event->state.action, state.action, sizeof(state.action));
     bpf_ringbuf_submit(event, 0);
+    bpf_map_update_elem(&guest_active_irqs, &key, &state, BPF_ANY);
+    return 0;
+}
+
+SEC("tracepoint/irq/irq_handler_exit")
+int guest_irq_exit(struct trace_event_raw_irq_handler_exit *context)
+{
+    __u64 key = ((__u64)bpf_get_smp_processor_id() << 32) | (__u32)context->irq;
+    struct guest_irq_state *state = bpf_map_lookup_elem(&guest_active_irqs, &key);
+    struct vtd_event *event;
+
+    if (!state)
+        return 0;
+    event = reserve_unfiltered_event(VTD_EVENT_GUEST_IRQ_EXIT);
+    if (event) {
+        event->event_info.result = context->ret;
+        event->state.irq = context->irq;
+        __builtin_memcpy(event->state.action, state->action, sizeof(event->state.action));
+        bpf_ringbuf_submit(event, 0);
+    }
+    bpf_map_delete_elem(&guest_active_irqs, &key);
     return 0;
 }

@@ -14,7 +14,7 @@
 #include "vtd.skel.h"
 #include "vtd_event.h"
 
-#define VTD_SCHEMA_VERSION 4
+#define VTD_SCHEMA_VERSION 5
 #define MAX_LINKS 40
 
 enum capture_mode {
@@ -35,17 +35,19 @@ struct capture_features {
     bool kvm_msi_route;
     bool kvm_apic_accept;
     bool kvm_mmio;
-    bool guest_diag;
-    bool guest_loopback;
-    bool guest_run_loopback;
-    bool guest_xmit;
-    bool guest_tx_map;
-    bool guest_dma_map;
-    bool guest_clean;
+    bool guest_run_entry;
+    bool guest_run_exit;
+    bool guest_xmit_entry;
+    bool guest_xmit_exit;
+    bool guest_dma_map_entry;
+    bool guest_dma_map_exit;
+    bool guest_clean_entry;
+    bool guest_clean_exit;
     bool guest_dma_unmap;
     bool guest_dma_sync_cpu;
     bool guest_dma_sync_device;
-    bool guest_irq;
+    bool guest_irq_entry;
+    bool guest_irq_exit;
 };
 
 static volatile sig_atomic_t stop_requested;
@@ -140,26 +142,18 @@ static const char *event_name(const struct vtd_event *event)
         return "kvm_apic_accept_irq";
     case VTD_EVENT_KVM_MMIO:
         return "kvm_mmio";
-    case VTD_EVENT_GUEST_DIAG_ENTRY:
-        return "guest_ixgbe_diag_entry";
-    case VTD_EVENT_GUEST_LOOPBACK_ENTRY:
-        return "guest_ixgbe_loopback_entry";
-    case VTD_EVENT_GUEST_LOOPBACK_EXIT:
-        return "guest_ixgbe_loopback_exit";
     case VTD_EVENT_GUEST_RUN_ENTRY:
         return "guest_ixgbe_run_loopback_entry";
     case VTD_EVENT_GUEST_RUN_EXIT:
         return "guest_ixgbe_run_loopback_exit";
     case VTD_EVENT_GUEST_XMIT_ENTRY:
         return "guest_ixgbe_xmit_entry";
-    case VTD_EVENT_GUEST_TX_MAP_ENTRY:
-        return "guest_ixgbe_tx_map_entry";
     case VTD_EVENT_GUEST_DMA_MAP_ENTRY:
         return "guest_dma_map_entry";
     case VTD_EVENT_GUEST_DMA_MAP_EXIT:
         return "guest_dma_map_exit";
-    case VTD_EVENT_GUEST_TX_MAP_EXIT:
-        return "guest_ixgbe_tx_map_exit";
+    case VTD_EVENT_GUEST_XMIT_EXIT:
+        return "guest_ixgbe_xmit_exit";
     case VTD_EVENT_GUEST_CLEAN_ENTRY:
         return "guest_ixgbe_clean_entry";
     case VTD_EVENT_GUEST_DMA_UNMAP:
@@ -172,6 +166,8 @@ static const char *event_name(const struct vtd_event *event)
         return "guest_ixgbe_clean_exit";
     case VTD_EVENT_GUEST_IRQ_ENTRY:
         return "guest_irq_handler_entry";
+    case VTD_EVENT_GUEST_IRQ_EXIT:
+        return "guest_irq_handler_exit";
     default:
         return "unknown";
     }
@@ -214,26 +210,18 @@ static const char *event_hook(const struct vtd_event *event)
         return "kvm:kvm_apic_accept_irq";
     case VTD_EVENT_KVM_MMIO:
         return "kvm:kvm_mmio";
-    case VTD_EVENT_GUEST_DIAG_ENTRY:
-        return "kprobe:ixgbe_diag_test";
-    case VTD_EVENT_GUEST_LOOPBACK_ENTRY:
-        return "kprobe:ixgbe_loopback_test";
-    case VTD_EVENT_GUEST_LOOPBACK_EXIT:
-        return "kretprobe:ixgbe_loopback_test";
     case VTD_EVENT_GUEST_RUN_ENTRY:
         return "kprobe:ixgbe_run_loopback_test";
     case VTD_EVENT_GUEST_RUN_EXIT:
         return "kretprobe:ixgbe_run_loopback_test";
     case VTD_EVENT_GUEST_XMIT_ENTRY:
         return "kprobe:ixgbe_xmit_frame_ring";
-    case VTD_EVENT_GUEST_TX_MAP_ENTRY:
-        return "kprobe:ixgbe_tx_map";
     case VTD_EVENT_GUEST_DMA_MAP_ENTRY:
         return "kprobe:dma_map_page_attrs";
     case VTD_EVENT_GUEST_DMA_MAP_EXIT:
         return "kretprobe:dma_map_page_attrs";
-    case VTD_EVENT_GUEST_TX_MAP_EXIT:
-        return "kretprobe:ixgbe_tx_map";
+    case VTD_EVENT_GUEST_XMIT_EXIT:
+        return "kretprobe:ixgbe_xmit_frame_ring";
     case VTD_EVENT_GUEST_CLEAN_ENTRY:
         return "kprobe:ixgbe_clean_test_rings";
     case VTD_EVENT_GUEST_DMA_UNMAP:
@@ -246,6 +234,8 @@ static const char *event_hook(const struct vtd_event *event)
         return "kretprobe:ixgbe_clean_test_rings";
     case VTD_EVENT_GUEST_IRQ_ENTRY:
         return "irq:irq_handler_entry";
+    case VTD_EVENT_GUEST_IRQ_EXIT:
+        return "irq:irq_handler_exit";
     default:
         return event->event_info.kind == VTD_EVENT_IOCTL_EXIT ? "syscalls:sys_exit_ioctl" : "syscalls:sys_enter_ioctl";
     }
@@ -296,17 +286,19 @@ static int emit_meta(const struct capture_features *features)
     json_bool(&writer, "kvm_msi_route", features->kvm_msi_route);
     json_bool(&writer, "kvm_apic_accept", features->kvm_apic_accept);
     json_bool(&writer, "kvm_mmio", features->kvm_mmio);
-    json_bool(&writer, "guest_diag", features->guest_diag);
-    json_bool(&writer, "guest_loopback", features->guest_loopback);
-    json_bool(&writer, "guest_run_loopback", features->guest_run_loopback);
-    json_bool(&writer, "guest_xmit", features->guest_xmit);
-    json_bool(&writer, "guest_tx_map", features->guest_tx_map);
-    json_bool(&writer, "guest_dma_map", features->guest_dma_map);
-    json_bool(&writer, "guest_clean", features->guest_clean);
+    json_bool(&writer, "guest_run_entry", features->guest_run_entry);
+    json_bool(&writer, "guest_run_exit", features->guest_run_exit);
+    json_bool(&writer, "guest_xmit_entry", features->guest_xmit_entry);
+    json_bool(&writer, "guest_xmit_exit", features->guest_xmit_exit);
+    json_bool(&writer, "guest_dma_map_entry", features->guest_dma_map_entry);
+    json_bool(&writer, "guest_dma_map_exit", features->guest_dma_map_exit);
+    json_bool(&writer, "guest_clean_entry", features->guest_clean_entry);
+    json_bool(&writer, "guest_clean_exit", features->guest_clean_exit);
     json_bool(&writer, "guest_dma_unmap", features->guest_dma_unmap);
     json_bool(&writer, "guest_dma_sync_cpu", features->guest_dma_sync_cpu);
     json_bool(&writer, "guest_dma_sync_device", features->guest_dma_sync_device);
-    json_bool(&writer, "guest_irq", features->guest_irq);
+    json_bool(&writer, "guest_irq_entry", features->guest_irq_entry);
+    json_bool(&writer, "guest_irq_exit", features->guest_irq_exit);
     json_object_end(&writer);
     json_object_end(&writer);
     json_object_end(&writer);
@@ -371,7 +363,7 @@ static int emit_record(void *ctx, void *data, size_t size)
         json_u32(&writer, "completed_descriptors", event->state.count);
         json_object_end(&writer);
     }
-    if ((event->event_info.kind >= VTD_EVENT_VFIO_MSI_ENTRY && event->event_info.kind <= VTD_EVENT_KVM_APIC_ACCEPT) || event->event_info.kind == VTD_EVENT_GUEST_IRQ_ENTRY) {
+    if ((event->event_info.kind >= VTD_EVENT_VFIO_MSI_ENTRY && event->event_info.kind <= VTD_EVENT_KVM_APIC_ACCEPT) || (event->event_info.kind == VTD_EVENT_GUEST_IRQ_ENTRY || event->event_info.kind == VTD_EVENT_GUEST_IRQ_EXIT)) {
         json_object_begin_field(&writer, "interrupt");
         json_u32(&writer, "irq", event->state.irq);
         json_u32(&writer, "vector", event->state.vector);
@@ -503,24 +495,20 @@ static int attach_host_programs(struct vtd_bpf *skeleton, struct bpf_link **link
 
 static int attach_guest_programs(struct vtd_bpf *skeleton, struct bpf_link **links, unsigned int *link_count, struct capture_features *features)
 {
-    links[(*link_count)++] = attach_optional(skeleton->progs.guest_diag_entry, false, "ixgbe_diag_test", &features->guest_diag);
-    links[(*link_count)++] = attach_optional(skeleton->progs.guest_loopback_entry, false, "ixgbe_loopback_test", &features->guest_loopback);
-    links[(*link_count)++] = attach_optional(skeleton->progs.guest_loopback_exit, true, "ixgbe_loopback_test", &features->guest_loopback);
-    links[(*link_count)++] = attach_optional(skeleton->progs.guest_run_entry, false, "ixgbe_run_loopback_test", &features->guest_run_loopback);
-    links[(*link_count)++] = attach_optional(skeleton->progs.guest_run_exit, true, "ixgbe_run_loopback_test", &features->guest_run_loopback);
-    links[(*link_count)++] = attach_optional(skeleton->progs.guest_xmit_entry, false, "ixgbe_xmit_frame_ring", &features->guest_xmit);
-    links[(*link_count)++] = attach_optional(skeleton->progs.guest_tx_map_entry, false, "ixgbe_tx_map", &features->guest_tx_map);
-    links[(*link_count)++] = attach_optional(skeleton->progs.guest_tx_map_exit, true, "ixgbe_tx_map", &features->guest_tx_map);
-    links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_map_entry, false, "dma_map_page_attrs", &features->guest_dma_map);
-    links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_map_exit, true, "dma_map_page_attrs", &features->guest_dma_map);
-    links[(*link_count)++] = attach_optional_symbol_pair(skeleton->progs.guest_clean_entry, false, "ixgbe_clean_test_rings.constprop.0", "ixgbe_clean_test_rings", &features->guest_clean);
-    links[(*link_count)++] = attach_optional_symbol_pair(skeleton->progs.guest_clean_exit, true, "ixgbe_clean_test_rings.constprop.0", "ixgbe_clean_test_rings", &features->guest_clean);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_run_entry, false, "ixgbe_run_loopback_test", &features->guest_run_entry);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_run_exit, true, "ixgbe_run_loopback_test", &features->guest_run_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_xmit_entry, false, "ixgbe_xmit_frame_ring", &features->guest_xmit_entry);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_xmit_exit, true, "ixgbe_xmit_frame_ring", &features->guest_xmit_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_map_entry, false, "dma_map_page_attrs", &features->guest_dma_map_entry);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_map_exit, true, "dma_map_page_attrs", &features->guest_dma_map_exit);
+    links[(*link_count)++] = attach_optional_symbol_pair(skeleton->progs.guest_clean_entry, false, "ixgbe_clean_test_rings.constprop.0", "ixgbe_clean_test_rings", &features->guest_clean_entry);
+    links[(*link_count)++] = attach_optional_symbol_pair(skeleton->progs.guest_clean_exit, true, "ixgbe_clean_test_rings.constprop.0", "ixgbe_clean_test_rings", &features->guest_clean_exit);
     links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_unmap, false, "dma_unmap_page_attrs", &features->guest_dma_unmap);
     links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_sync_cpu, false, "dma_sync_single_for_cpu", &features->guest_dma_sync_cpu);
     links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_sync_device, false, "dma_sync_single_for_device", &features->guest_dma_sync_device);
-    links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_irq_entry, &features->guest_irq);
-    if (!features->guest_diag || !features->guest_loopback || !features->guest_run_loopback || !features->guest_xmit ||
-        !features->guest_tx_map || !features->guest_dma_map || !features->guest_clean || !features->guest_irq)
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_irq_entry, &features->guest_irq_entry);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_irq_exit, &features->guest_irq_exit);
+    if (!features->guest_run_entry || !features->guest_run_exit || !features->guest_xmit_entry || !features->guest_xmit_exit || !features->guest_dma_map_entry || !features->guest_dma_map_exit || !features->guest_clean_entry || !features->guest_clean_exit || !features->guest_irq_entry || !features->guest_irq_exit)
         return -ENOENT;
     return 0;
 }
