@@ -67,6 +67,87 @@ enum qedu_dma_stage
 	QEDU_DMA_FROM_DEVICE,
 };
 
+/* Stable numeric values carried by qedu trace events. */
+enum qedu_io_engine
+{
+	QEDU_ENGINE_NONE,
+	QEDU_ENGINE_FACTORIAL,
+	QEDU_ENGINE_DMA,
+};
+
+enum qedu_cpu_buffer_operation
+{
+	QEDU_BUFFER_COPY_FROM_USER,
+	QEDU_BUFFER_CLEAR_FOR_DMA_RETURN,
+	QEDU_BUFFER_COPY_TO_USER,
+};
+
+enum qedu_file_operation
+{
+	QEDU_FILE_OPEN,
+	QEDU_FILE_READ,
+	QEDU_FILE_WRITE,
+	QEDU_FILE_RELEASE,
+};
+
+enum qedu_file_phase
+{
+	QEDU_FILE_ENTER,
+	QEDU_FILE_EXIT,
+};
+
+enum qedu_dma_stage_reason
+{
+	QEDU_STAGE_SUBMIT,
+	QEDU_STAGE_ADVANCE_WORK,
+	QEDU_STAGE_FINISH_WORK,
+	QEDU_STAGE_SIGNAL,
+	QEDU_STAGE_TIMEOUT,
+};
+
+enum qedu_dma_direction
+{
+	QEDU_DMA_DIR_TO_DEVICE,
+	QEDU_DMA_DIR_FROM_DEVICE,
+};
+
+enum qedu_dma_address_space
+{
+	QEDU_ADDR_DMA,
+	QEDU_ADDR_EDU_LOCAL,
+};
+
+enum qedu_dma_work_kind
+{
+	QEDU_WORK_NONE,
+	QEDU_WORK_ADVANCE,
+	QEDU_WORK_FINISH,
+};
+
+enum qedu_wait_phase
+{
+	QEDU_WAIT_BEGIN,
+	QEDU_WAIT_END,
+};
+
+enum qedu_probe_stage
+{
+	QEDU_PROBE_BEGIN,
+	QEDU_DEVICE_STATE_READY,
+	QEDU_PCI_ENABLED,
+	QEDU_BAR_REGIONS_CLAIMED,
+	QEDU_BAR0_MAPPED,
+	QEDU_IRQ_REGISTERED,
+	QEDU_DMA_MASK_CONFIGURED,
+	QEDU_BUS_MASTER_ENABLED,
+	QEDU_DMA_BUFFER_READY,
+	QEDU_WORKQUEUE_READY,
+	QEDU_CHARDEV_PUBLISHED,
+	QEDU_SYSFS_PUBLISHED,
+	QEDU_DEBUGFS_PUBLISHED,
+	QEDU_PROBE_READY,
+};
+
 /*
  * Per-device state shared by the PCI, character-device, IRQ, DMA, sysfs, and debugfs layers.
  */
@@ -76,24 +157,28 @@ struct dentry;
 
 struct qedu_dev
 {
-	struct pci_dev *pdev;			/* Bound PCI function. */
-	void __iomem *bar0;				/* Kernel mapping of BAR0 MMIO. */
-	void *dma_cpu_addr;			/* CPU virtual address of the coherent guest-RAM buffer. */
-	dma_addr_t dma_addr;			/* Device DMA address of the same guest-RAM buffer. */
-	size_t result_size;				/* Valid bytes currently available to read(). */
-	int tx;							/* Bytes returned to userspace. */
-	int rx;							/* Bytes accepted from userspace. */
-	unsigned int timeout_ms;		/* Hardware completion wait timeout. */
-	struct mutex lock;				/* Serializes jobs and shared result state. */
-	wait_queue_head_t job_wait;		/* Waiters sleeping for completion IRQs. */
-	unsigned long completed_events; /* Completion bits set by the IRQ handler. */
-	struct workqueue_struct *dma_wq; /* Dedicated process-context bottom half for DMA completion. */
+	struct pci_dev *pdev;				 /* Bound PCI function. */
+	void __iomem *bar0;					 /* Kernel mapping of BAR0 MMIO. */
+	void *dma_cpu_addr;					 /* CPU virtual address of the coherent guest-RAM buffer. */
+	dma_addr_t dma_addr;				 /* Device DMA address of the same guest-RAM buffer. */
+	size_t result_size;					 /* Valid bytes currently available to read(). */
+	int tx;								 /* Bytes returned to userspace. */
+	int rx;								 /* Bytes accepted from userspace. */
+	unsigned int timeout_ms;			 /* Hardware completion wait timeout. */
+	struct mutex lock;					 /* Serializes jobs and shared result state. */
+	wait_queue_head_t job_wait;			 /* Waiters sleeping for completion IRQs. */
+	unsigned long completed_events;		 /* Completion bits set by the IRQ handler. */
+	struct workqueue_struct *dma_wq;	 /* Dedicated process-context bottom half for DMA completion. */
 	struct work_struct dma_advance_work; /* First IRQ: start the return transfer. */
-	struct work_struct dma_finish_work;  /* Second IRQ: complete the echo and wake userspace. */
-	atomic_t dma_stage;				/* Current direction in the two-IRQ DMA echo state machine. */
-	size_t dma_len;					/* Byte count reused when the worker starts the return transfer. */
-	struct miscdevice miscdev;		/* /dev/qedu and sysfs registration. */
-	struct dentry *debugfs_dir;		/* /sys/kernel/debug/qedu root. */
+	struct work_struct dma_finish_work;	 /* Second IRQ: complete the echo and wake userspace. */
+	atomic_t dma_stage;					 /* Current direction in the two-IRQ DMA echo state machine. */
+	size_t dma_len;						 /* Byte count reused when the worker starts the return transfer. */
+	atomic64_t next_io_id;				 /* Instrumentation sequence assigned to each write(2). */
+	u64 active_io_id;					 /* Operation currently allowed to reach the IRQ handler. */
+	u64 result_io_id;					 /* Operation that produced the readable result buffer. */
+	enum qedu_io_engine active_engine;	 /* Hardware engine expected by the shared IRQ handler. */
+	struct miscdevice miscdev;			 /* /dev/qedu and sysfs registration. */
+	struct dentry *debugfs_dir;			 /* /sys/kernel/debug/qedu root. */
 };
 
 int qedu_chrdev_init(struct qedu_dev *qdev);
@@ -110,9 +195,9 @@ void qedu_raise_test_irq(struct qedu_dev *qdev);
 int qedu_dma_init(struct qedu_dev *qdev);
 void qedu_dma_exit(struct qedu_dev *qdev);
 int qedu_dma_smoke_test(struct qedu_dev *qdev);
-int qedu_dma_echo_job(struct qedu_dev *qdev, size_t len);
+int qedu_dma_echo_job(struct qedu_dev *qdev, size_t len, u64 io_id);
 void qedu_dma_irq_complete(struct qedu_dev *qdev);
 
-int qedu_factorial_job(struct qedu_dev *qdev, u32 input, u32 *result);
+int qedu_factorial_job(struct qedu_dev *qdev, u32 input, u32 *result, u64 io_id);
 
 #endif /* QEDU_H */

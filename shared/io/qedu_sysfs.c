@@ -31,7 +31,7 @@ static struct qedu_dev *qedu_from_sysfs(struct device *dev)
 	struct miscdevice *miscdev = dev_get_drvdata(dev);
 
 	/*
-	 * misc_register() stored the embedded miscdevice as this device's driver * data. Recover its enclosing qedu_dev just as qedu_open() does.
+	 * misc_register() stored the embedded miscdevice as this device's driver data. Recover its enclosing qedu_dev just as qedu_open() does.
 	 */
 	return container_of(miscdev, struct qedu_dev, miscdev);
 }

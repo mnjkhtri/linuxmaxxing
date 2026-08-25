@@ -6,7 +6,9 @@ SHARED_DIR := ..
 JSON_WRITER_SRC := $(SHARED_DIR)/json_writer.c
 JSON_WRITER_HDR := $(SHARED_DIR)/json_writer.h
 
+obj-m += qedu_trace.o
 obj-m += qedu.o
+ccflags-y += -I$(src)
 qedu-y := qedu_main.o qedu_chrdev.o qedu_irq.o qedu_dma.o qedu_sysfs.o qedu_debugfs.o
 
 .PHONY: all workload clean

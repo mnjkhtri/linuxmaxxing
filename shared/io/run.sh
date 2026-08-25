@@ -4,27 +4,24 @@ set -Eeuo pipefail
 # =============================================================================
 # CAPTURE MODEL
 #
-# One workload_qedu run feeds all three capture artifacts:
+# One workload_qedu run preserves three independent capture artifacts.
 #
-#   io-Phases.ndjson   workload structured phase records (source=workload)
-#   io-Trace.txt       raw tracefs QEDU event activity
-#   io-Report.txt      final post-workload driver/device state (sysfs+debugfs)
+# - io-Phases.ndjson stores workload markers on CLOCK_MONOTONIC.
+# - io-Trace.txt stores raw tracefs records, including qedu semantic events.
+# - io-Report.txt stores final resource state and trace-loss counters.
 #
-# The workload emits NDJSON phase records to stdout with sequence and monotonic
-# time_ns; structured phases are authoritative.  The private-instance trace is
-# a separate raw kernel-side source correlated to phases by time.
+# Workload and tracefs timestamps share CLOCK_MONOTONIC.
+# The UI reads these three artifacts independently and correlates them in memory.
 #
-# This runner follows the scheduler/memory lifecycle pattern:
-#   - private tracefs instance (never touches the global one)
-#   - monotone clock, verified as [mono] before any capture
-#   - pre-module-load tracing so vector_alloc/vector_config evidence at probe
-#     is captured before qedu.ko is inserted
-#   - workload stops itself so PID filters are installed before any device I/O
-#   - structured cleanup on every exit path; the module is left loaded on
-#     success so the driver state stays inspectable
+# The runner uses a private tracefs instance without touching global tracing.
+# It verifies the monotonic trace clock before capture.
+# It starts tracing before module insertion to observe vector allocation at probe.
+# It stops the workload before I/O so PID filters can be installed safely.
+# Cleanup handles every exit path and leaves the module loaded after success.
 # =============================================================================
 
 MODULE=./qedu.ko
+TRACE_MODULE=./qedu_trace.ko
 WORKLOAD=./workload_qedu
 CAPTURE_DIR=${QEDU_CAPTURE_DIR:-../_captures}
 PHASES_CAPTURE=${CAPTURE_DIR}/io-Phases.ndjson
@@ -36,27 +33,28 @@ TRACEFS=/sys/kernel/tracing
 INSTANCE_NAME=linuxmaxxing-io
 INSTANCE="${TRACEFS}/instances/${INSTANCE_NAME}"
 
+QEDU_BDF=
 QEDU_IRQ=
 WORKLOAD_PID=
 ORIGINAL_TIMEOUT=
 RUN_TIMEOUT=1500
 
-# Events active before qedu.ko is inserted capture probe-time vector evidence.
-# The worker lifecycle events are enabled here but pinned to the qedu_dma
-# callback symbols right after insmod resolves them.
-PRELOAD_REQUIRED=(irq/irq_handler_entry irq/irq_handler_exit
+# Probe milestones, the coherent allocation, and optional vector routing are captured before qedu insertion.
+# Workqueue events stay disabled until probe completes so unrelated setup noise is excluded.
+PRELOAD_REQUIRED=(dma/dma_alloc)
+OPTIONAL_EVENTS=(irq_vectors/vector_config irq_vectors/vector_alloc)
+RUNTIME_REQUIRED=(irq/irq_handler_entry irq/irq_handler_exit
 	workqueue/workqueue_queue_work workqueue/workqueue_activate_work
 	workqueue/workqueue_execute_start workqueue/workqueue_execute_end)
-# irq vectors are optional because some kernels expose them and others do not.
-OPTIONAL_EVENTS=(irq_vectors/vector_config irq_vectors/vector_alloc)
-# Workload events are enabled only once the workload PID is known, so their
-# filters can be installed before any device I/O and no setup noise is captured.
+QEDU_REQUIRED=(qedu/qedu_probe_stage qedu/qedu_file_op qedu/qedu_cpu_buffer_io
+	qedu/qedu_dma_stage qedu/qedu_dma_submit qedu/qedu_irq_ack
+	qedu/qedu_dma_work_queue qedu/qedu_completion_publish qedu/qedu_wait
+	qedu/qedu_factorial_submit qedu/qedu_factorial_result)
 WORKLOAD_REQUIRED=(syscalls/sys_enter_openat syscalls/sys_exit_openat
 	syscalls/sys_enter_read syscalls/sys_exit_read
 	syscalls/sys_enter_write syscalls/sys_exit_write
 	syscalls/sys_enter_close syscalls/sys_exit_close
-	sched/sched_switch sched/sched_wakeup sched/sched_waking
-	exceptions/page_fault_user)
+	sched/sched_switch sched/sched_wakeup sched/sched_waking)
 SKIPPED_EVENTS=()
 
 log()
@@ -76,12 +74,15 @@ event_ctl()
 }
 
 # -----------------------------------------------------------------------------
-# preflight: root, binaries, and a clean capture directory.
+# preflight verifies privileges, binaries, and a clean capture directory.
 # -----------------------------------------------------------------------------
 preflight()
 {
 	if [[ $(id -u) -ne 0 ]]; then
 		fail "run this inside the guest as root"
+	fi
+	if [[ ! -r ${TRACE_MODULE} ]]; then
+		fail "missing ${TRACE_MODULE}; run make -C shared/io"
 	fi
 	if [[ ! -r ${MODULE} ]]; then
 		fail "missing ${MODULE}; run make -C shared/io"
@@ -96,7 +97,7 @@ preflight()
 }
 
 # -----------------------------------------------------------------------------
-# find_device: locate the QEMU EDU PCI device and its shared IRQ.
+# find_device locates the QEMU EDU PCI function and its shared IRQ.
 # -----------------------------------------------------------------------------
 find_device()
 {
@@ -106,14 +107,15 @@ find_device()
 		[[ $(< "${device_path}/vendor") == 0x1234 ]] || continue
 		[[ $(< "${device_path}/device") == 0x11e8 ]] || continue
 		QEDU_IRQ=$(< "${device_path}/irq")
-		log "QEMU EDU device ${device_path##*/} on IRQ ${QEDU_IRQ}"
+		QEDU_BDF=${device_path##*/}
+		log "QEMU EDU device ${QEDU_BDF} on IRQ ${QEDU_IRQ}"
 		return 0
 	done
 	fail "QEMU EDU device 1234:11e8 was not found"
 }
 
 # -----------------------------------------------------------------------------
-# reset_instance: create a fresh private tracefs instance.
+# reset_instance creates a fresh private tracefs instance.
 # -----------------------------------------------------------------------------
 reset_instance()
 {
@@ -141,7 +143,7 @@ reset_instance()
 }
 
 # -----------------------------------------------------------------------------
-# enable_event: enable a tracepoint, recording unavailable optional ones.
+# enable_event enables a tracepoint and records unavailable optional events.
 # -----------------------------------------------------------------------------
 enable_event()
 {
@@ -170,17 +172,10 @@ set_filter()
 enable_header()
 {
 	local event
-	for event in "${PRELOAD_REQUIRED[@]}" "${OPTIONAL_EVENTS[@]}"; do
+	for event in "${PRELOAD_REQUIRED[@]}" "${QEDU_REQUIRED[@]}" "${OPTIONAL_EVENTS[@]}"; do
 		enable_event "${event}"
 	done
-
-	# Permanent workqueue tracepoints expose the hardirq -> worker handoff.
-	# The dedicated queue name keeps queue_work noise out.
-	set_filter workqueue/workqueue_queue_work 'workqueue == "qedu_dma"'
-
-	# QEDU IRQ evidence: only this device's shared IRQ line.
-	set_filter irq/irq_handler_entry "irq == ${QEDU_IRQ}"
-	set_filter irq/irq_handler_exit "irq == ${QEDU_IRQ}"
+	set_filter dma/dma_alloc "device == \"${QEDU_BDF}\""
 	set_filter irq_vectors/vector_config "irq == ${QEDU_IRQ}"
 	set_filter irq_vectors/vector_alloc "irq == ${QEDU_IRQ}"
 
@@ -191,9 +186,21 @@ enable_header()
 }
 
 # -----------------------------------------------------------------------------
-# enable_preload_trace + load_module: capture vector allocation/configuration
-# that happens at probe, so tracing must be live before insmod.
+# enable_preload_trace and load_module capture vector allocation at probe.
+# Tracing must therefore be active before qedu.ko is inserted.
 # -----------------------------------------------------------------------------
+load_trace_provider()
+{
+	if grep -q '^qedu ' /proc/modules; then
+		rmmod qedu
+	fi
+	if grep -q '^qedu_trace ' /proc/modules; then
+		rmmod qedu_trace
+	fi
+	insmod "${TRACE_MODULE}"
+	log "qedu_trace.ko inserted; probe tracepoints are now available"
+}
+
 enable_preload_trace()
 {
 	echo 1 > "${INSTANCE}/tracing_on"
@@ -201,16 +208,29 @@ enable_preload_trace()
 
 load_module()
 {
-	if grep -q '^qedu ' /proc/modules; then
-		rmmod qedu
-	fi
 	insmod "${MODULE}"
+	echo 0 > "${INSTANCE}/tracing_on"
 	log "qedu.ko inserted"
 }
 
+# enable_runtime_trace adds filtered IRQ and workqueue events after probe.
+# The qedu semantic events remain enabled from the preload interval.
 # -----------------------------------------------------------------------------
-# configure_module_trace_filters: resolve the two qedu_dma callback symbols and
-# pin the worker lifecycle events to those function identities.
+enable_runtime_trace()
+{
+	local event
+	for event in "${RUNTIME_REQUIRED[@]}"; do
+		enable_event "${event}"
+	done
+	set_filter irq/irq_handler_entry "irq == ${QEDU_IRQ}"
+	set_filter irq/irq_handler_exit "irq == ${QEDU_IRQ}"
+	set_filter workqueue/workqueue_queue_work 'workqueue == "qedu_dma"'
+	log "filtered runtime events enabled; qedu semantic events remain active"
+}
+
+# -----------------------------------------------------------------------------
+# configure_module_trace_filters resolves the two qedu_dma callback symbols.
+# It pins worker lifecycle events to those function identities.
 # -----------------------------------------------------------------------------
 configure_module_trace_filters()
 {
@@ -228,8 +248,8 @@ configure_module_trace_filters()
 }
 
 # -----------------------------------------------------------------------------
-# set_run_timeout: capture the driver default, override it for this run, and
-# remember the original so it can be restored on every exit path.
+# set_run_timeout overrides the driver timeout for this run.
+# It remembers the original timeout so every exit path can restore it.
 # -----------------------------------------------------------------------------
 set_run_timeout()
 {
@@ -239,8 +259,8 @@ set_run_timeout()
 }
 
 # -----------------------------------------------------------------------------
-# start_workload: trace off; the workload stops itself immediately so its PID
-# can be installed in PID-specific filters before any device I/O.
+# start_workload launches a process that stops itself before device I/O.
+# This allows PID-specific filters to be installed while tracing is disabled.
 # -----------------------------------------------------------------------------
 start_workload()
 {
@@ -258,9 +278,8 @@ start_workload()
 }
 
 # -----------------------------------------------------------------------------
-# configure_workload_filters: enable and pin PID-specific syscall, sched, and
-# fault events.  Because the workload is stopped, filters are installed before
-# any device I/O happens.
+# configure_workload_filters enables PID-specific syscall and scheduler events.
+# The stopped workload cannot perform device I/O before those filters are installed.
 # -----------------------------------------------------------------------------
 configure_workload_filters()
 {
@@ -275,12 +294,11 @@ configure_workload_filters()
 	set_filter sched/sched_switch "prev_pid == ${WORKLOAD_PID} || next_pid == ${WORKLOAD_PID} || prev_comm ~ \"kworker*\" || next_comm ~ \"kworker*\""
 	set_filter sched/sched_wakeup "pid == ${WORKLOAD_PID}"
 	set_filter sched/sched_waking "pid == ${WORKLOAD_PID}"
-	set_filter exceptions/page_fault_user "common_pid == ${WORKLOAD_PID}"
 	log "workload trace filters installed on pid ${WORKLOAD_PID}"
 }
 
 # -----------------------------------------------------------------------------
-# resume_workload: tracing on, release the workload, wait for completion.
+# resume_workload enables tracing, releases the workload, and waits for completion.
 # -----------------------------------------------------------------------------
 resume_workload()
 {
@@ -292,7 +310,7 @@ resume_workload()
 }
 
 # -----------------------------------------------------------------------------
-# restore_timeout: put the driver timeout back regardless of path.
+# restore_timeout restores the driver timeout on every exit path.
 # -----------------------------------------------------------------------------
 restore_timeout()
 {
@@ -303,7 +321,7 @@ restore_timeout()
 }
 
 # -----------------------------------------------------------------------------
-# stop_trace: flush the private instance to the raw trace capture.
+# stop_trace flushes the private instance into the raw trace capture.
 # -----------------------------------------------------------------------------
 stop_trace()
 {
@@ -313,12 +331,12 @@ stop_trace()
 }
 
 # -----------------------------------------------------------------------------
-# collect_report: final post-workload metadata + sysfs + debugfs only.
-# The workload no longer appears in the report; io-Phases.ndjson owns it.
+# collect_report stores final metadata, sysfs state, and debugfs state.
+# Workload observations remain exclusively in io-Phases.ndjson.
 # -----------------------------------------------------------------------------
 collect_report()
 {
-	local trace_clock workload_pid
+	local trace_clock workload_pid stats cpu overrun dropped entries
 	trace_clock=$(sed -n 's/.*\[\([^]]*\)\].*/\1/p' "${INSTANCE}/trace_clock")
 	workload_pid=$(sed -n 's/.*"context":{"pid":\([0-9]*\).*/\1/p' "${PHASES_CAPTURE}" | head -n 1)
 
@@ -340,67 +358,89 @@ collect_report()
 		echo
 		echo '[debugfs]'
 		cat "${DEBUGFS_DIR}/status"
+
+		echo
+		echo '[trace_stats]'
+		for stats in "${INSTANCE}"/per_cpu/cpu*/stats; do
+			[[ -r ${stats} ]] || continue
+			cpu=$(basename "$(dirname "${stats}")")
+			overrun=$(awk '$1 == "overrun:" { print $2 }' "${stats}")
+			dropped=$(awk '$1 == "dropped" && $2 == "events:" { print $3 }' "${stats}")
+			entries=$(awk '$1 == "entries:" { print $2 }' "${stats}")
+			echo "${cpu}_overrun=${overrun:-0}"
+			echo "${cpu}_dropped=${dropped:-0}"
+			echo "${cpu}_entries=${entries:-0}"
+		done
 	} > "${REPORT_CAPTURE}"
 	log "report written: ${REPORT_CAPTURE}"
 }
 
 # -----------------------------------------------------------------------------
-# validate_capture: semantic checks on the artifacts.
-# io-Phases.ndjson is authoritative and carries its own sequence and monotonic
-# time_ns.  The private-instance trace is a separate raw source; we check that
-# it carries the kernel-side evidence (qedu_dma worker handoff and the device
-# IRQ) on the same clock.
+# validate_capture performs semantic checks on every artifact.
+# io-Phases.ndjson owns workload sequence numbers and monotonic timestamps.
+# The private tracefs instance is an independent raw source on the same clock.
+# Validation requires both the qedu DMA worker handoff and the device IRQ evidence.
 # -----------------------------------------------------------------------------
 validate_capture()
 {
-	local seq
+	local factorial_irq_line factorial_submit_line file_boundary seq
 	if ! grep -q '"kind":"phase"' "${PHASES_CAPTURE}"; then
 		fail "no phase records in ${PHASES_CAPTURE}"
+	fi
+	if [[ $(grep -c '"kind":"phase"' "${PHASES_CAPTURE}") -ne 10 ]] || ! awk -F'"time_ns":' '{ split($2, part, ","); if (part[1] <= previous) exit 1; previous = part[1] }' "${PHASES_CAPTURE}"; then
+		fail "phase capture must contain exactly 10 monotonically ordered records"
 	fi
 	for seq in $(seq 1 10); do
 		if ! grep -q "\"seq\":${seq}," "${PHASES_CAPTURE}"; then
 			fail "phase record ${seq} missing"
 		fi
 	done
-	# Semantic evidence that the DMA hardirq -> worker handoff was observed.
-	if ! grep -q 'qedu_dma' "${TRACE_CAPTURE}"; then
-		fail "no qedu_dma worker activity in trace"
+	if ! grep -q 'qedu_probe_stage:.*stage=PROBE_READY' "${TRACE_CAPTURE}"; then
+		fail "no completed qedu initialization trace"
+	fi
+	if ! grep -q 'qedu_probe_stage:.*stage=DEVICE_STATE_READY api=devm_kzalloc' "${TRACE_CAPTURE}"; then
+		fail "qedu initialization trace is missing captured API names"
+	fi
+	for file_boundary in 'operation=OPEN phase=ENTER' 'operation=OPEN phase=EXIT' 'operation=READ phase=ENTER' 'operation=READ phase=EXIT' 'operation=RELEASE phase=ENTER' 'operation=RELEASE phase=EXIT'; do
+		if ! grep -q "qedu_file_op:.*${file_boundary}" "${TRACE_CAPTURE}"; then
+			fail "missing qedu file-operation boundary: ${file_boundary}"
+		fi
+	done
+	if ! grep -q 'qedu_file_op:.*operation=WRITE phase=EXIT .*engine=FACTORIAL' "${TRACE_CAPTURE}"; then
+		fail "missing factorial write return boundary"
+	fi
+	if ! grep -q 'qedu_file_op:.*operation=WRITE phase=EXIT .*engine=DMA' "${TRACE_CAPTURE}"; then
+		fail "missing DMA write return boundary"
+	fi
+	factorial_submit_line=$(awk '/qedu_factorial_submit:.*io_id=1 / { print NR; exit }' "${TRACE_CAPTURE}")
+	factorial_irq_line=$(awk '/qedu_irq_ack:.*io_id=1 .*engine=FACTORIAL/ { print NR; exit }' "${TRACE_CAPTURE}")
+	if [[ -z ${factorial_submit_line} || -z ${factorial_irq_line} || ${factorial_submit_line} -ge ${factorial_irq_line} ]]; then
+		fail "factorial capture does not order MMIO submission before IRQ completion"
+	fi
+	if ! grep -q 'dma_alloc:.*size=4096' "${TRACE_CAPTURE}"; then
+		fail "no coherent DMA allocation trace"
+	fi
+	if ! grep -q 'qedu_dma_submit:.*io_id=2 leg=0 direction=DMA_TO_DEVICE' "${TRACE_CAPTURE}" || ! grep -q 'qedu_dma_submit:.*io_id=2 leg=1 direction=DMA_FROM_DEVICE' "${TRACE_CAPTURE}"; then
+		fail "DMA capture is missing one of its two directed submissions"
+	fi
+	if ! grep -q 'qedu_irq_ack:' "${TRACE_CAPTURE}"; then
+		fail "no qedu IRQ acknowledgement tracepoints"
 	fi
 	if ! grep -q 'irq_handler_entry.*qedu' "${TRACE_CAPTURE}"; then
-		fail "no qedu IRQ handler activity in trace"
+		fail "no generic qedu IRQ handler activity"
 	fi
-
-	if command -v python3 >/dev/null 2>&1; then
-		python3 - "${PHASES_CAPTURE}" <<'PY' || fail "phase validation failed"
-import json
-import sys
-
-records = []
-with open(sys.argv[1], 'r', encoding='utf-8') as stream:
-    for line in stream:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-phases = [r for r in records if r.get('kind') == 'phase']
-assert len(phases) == 10, 'expected 10 phase records'
-assert [r['seq'] for r in phases] == list(range(1, 11)), 'phase seq must be 1..10'
-assert [r['time_ns'] for r in phases] == sorted(r['time_ns'] for r in phases), 'phase time_ns is not monotonic'
-for r in phases:
-    assert r['experiment'] == 'io' and r['source'] == 'workload', 'phase schema mismatch'
-    assert r['event_info']['action'] in ('begin', 'end'), 'bad phase action'
-print('qedu: phases valid: %d records, seq 1..10, monotonic' % len(phases))
-PY
+	if ! grep -q 'qedu_dma_work_queue:.*io_id=2 .*work_kind=ADVANCE .*queued=1' "${TRACE_CAPTURE}" || ! grep -q 'qedu_dma_work_queue:.*io_id=2 .*work_kind=FINISH .*queued=1' "${TRACE_CAPTURE}"; then
+		fail "DMA capture is missing a successful IRQ-to-workqueue handoff"
 	fi
-	log "captures validated"
+	if grep -Eq '_(overrun|dropped)=[1-9][0-9]*' "${REPORT_CAPTURE}"; then
+		fail "trace loss reported in ${REPORT_CAPTURE}"
+	fi
+	log "three independent captures validated"
 }
 
 # -----------------------------------------------------------------------------
-# cleanup: restore trace state, timeout, and any stray stopped workload on
-# every exit path.  The module is intentionally left loaded on success.
+# cleanup restores trace state, timeout state, and any stopped workload on every exit path.
+# It intentionally leaves the module loaded after a successful capture.
 # -----------------------------------------------------------------------------
 cleanup()
 {
@@ -428,9 +468,11 @@ trap cleanup EXIT HUP INT TERM
 preflight
 find_device
 reset_instance
+load_trace_provider
 enable_header
 enable_preload_trace
 load_module
+enable_runtime_trace
 configure_module_trace_filters
 set_run_timeout
 start_workload
@@ -442,4 +484,4 @@ collect_report
 validate_capture
 
 trap - EXIT HUP INT TERM
-log "done"
+log "done: ${PHASES_CAPTURE}, ${TRACE_CAPTURE}, ${REPORT_CAPTURE}"

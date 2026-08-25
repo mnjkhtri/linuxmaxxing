@@ -3,30 +3,68 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>QEDU PCI I/O flight recorder</title>
+<title>Linux PCI I/O</title>
 <link rel="stylesheet" href="../../theme.css?v=21">
-<link rel="stylesheet" href="io.css?v=3">
+<link rel="stylesheet" href="io.css?v=39">
 </head>
 <body>
-<main class="irq-lab">
-<header class="head">
-<div><div class="eyebrow">QEDU / PCI / MMIO · DMA · IRQ</div><h1>I/O <span>flight recorder</span></h1><p>MMIO BAR registers, coherent DMA, and shared INTx delivery — one qedu PCI device (QEMU EDU) traced end to end</p></div>
-<div id="status" role="status"><i class="trace-dot"></i><span>following QEDU execution…</span></div>
+<main class="io-flow">
+<header class="hero">
+<div>
+<div class="eyebrow">WRITE(2) → DRIVER DISPATCH → MMIO / DMA → INTx → COMPLETION</div>
+<h1>PCI <span>I/O</span></h1>
+<p>Follow the exact trigger, execution context, ownership, and completion path of each captured job.</p>
+</div>
+<div class="capture-status" id="capture-status"><i></i><span>loading validated capture…</span></div>
 </header>
-<section class="workbench">
-<section class="panel stage">
-<header class="panel-head"><h2>Kernel execution path</h2><div class="irq-strip"><span>PCI <b id="m-device">—</b> <small id="m-device-sub">QEMU EDU</small></span><i>|</i><span>APIC <b id="m-vector">—</b> <small id="m-vector-sub">vector allocation</small></span><i>|</i><span>IRQ <b id="m-irq">—</b> <small id="m-irq-sub">runtime entries</small></span><i>|</i><span class="cat-m">MMIO <b id="m-mmio">—</b></span><i>|</i><span class="cat-d">DMA <b id="m-dma">—</b></span><i>|</i><span class="cat-i">IRQ <b id="m-irqcat">—</b></span><i>|</i><span class="cat-s">SYSCALL <b id="m-sys">—</b></span><i>|</i><span>syscalls <b id="m-syscalls">—</b></span><i>|</i><span>sleeps <b id="m-sleeps">—</b></span><i>|</i><span>faults <b id="m-faults">—</b></span></div></header>
-<div class="overview"><svg id="timeline" viewBox="0 0 900 520" role="img" aria-label="Kernel execution events grouped by context in timestamp order"></svg></div>
-<section class="irq-evidence"><h3>I/O delivery evidence</h3><div class="irq-evidence-flow"><span class="irq-gap">MMIO · factorial</span><i>→</i><span class="irq-gap">DMA · coherent echo</span><i>→</i><b id="evidence-vector">vector —</b><i>→</i><span class="irq-gap">APIC / IDT not directly traced</span></div></section>
+
+
+<section class="workspace">
+<div class="flow-column">
+<section class="panel journey-panel">
+<header class="journey-head">
+<div class="journey-copy"><small id="journey-kicker">CAPTURED FLOW</small><h2 id="journey-title">—</h2><p id="journey-caption">—</p></div>
+<div class="flow-key"><span><i class="active-key"></i>active in this stage</span><span><i class="inferred-key"></i>configured / inferred</span><button type="button" id="prev-stage" title="Previous stage">←</button><b id="step-position">—</b><button type="button" id="next-stage" title="Next stage">→</button></div>
+</header>
+
+<nav class="step-roadmap" id="step-roadmap" aria-label="Mechanism steps"></nav>
+
+<div class="active-flow">
+<div class="sequence-diagram" id="sequence-diagram">
+<div class="sequence-head" id="sequence-head"></div>
+<div class="sequence-body" id="sequence-body"></div>
+</div>
+</div>
+
 </section>
-<aside class="panel notebook">
-<section class="inspect"><div class="inspect-type"><i class="trace-dot"></i><span id="inspect-type">event</span></div><h3 id="inspect-title">Select a trace event</h3><dl class="fields" id="fields"><dt>status</dt><dd>waiting</dd></dl></section>
-<header class="panel-head"><h2>Activities</h2><span class="sub" id="phase-summary">—</span></header>
-<div id="phase-list" class="phase-list"></div>
-<section class="device-state"><h3>Final device state</h3><div class="state-grid" id="state-grid"></div><div class="bits"><span class="bit" id="bit-factorial">bit 0 · factorial</span><span class="bit" id="bit-dma">bit 1 · DMA</span></div></section>
+
+</div>
+
+<aside class="panel inspector">
+<header class="inspect-head">
+<span class="evidence-badge" id="inspect-evidence">observed</span>
+<small id="inspect-index">select a record</small>
+<h2 id="inspect-title">Tracepoint evidence</h2>
+<code id="inspect-tracepoint">—</code>
+</header>
+<section class="proof">
+<p id="inspect-proof">Select a step or evidence record.</p>
+</section>
+<section class="resource-card">
+<h3>Resources</h3>
+<div id="resource-facts"></div>
+</section>
+<section class="context-card">
+<h3>Execution context</h3>
+<div class="context-grid" id="inspect-context"></div>
+</section>
+<section class="field-card">
+<h3>Trace fields</h3>
+<dl id="inspect-fields"></dl>
+</section>
 </aside>
 </section>
 </main>
-<script src="io.js?v=4"></script>
+<script src="io.js?v=46"></script>
 </body>
 </html>

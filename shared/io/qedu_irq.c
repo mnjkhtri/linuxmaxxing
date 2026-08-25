@@ -3,6 +3,7 @@
 #include <linux/io.h>
 
 #include "qedu.h"
+#include "qedu_trace.h"
 
 /*
  * QEMU EDU uses legacy INTx, which may share one Linux IRQ with other devices.
@@ -38,7 +39,7 @@
  *
  * This function runs as the hard-IRQ top half. It must not sleep or take
  * qdev->lock. Factorial stays as the minimal direct-wakeup example. DMA uses
- * qedu_dma_work so direction changes and final wakeup happen in process context.
+ * qedu_dma_advance_work and qedu_dma_finish_work so direction changes and the final wakeup happen in process context.
  *
  * The timeout stops broken hardware from blocking a task forever. A signal
  * may interrupt the sleep; that error is returned to the userspace syscall.
@@ -47,6 +48,10 @@
 static irqreturn_t qedu_irq_handler(int irq, void *dev_id)
 {
 	struct qedu_dev *qdev = dev_id;
+	const char *device = pci_name(qdev->pdev);
+	enum qedu_io_engine engine;
+	unsigned long bits_before;
+	u64 io_id;
 	u32 status;
 
 	status = ioread32(qdev->bar0 + QEDU_REG_IRQ_STATUS);
@@ -54,10 +59,20 @@ static irqreturn_t qedu_irq_handler(int irq, void *dev_id)
 		return IRQ_NONE;
 
 	iowrite32(status, qdev->bar0 + QEDU_REG_IRQ_ACK);
+	engine = READ_ONCE(qdev->active_engine);
+	io_id = engine == QEDU_ENGINE_NONE ? 0 : READ_ONCE(qdev->active_io_id);
+	Trace_qedu_irq_ack(device, io_id, engine, irq, status, status,
+					   atomic_read(&qdev->dma_stage));
 
 	if (status & QEDU_IRQ_FACTORIAL)
 	{
+		bits_before = READ_ONCE(qdev->completed_events);
 		set_bit(QEDU_EVENT_FACTORIAL, &qdev->completed_events);
+		Trace_qedu_completion_publish(device, io_id,
+									  QEDU_ENGINE_FACTORIAL,
+									  QEDU_EVENT_FACTORIAL,
+									  bits_before,
+									  READ_ONCE(qdev->completed_events));
 		wake_up_interruptible(&qdev->job_wait);
 	}
 
@@ -88,6 +103,8 @@ int qedu_irq_init(struct qedu_dev *qdev)
 		return ret;
 	}
 
+	Trace_qedu_probe_stage(pci_name(pdev), QEDU_IRQ_REGISTERED, "request_irq",
+						   "shared_intx_action", pdev->irq, IRQF_SHARED, 0);
 	pr_info("qedu: IRQ %d requested\n", pdev->irq);
 	return 0;
 }

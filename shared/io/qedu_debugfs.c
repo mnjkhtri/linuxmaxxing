@@ -5,6 +5,7 @@
 #include <linux/seq_file.h>
 
 #include "qedu.h"
+#include "qedu_trace.h"
 
 /*
  * debugfs is for developer diagnostics, not a stable userspace ABI.
@@ -78,14 +79,32 @@ static const struct file_operations qedu_debugfs_status_fops = {
 
 void qedu_debugfs_init(struct qedu_dev *qdev)
 {
+	struct dentry *status_file;
+
 	qdev->debugfs_dir = debugfs_create_dir("qedu", NULL);
 	if (IS_ERR(qdev->debugfs_dir))
 	{
+		Trace_qedu_probe_stage(pci_name(qdev->pdev), QEDU_DEBUGFS_PUBLISHED, "debugfs_create_dir",
+				       "/sys/kernel/debug/qedu/status", 0, 0,
+				       PTR_ERR(qdev->debugfs_dir));
 		qdev->debugfs_dir = NULL;
 		return;
 	}
 
-	debugfs_create_file("status", 0444, qdev->debugfs_dir, qdev, &qedu_debugfs_status_fops);
+	status_file = debugfs_create_file("status", 0444, qdev->debugfs_dir, qdev, &qedu_debugfs_status_fops);
+	if (IS_ERR(status_file))
+	{
+		Trace_qedu_probe_stage(pci_name(qdev->pdev), QEDU_DEBUGFS_PUBLISHED, "debugfs_create_file",
+				       "/sys/kernel/debug/qedu/status", 0, 0,
+				       PTR_ERR(status_file));
+		debugfs_remove(qdev->debugfs_dir);
+		qdev->debugfs_dir = NULL;
+		return;
+	}
+
+	Trace_qedu_probe_stage(pci_name(qdev->pdev), QEDU_DEBUGFS_PUBLISHED, "debugfs_create_file",
+			       "/sys/kernel/debug/qedu/status",
+			       (unsigned long)status_file, 0444, 0);
 	pr_info("qedu: debugfs status created\n");
 }
 

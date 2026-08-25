@@ -5,6 +5,7 @@
 #include <linux/uaccess.h>
 
 #include "qedu.h"
+#include "qedu_trace.h"
 
 /*
  * The misc core initializes file->private_data with the embedded miscdevice.
@@ -16,18 +17,25 @@ static int qedu_open(struct inode *inode, struct file *file)
 	struct qedu_dev *qdev;
 
 	qdev = container_of(miscdev, struct qedu_dev, miscdev);
+	Trace_qedu_file_op(pci_name(qdev->pdev), 0, QEDU_FILE_OPEN, QEDU_FILE_ENTER, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
 	file->private_data = qdev;
+	Trace_qedu_file_op(pci_name(qdev->pdev), 0, QEDU_FILE_OPEN, QEDU_FILE_EXIT, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
 
 	pr_info("qedu: open called\n");
 	return 0;
 }
 
-static int qedu_release(struct inode *inode, struct file *file)
 /*
  * There is currently no per-open state to release; the result belongs to the device and is shared by every open file.
  */
+static int qedu_release(struct inode *inode, struct file *file)
 {
+	struct qedu_dev *qdev = file->private_data;
+	u64 io_id = READ_ONCE(qdev->result_io_id);
+
+	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_RELEASE, QEDU_FILE_ENTER, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
 	pr_info("qedu: release called\n");
+	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_RELEASE, QEDU_FILE_EXIT, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
 	return 0;
 }
 
@@ -35,20 +43,30 @@ static int qedu_release(struct inode *inode, struct file *file)
  * Return the most recent result.
  * simple_read_from_buffer() bounds the copy, supports partial reads, advances the per-open offset, and returns EOF after qdev->result_size valid bytes have been consumed.
  */
-static ssize_t qedu_read(struct file *file, char __user *user_buf,
-						 size_t count, loff_t *ppos)
+static ssize_t qedu_read(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
 {
 	struct qedu_dev *qdev = file->private_data;
 	ssize_t ret;
+	loff_t offset = *ppos;
+	u64 io_id = READ_ONCE(qdev->result_io_id);
 
+	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_READ, QEDU_FILE_ENTER, (unsigned long)file, count, offset, 0, QEDU_ENGINE_NONE);
 	if (mutex_lock_interruptible(&qdev->lock))
-		return -ERESTARTSYS;
+	{
+		ret = -ERESTARTSYS;
+		goto out_trace;
+	}
 
+	io_id = qdev->result_io_id;
 	ret = simple_read_from_buffer(user_buf, count, ppos, qdev->dma_cpu_addr, qdev->result_size);
+	Trace_qedu_cpu_buffer_io(pci_name(qdev->pdev), io_id, QEDU_BUFFER_COPY_TO_USER, offset, count, ret);
 	if (ret > 0)
 		qdev->tx += ret;
 
 	mutex_unlock(&qdev->lock);
+
+out_trace:
+	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_READ, QEDU_FILE_EXIT, (unsigned long)file, count, offset, ret, QEDU_ENGINE_NONE);
 	return ret;
 }
 
@@ -68,27 +86,45 @@ static ssize_t qedu_read(struct file *file, char __user *user_buf,
  *
  * qdev->lock serializes the shared DMA/result buffer, result_size, and EDU's single factorial/DMA engines.
  * Process context may hold this mutex while it sleeps for IRQ completion because the hardirq handler never acquires it.
- * Coherent DMA handles CPU/device cache visibility; it does not serialize CPU * threads, so the mutex remains necessary.
+ * Coherent DMA handles CPU/device cache visibility; it does not serialize CPU threads, so the mutex remains necessary.
  */
 static ssize_t qedu_write(struct file *file, const char __user *user_buf, size_t count, loff_t *ppos)
 {
 	struct qedu_dev *qdev = file->private_data;
+	enum qedu_io_engine selected_engine = QEDU_ENGINE_NONE;
 	u32 factorial_input;
 	u32 factorial_result;
+	u64 io_id = atomic64_inc_return(&qdev->next_io_id);
+	unsigned long not_copied;
+	loff_t offset = *ppos;
 	int ret;
 
+	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_WRITE, QEDU_FILE_ENTER, (unsigned long)file, count, offset, 0, QEDU_ENGINE_NONE);
 	if (!count)
-		return 0;
+	{
+		ret = 0;
+		goto out_trace;
+	}
 
 	if (count >= QEDU_DMA_SIZE)
-		return -EMSGSIZE;
+	{
+		ret = -EMSGSIZE;
+		goto out_trace;
+	}
 
 	if (mutex_lock_interruptible(&qdev->lock))
-		return -ERESTARTSYS;
+	{
+		ret = -ERESTARTSYS;
+		goto out_trace;
+	}
 
+	WRITE_ONCE(qdev->active_io_id, io_id);
+	WRITE_ONCE(qdev->active_engine, QEDU_ENGINE_NONE);
 	qdev->result_size = 0;
 
-	if (copy_from_user(qdev->dma_cpu_addr, user_buf, count))
+	not_copied = copy_from_user(qdev->dma_cpu_addr, user_buf, count);
+	Trace_qedu_cpu_buffer_io(pci_name(qdev->pdev), io_id, QEDU_BUFFER_COPY_FROM_USER, 0, count, count - not_copied);
+	if (not_copied)
 	{
 		ret = -EFAULT;
 		goto out_unlock;
@@ -99,7 +135,7 @@ static ssize_t qedu_write(struct file *file, const char __user *user_buf, size_t
 	ret = kstrtou32(qdev->dma_cpu_addr, 0, &factorial_input);
 	if (!ret)
 	{
-		ret = qedu_factorial_job(qdev, factorial_input, &factorial_result);
+		ret = qedu_factorial_job(qdev, factorial_input, &factorial_result, io_id);
 		if (ret)
 			goto out_unlock;
 
@@ -108,7 +144,7 @@ static ssize_t qedu_write(struct file *file, const char __user *user_buf, size_t
 	}
 	else
 	{
-		ret = qedu_dma_echo_job(qdev, count);
+		ret = qedu_dma_echo_job(qdev, count, io_id);
 		if (ret)
 			goto out_unlock;
 
@@ -116,11 +152,17 @@ static ssize_t qedu_write(struct file *file, const char __user *user_buf, size_t
 		pr_info("qedu: DMA echo completed, bytes=%zu\n", count);
 	}
 
+	qdev->result_io_id = io_id;
 	qdev->rx += count;
 	ret = count;
 
 out_unlock:
+	selected_engine = READ_ONCE(qdev->active_engine);
+	WRITE_ONCE(qdev->active_engine, QEDU_ENGINE_NONE);
 	mutex_unlock(&qdev->lock);
+
+out_trace:
+	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_WRITE, QEDU_FILE_EXIT, (unsigned long)file, count, offset, ret, selected_engine);
 	return ret;
 }
 
@@ -162,6 +204,10 @@ int qedu_chrdev_init(struct qedu_dev *qdev)
 		return ret;
 	}
 
+	Trace_qedu_probe_stage(pci_name(pdev), QEDU_CHARDEV_PUBLISHED, "misc_register",
+						   "/dev/qedu", qdev->miscdev.minor, 0, 0);
+	Trace_qedu_probe_stage(pci_name(pdev), QEDU_SYSFS_PUBLISHED, "misc_register",
+						   "/sys/class/misc/qedu", qdev->miscdev.minor, 0, 0);
 	pr_info("qedu: /dev/qedu created\n");
 	return 0;
 }

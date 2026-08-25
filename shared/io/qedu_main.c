@@ -5,6 +5,7 @@
 #include <linux/slab.h>
 
 #include "qedu.h"
+#include "qedu_trace.h"
 
 static bool selftest;
 module_param(selftest, bool, 0444);
@@ -28,7 +29,7 @@ MODULE_PARM_DESC(selftest, "Run probe-time MMIO, IRQ, and DMA self-tests");
  *
  * After booting the repository's QEMU guest, load and inspect it with:
  *
- *   sh /mnt/host/interrupts/run.sh
+ *   sh /mnt/host/io/run.sh
  *   ls -l /dev/qedu
  *   echo 10 > /dev/qedu
  *   cat /dev/qedu
@@ -96,20 +97,28 @@ static int qedu_test_registers(struct qedu_dev *qdev)
  *
  * qedu_write() then formats this 32-bit value as decimal text in dma_cpu_addr.
  */
-int qedu_factorial_job(struct qedu_dev *qdev, u32 input, u32 *result)
+int qedu_factorial_job(struct qedu_dev *qdev, u32 input, u32 *result, u64 io_id)
 {
 	long wait_ret;
+	const char *device = pci_name(qdev->pdev);
 
 	pr_info("qedu: factorial job started, input=%u\n", input);
+	WRITE_ONCE(qdev->active_engine, QEDU_ENGINE_FACTORIAL);
 
 	clear_bit(QEDU_EVENT_FACTORIAL, &qdev->completed_events);
 	iowrite32(QEDU_STATUS_FACTORIAL_IRQ_ENABLE, qdev->bar0 + QEDU_REG_STATUS);
+	Trace_qedu_factorial_submit(device, io_id, input, QEDU_STATUS_FACTORIAL_IRQ_ENABLE);
 	iowrite32(input, qdev->bar0 + QEDU_REG_FACTORIAL);
 
+	Trace_qedu_wait(device, io_id, QEDU_ENGINE_FACTORIAL, QEDU_WAIT_BEGIN,
+					qdev->timeout_ms, 0, READ_ONCE(qdev->completed_events));
 	wait_ret = wait_event_interruptible_timeout(
 		qdev->job_wait,
 		test_bit(QEDU_EVENT_FACTORIAL, &qdev->completed_events),
 		msecs_to_jiffies(qdev->timeout_ms));
+
+	Trace_qedu_wait(device, io_id, QEDU_ENGINE_FACTORIAL, QEDU_WAIT_END,
+					qdev->timeout_ms, wait_ret, READ_ONCE(qdev->completed_events));
 
 	if (wait_ret < 0)
 		return wait_ret;
@@ -121,6 +130,7 @@ int qedu_factorial_job(struct qedu_dev *qdev, u32 input, u32 *result)
 	}
 
 	*result = ioread32(qdev->bar0 + QEDU_REG_FACTORIAL);
+	Trace_qedu_factorial_result(device, io_id, *result);
 	return 0;
 }
 
@@ -175,12 +185,19 @@ static int qedu_pci_init(struct qedu_dev *qdev)
 		return ret;
 	}
 
+	Trace_qedu_probe_stage(pci_name(pdev), QEDU_PCI_ENABLED, "pci_enable_device",
+						   "struct_pci_dev", (unsigned long)pdev, 0, 0);
+
 	ret = pci_request_regions(pdev, "qedu");
 	if (ret)
 	{
 		pr_err("qedu: pci_request_regions failed: %d\n", ret);
 		goto err_disable;
 	}
+
+	Trace_qedu_probe_stage(pci_name(pdev), QEDU_BAR_REGIONS_CLAIMED, "pci_request_regions",
+						   "pci_bar_regions", pci_resource_start(pdev, 0),
+						   pci_resource_len(pdev, 0), 0);
 
 	bar0_start = pci_resource_start(pdev, 0);
 	bar0_len = pci_resource_len(pdev, 0);
@@ -193,6 +210,10 @@ static int qedu_pci_init(struct qedu_dev *qdev)
 		pr_err("qedu: failed to map BAR0\n");
 		goto err_regions;
 	}
+
+	Trace_qedu_probe_stage(pci_name(pdev), QEDU_BAR0_MAPPED, "pci_iomap",
+						   "bar0_mmio_mapping", (unsigned long)qdev->bar0,
+						   bar0_len, 0);
 
 	pr_info("qedu: BAR0 mapped at %px\n", qdev->bar0);
 	return 0;
@@ -243,12 +264,16 @@ static int qedu_alloc_device(struct pci_dev *pdev, struct qedu_dev **out)
 	qdev->completed_events = 0;
 	qdev->result_size = 0;
 	qdev->timeout_ms = QEDU_DEFAULT_TIMEOUT_MS;
+	atomic64_set(&qdev->next_io_id, 0);
+	qdev->active_io_id = 0;
+	qdev->result_io_id = 0;
+	qdev->active_engine = QEDU_ENGINE_NONE;
 	pci_set_drvdata(pdev, qdev);
 	*out = qdev;
 	return 0;
 }
 
-static void qedu_free_device(struct qedu_dev *qdev)
+static void qedu_clear_device_data(struct qedu_dev *qdev)
 {
 	pci_set_drvdata(qdev->pdev, NULL);
 }
@@ -264,16 +289,24 @@ static void qedu_free_device(struct qedu_dev *qdev)
  *             -> qedu_chrdev_init()
  *               -> qedu_debugfs_init()
  *
- * Remove performs the exact reverse sequence. Probe's error labels follow that same ordering and release only layers initialized before the failure.
+ * Teardown first stops new IRQ-driven work, then drains the workqueue and releases the remaining resources. Probe's error labels release only layers initialized before the failure.
  */
 static int qedu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct qedu_dev *qdev;
 	int ret;
 
+	Trace_qedu_probe_stage(pci_name(pdev), QEDU_PROBE_BEGIN, "qedu_probe",
+						   "pci_driver_probe", (unsigned long)pdev,
+						   sizeof(*pdev), 0);
+
 	ret = qedu_alloc_device(pdev, &qdev);
 	if (ret)
 		return ret;
+
+	Trace_qedu_probe_stage(pci_name(pdev), QEDU_DEVICE_STATE_READY, "devm_kzalloc",
+						   "struct_qedu_dev", (unsigned long)qdev,
+						   sizeof(*qdev), 0);
 
 	ret = qedu_pci_init(qdev);
 	if (ret)
@@ -300,6 +333,9 @@ static int qedu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	qedu_debugfs_init(qdev);
 
+	Trace_qedu_probe_stage(pci_name(pdev), QEDU_PROBE_READY, "qedu_probe",
+						   "bound_qedu_device", (unsigned long)qdev,
+						   sizeof(*qdev), 0);
 	pr_info("qedu: probe completed; device is ready\n");
 	return 0;
 
@@ -312,7 +348,7 @@ err_irq:
 err_pci:
 	qedu_pci_exit(qdev);
 err_free:
-	qedu_free_device(qdev);
+	qedu_clear_device_data(qdev);
 	return ret;
 }
 
@@ -327,7 +363,7 @@ static void qedu_remove(struct pci_dev *pdev)
 	qedu_irq_exit(qdev);
 	qedu_dma_exit(qdev);
 	qedu_pci_exit(qdev);
-	qedu_free_device(qdev);
+	qedu_clear_device_data(qdev);
 }
 
 static const struct pci_device_id qedu_ids[] = {
