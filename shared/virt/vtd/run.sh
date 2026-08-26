@@ -59,6 +59,11 @@ dispatch_to_cloudlab()
             any(.[]; .kind == "vfio_dma_map_enter") and
             any(.[]; .kind == "iommu_map") and
             any(.[]; .kind == "vfio_dma_map_exit") and
+            any(.[]; .kind == "vfio_irq_set_exit" and .state.interrupt.index == 2 and .event_info.result == 0) and
+            any(.[]; .kind == "irte_alloc" and .event_info.result >= 0) and
+            any(.[]; .kind == "irte_activate") and
+            any(.[]; .kind == "interrupt_remap_msi_message") and
+            any(.[]; .kind == "kvm_pi_irte_update" and .state.interrupt.posted == true) and
         .[-1].state.ringbuf_dropped == 0 and
             .[-1].state.short_records == 0
     ' "$repo_root/shared/_captures/virt-vtd.eBPF.ndjson" >/dev/null || {
@@ -69,6 +74,8 @@ dispatch_to_cloudlab()
             .[0].kind == "capture_meta" and
             .[-1].kind == "capture_summary" and
             any(.[]; .kind == "guest_ixgbe_run_loopback_entry") and
+            any(.[]; .kind == "guest_ixgbe_open") and
+            any(.[]; .kind == "guest_ixgbe_close") and
             any(.[]; .kind == "guest_ixgbe_xmit_entry") and
             any(.[]; .kind == "guest_dma_map_exit") and
             any(.[]; .kind == "guest_ixgbe_xmit_exit" and .event_info.result == 0) and
@@ -457,6 +464,11 @@ finish_observation()
         any(.[]; .kind == "vfio_dma_map_enter") and
         any(.[]; .kind == "iommu_map") and
         any(.[]; .kind == "vfio_dma_map_exit") and
+        any(.[]; .kind == "vfio_irq_set_exit" and .state.interrupt.index == 2 and .event_info.result == 0) and
+        any(.[]; .kind == "irte_alloc" and .event_info.result >= 0) and
+        any(.[]; .kind == "irte_activate") and
+        any(.[]; .kind == "interrupt_remap_msi_message") and
+        any(.[]; .kind == "kvm_pi_irte_update" and .state.interrupt.posted == true) and
         .[-1].state.ringbuf_dropped == 0 and
         .[-1].state.short_records == 0
     ' "$ebpf_capture" >/dev/null
@@ -566,7 +578,7 @@ GUEST
     echo "Phase A guest proof: host $bdf -> guest $guest_bdf, driver=$guest_driver, interface=${guest_interface:-not-created}" >&2
 }
 
-# One bounded ixgbe offline loopback run supplies guest DMA-API, descriptor, completion, and IRQ evidence.
+# One bounded ixgbe offline loopback run supplies guest interface, DMA-API, descriptor, completion, and IRQ evidence.
 collect_guest_dma_use()
 {
     local guest_script guest_status=0
@@ -653,6 +665,8 @@ GUEST
         .[0].kind == "capture_meta" and
         .[-1].kind == "capture_summary" and
         any(.[]; .kind == "guest_ixgbe_run_loopback_entry") and
+        any(.[]; .kind == "guest_ixgbe_open") and
+        any(.[]; .kind == "guest_ixgbe_close") and
         any(.[]; .kind == "guest_ixgbe_xmit_entry") and
         any(.[]; .kind == "guest_dma_map_exit") and
         any(.[]; .kind == "guest_ixgbe_xmit_exit" and .event_info.result == 0) and

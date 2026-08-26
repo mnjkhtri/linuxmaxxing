@@ -12,21 +12,22 @@
     var setupFacts = {};
     var mapTransactions = [];
     var selectedTransaction = 0;
+    var workloadTransaction = -1;
     var selectedChunk = 0;
     var phaseItems = [];
     var selectedIndex = 0;
     var selectedPhase = "A";
     var skippedLines = 0;
-    var LANE = { DMA: 0, GUEST: 1, KVM: 2, NIC: 3, QEMU: 4, VFIO: 5, IOMMU: 6, MEMORY: 7 };
+    var LANE = { DMA: 0, GUEST: 1, KVM: 2, NIC: 3, QEMU: 4, IOMMU: 5, VFIO: 6, MEMORY: 7 };
     var actors = [
-        { id: "guest-dma", role: "GUEST KERNEL", name: "DMA API" },
-        { id: "guest", role: "GUEST", name: "IXGBE" },
-        { id: "kvm", role: "CPU MEMORY", name: "KVM · EPT" },
-        { id: "nic", role: "REQUESTER", name: "PCIe NIC" },
-        { id: "qemu", role: "USERSPACE", name: "QEMU" },
-        { id: "vfio", role: "DMA CONTROL", name: "VFIO" },
-        { id: "iommu", role: "TRANSLATION", name: "IOMMU · VT-d" },
-        { id: "memory", role: "BACKING", name: "HOST MM" }
+        { id: "guest-dma", role: "GUEST · KERNEL", name: "DMA API", scope: "guest" },
+        { id: "guest", role: "GUEST · DRIVER", name: "IXGBE", scope: "guest" },
+        { id: "kvm", role: "NOT GUEST · HOST", name: "KVM · APICv", scope: "outside" },
+        { id: "nic", role: "NOT GUEST · DEVICE", name: "PCIe NIC", scope: "outside" },
+        { id: "qemu", role: "NOT GUEST · USERSPACE", name: "QEMU", scope: "outside" },
+        { id: "iommu", role: "NOT GUEST · HARDWARE", name: "IOMMU · VT-d", scope: "outside" },
+        { id: "vfio", role: "NOT GUEST · KERNEL", name: "VFIO", scope: "outside" },
+        { id: "memory", role: "NOT GUEST · MEMORY", name: "HOST MM", scope: "outside" }
     ];
 
     function byId(id) {
@@ -200,6 +201,40 @@
         });
     }
 
+    function workloadMapIndex() {
+        var dmaRecord = guestEvent("guest_dma_map_exit");
+        var runtimeRecord = runtimeMmioRecord();
+        var dmaAddress;
+        var cutoff;
+        var lastBoundary;
+
+        if (!dmaRecord || !dmaInfo(dmaRecord).address)
+            return -1;
+        dmaAddress = dmaInfo(dmaRecord).address;
+        cutoff = runtimeRecord ? runtimeRecord.time_ns : Number.POSITIVE_INFINITY;
+        lastBoundary = ebpfRecords.filter(function (record) {
+            var address = addressInfo(record);
+            return (record.kind === "vfio_dma_map_exit" || record.kind === "vfio_dma_unmap_exit") &&
+                eventInfo(record).result === 0 && record.time_ns <= cutoff &&
+                rangeContains(address.iova, address.size, dmaAddress, "0x1");
+        }).pop();
+        if (!lastBoundary || lastBoundary.kind !== "vfio_dma_map_exit")
+            return -1;
+        return mapTransactions.findIndex(function (transaction) { return transaction.exit === lastBoundary; });
+    }
+
+    function workloadChunkIndex(transaction) {
+        var dmaRecord = guestEvent("guest_dma_map_exit");
+        var dmaAddress = dmaRecord && dmaInfo(dmaRecord).address;
+
+        if (!transaction || !dmaAddress)
+            return 0;
+        return Math.max(0, transaction.chunks.findIndex(function (record) {
+            var address = addressInfo(record);
+            return rangeContains(address.iova, address.size, dmaAddress, "0x1");
+        }));
+    }
+
     function buildTransactions() {
         mapTransactions = ebpfRecords.filter(function (record) {
             return record.kind === "vfio_dma_map_enter" && eventInfo(record).sample_status !== "invalid_argument";
@@ -221,12 +256,17 @@
             return { enter: enter, exit: exit, chunks: chunks, pins: pins, type1: type1 };
         });
 
-        selectedTransaction = mapTransactions.findIndex(function (transaction) {
-            var address = addressInfo(transaction.enter);
-            return transaction.exit && eventInfo(transaction.exit).result === 0 && numeric(address.size) >= 0x100000 && transaction.chunks.length > 1;
-        });
+        workloadTransaction = workloadMapIndex();
+        selectedTransaction = workloadTransaction;
+        if (selectedTransaction < 0) {
+            selectedTransaction = mapTransactions.findIndex(function (transaction) {
+                var address = addressInfo(transaction.enter);
+                return transaction.exit && eventInfo(transaction.exit).result === 0 && numeric(address.size) >= 0x100000 && transaction.chunks.length > 1;
+            });
+        }
         if (selectedTransaction < 0)
             selectedTransaction = 0;
+        selectedChunk = workloadChunkIndex(mapTransactions[selectedTransaction]);
     }
 
     function phaseAItems() {
@@ -312,8 +352,10 @@
         return [teardown.enter, unmap, unpinEnter, unpinExit, teardown.exit].filter(Boolean);
     }
 
-    function message(group, label, detail, from, to, record, architectural) {
-        return { group: group, label: label, detail: detail, from: from, to: to, record: record || null, architectural: Boolean(architectural) };
+    function message(group, label, detail, from, to, record, architectural, scope) {
+        var domain = scope || (record && record.source === "guest-ebpf" ? "guest" : "outside");
+
+        return { group: group, label: label, detail: detail, from: from, to: to, record: record || null, architectural: Boolean(architectural), scope: domain };
     }
 
     function guestBarForGpa(gpa) {
@@ -338,6 +380,58 @@
         }) || null;
     }
 
+    function msixTableWrites() {
+        var writes = ebpfRecords.filter(function (record) {
+            var mmio = mmioInfo(record);
+            var bar = record.kind === "kvm_mmio" ? guestBarForGpa(mmio.gpa) : null;
+            return bar && bar.region === "4" && mmio.type === 2;
+        });
+        var address = writes.find(function (record) {
+            var mmio = mmioInfo(record);
+            return big(mmio.gpa) % 16n === 0n && (big(mmio.value) & 0xfff00000n) === 0xfee00000n;
+        });
+        var data = address && writes.find(function (record) {
+            return record.time_ns >= address.time_ns && big(mmioInfo(record).gpa) === big(mmioInfo(address).gpa) + 8n;
+        });
+
+        return { address: address || null, data: data || null };
+    }
+
+    function postedInterruptRoute() {
+        var update = ebpfRecords.find(function (record) { return record.kind === "kvm_pi_irte_update" && interruptInfo(record).posted; });
+        var irq = update && interruptInfo(update).irq;
+        var requests;
+        var enter;
+        var related;
+        var allocation;
+        var activation;
+        var messageRecord;
+
+        if (!update)
+            return null;
+        requests = ebpfRecords.filter(function (record) {
+            var interrupt = interruptInfo(record);
+            return record.kind === "vfio_irq_set_enter" && interrupt.index === 2 && record.time_ns <= update.time_ns;
+        });
+        enter = requests[requests.length - 1] || null;
+        related = enter ? requestRecords(eventInfo(enter).request_id) : [];
+        allocation = ebpfRecords.find(function (record) { return record.kind === "irte_alloc" && interruptInfo(record).irq === irq; }) || null;
+        activation = ebpfRecords.filter(function (record) {
+            return record.kind === "irte_activate" && interruptInfo(record).irq === irq && (!enter || record.time_ns >= enter.time_ns) && record.time_ns <= update.time_ns;
+        }).pop() || null;
+        messageRecord = ebpfRecords.filter(function (record) {
+            return record.kind === "interrupt_remap_msi_message" && interruptInfo(record).irq === irq && (!enter || record.time_ns >= enter.time_ns) && record.time_ns <= update.time_ns;
+        }).pop() || null;
+        return {
+            enter: enter,
+            exit: related.find(function (record) { return record.kind === "vfio_irq_set_exit"; }) || null,
+            allocation: allocation,
+            activation: activation,
+            message: messageRecord,
+            update: update
+        };
+    }
+
     function hostEvent(kind) {
         return ebpfRecords.find(function (record) { return record.kind === kind; }) || null;
     }
@@ -350,7 +444,8 @@
         var kvmExit = kvmEnter && matchingExit(kvmEnter, "kvm_memory_region_exit");
         var teardown = transaction && matchingUnmap(transaction);
         var selectedPins = pinEventsForChunk(transaction, selectedMap);
-        var mmioRecord = runtimeMmioRecord();
+        var msix = msixTableWrites();
+        var route = postedInterruptRoute();
         var physicalIrq = hostEvent("vfio_msi_handler_entry") || hostEvent("vfio_intx_handler_entry");
         var irqfd = hostEvent("kvm_irqfd_wakeup");
         var msiRoute = hostEvent("kvm_msi_route");
@@ -358,6 +453,9 @@
         var preparation = [];
         var mappingEvents = [];
         var teardownEvents = [];
+        var firstOpenSeen = false;
+        var loopbackActive = false;
+        var loopbackComplete = false;
         var items = [];
 
         if (kvmEnter) {
@@ -386,41 +484,67 @@
                 var entering;
 
                 if (record.kind === "vfio_dma_map_enter")
-                    items.push(message("MAP", "VFIO_IOMMU_MAP_DMA", "fd " + eventInfo(record).fd + " · IOVA " + address.iova + " · " + formatBytes(address.size), LANE.QEMU, LANE.VFIO, record));
+                    items.push(message("DMA MAP", "VFIO_IOMMU_MAP_DMA", "fd " + eventInfo(record).fd + " · IOVA " + address.iova + " · " + formatBytes(address.size), LANE.QEMU, LANE.VFIO, record));
                 else if (record.kind === "vfio_type1_map_enter")
-                    items.push(message("MAP", "validate map request", "VFIO type1 backend", LANE.VFIO, LANE.VFIO, record));
+                    items.push(message("DMA MAP", "validate map request", "VFIO type1 backend", LANE.VFIO, LANE.VFIO, record));
                 else if (record.kind === "vfio_type1_map_exit")
-                    items.push(message("MAP", "type1 map result", "ret " + eventInfo(record).result, LANE.VFIO, LANE.VFIO, record));
+                    items.push(message("DMA MAP", "type1 map result", "ret " + eventInfo(record).result, LANE.VFIO, LANE.VFIO, record));
                 else if (record.kind.indexOf("vfio_page_pin_") === 0) {
                     entering = record.kind === "vfio_page_pin_enter";
-                    items.push(message("MAP", entering ? "pin backing pages" : "page-pin result", entering ? "HVA " + address.hva + " · " + address.page_count + " pages" : "pinned " + eventInfo(record).result + " pages", entering ? LANE.VFIO : LANE.MEMORY, entering ? LANE.MEMORY : LANE.VFIO, record));
+                    items.push(message("DMA MAP", entering ? "pin backing pages" : "page-pin result", entering ? "HVA " + address.hva + " · " + address.page_count + " pages" : "pinned " + eventInfo(record).result + " pages", entering ? LANE.VFIO : LANE.MEMORY, entering ? LANE.MEMORY : LANE.VFIO, record));
                 } else if (record.kind === "iommu_map")
-                    items.push(message("MAP", "iommu:map", "IOVA " + address.iova + " → HPA " + address.hpa + " · " + formatBytes(address.size), LANE.VFIO, LANE.IOMMU, record));
+                    items.push(message("DMA MAP", "iommu:map", "IOVA " + address.iova + " → HPA " + address.hpa + " · " + formatBytes(address.size), LANE.VFIO, LANE.IOMMU, record));
                 else if (record.kind === "vfio_dma_map_exit")
-                    items.push(message("MAP", "map result", "ret " + eventInfo(record).result, LANE.VFIO, LANE.QEMU, record));
+                    items.push(message("DMA MAP", "map result", "ret " + eventInfo(record).result, LANE.VFIO, LANE.QEMU, record));
             });
             if (!selectedPins.length) {
                 var mapRequestIndex = items.findIndex(function (item) { return item.record === transaction.enter; });
-                items.splice(mapRequestIndex + 1, 0, message("MAP", "pin backing pages", "QEMU HVA → resident host pages", LANE.VFIO, LANE.MEMORY, null, true));
+                items.splice(mapRequestIndex + 1, 0, message("DMA MAP", "pin backing pages", "QEMU HVA → resident host pages", LANE.VFIO, LANE.MEMORY, null, true));
             }
         }
-        if (mmioRecord) {
-            var mmio = mmioInfo(mmioRecord);
-            var mmioBar = guestBarForGpa(mmio.gpa);
-            items.push(message("MMIO", "BAR MMIO write", "BAR " + (mmioBar ? mmioBar.region : "—") + " · GPA " + mmio.gpa + " · " + mmio.length + " bytes", LANE.GUEST, LANE.KVM, mmioRecord));
+
+        if (route && route.allocation) {
+            var allocationInfo = interruptInfo(route.allocation);
+            items.push(message("IRQ SETUP", "allocate IRTE", "host IRQ " + allocationInfo.irq + " · IRTE " + allocationInfo.irte_index, LANE.VFIO, LANE.IOMMU, route.allocation));
         }
-        var loopbackActive = false;
-        var loopbackComplete = false;
+        if (msix.address) {
+            var addressMmio = mmioInfo(msix.address);
+            items.push(message("IRQ SETUP", "program MSI-X address", addressMmio.gpa + " ← " + addressMmio.value, LANE.GUEST, LANE.KVM, msix.address));
+        }
+        if (msix.data) {
+            var dataMmio = mmioInfo(msix.data);
+            items.push(message("IRQ SETUP", "program MSI-X data", dataMmio.gpa + " ← " + dataMmio.value, LANE.GUEST, LANE.KVM, msix.data));
+        }
+        if (route && route.enter) {
+            var irqRequest = interruptInfo(route.enter);
+            items.push(message("IRQ SETUP", "VFIO_DEVICE_SET_IRQS", "MSI-X " + irqRequest.start + " · count " + irqRequest.count + " · eventfd", LANE.QEMU, LANE.VFIO, route.enter));
+        }
+        if (route && route.activation)
+            items.push(message("IRQ SETUP", "activate IRTE", "host IRQ " + interruptInfo(route.activation).irq, LANE.VFIO, LANE.IOMMU, route.activation));
+        if (route && route.message) {
+            var remappable = interruptInfo(route.message);
+            items.push(message("IRQ SETUP", "compose remappable MSI", remappable.address + " · data " + remappable.data, LANE.VFIO, LANE.IOMMU, route.message));
+        }
+        if (route && route.update) {
+            var posted = interruptInfo(route.update);
+            items.push(message("IRQ SETUP", "target IRTE to vCPU", "IRQ " + posted.irq + " · vCPU " + posted.vcpu_id + " · vector 0x" + Number(posted.vector).toString(16), LANE.KVM, LANE.IOMMU, route.update));
+        }
+        if (route && route.exit)
+            items.push(message("IRQ SETUP", "VFIO IRQ result", "ret " + eventInfo(route.exit).result, LANE.VFIO, LANE.QEMU, route.exit));
 
         guestRecords.forEach(function (record) {
             var dma = dmaInfo(record);
             var interrupt = interruptInfo(record);
             var mappedDma;
-            var irqGroup;
             var translatedChunk;
             var translatedHpa;
 
-            if (record.kind === "guest_ixgbe_run_loopback_entry") {
+            if (record.kind === "guest_ixgbe_open") {
+                items.push(message("INTERFACE", firstOpenSeen ? "restore interface" : "bring interface up", record.context.comm + " → ixgbe_open()", LANE.GUEST, LANE.GUEST, record));
+                firstOpenSeen = true;
+            } else if (record.kind === "guest_ixgbe_close")
+                items.push(message("INTERFACE", "enter offline test", record.context.comm + " → ixgbe_close()", LANE.GUEST, LANE.GUEST, record));
+            else if (record.kind === "guest_ixgbe_run_loopback_entry") {
                 loopbackActive = true;
                 items.push(message("DMA USE", "run loopback test", "64 TX/RX frames per batch", LANE.GUEST, LANE.GUEST, record));
             } else if (record.kind === "guest_ixgbe_xmit_entry")
@@ -430,7 +554,8 @@
             else if (record.kind === "guest_dma_map_exit")
                 items.push(message("DMA USE", "return DMA address", dma.address + " · " + formatBytes(dma.length), LANE.DMA, LANE.GUEST, record));
             else if (record.kind === "guest_ixgbe_xmit_exit") {
-                items.push(message("DMA USE", "publish TX tail", "ixgbe_xmit_frame_ring() · ret " + eventInfo(record).result, LANE.GUEST, LANE.NIC, record));
+                items.push(message("DMA USE", "TX submission returns", "ixgbe_xmit_frame_ring() · ret " + eventInfo(record).result, LANE.GUEST, LANE.GUEST, record));
+                items.push(message("DMA USE", "ring TX tail doorbell", "device begins descriptor fetch", LANE.GUEST, LANE.NIC, null, true, "guest"));
                 mappedDma = guestEvent("guest_dma_map_exit");
                 translatedChunk = mappedDma && transaction && transaction.chunks.find(function (chunkRecord) {
                     var chunk = addressInfo(chunkRecord);
@@ -442,7 +567,7 @@
                     items.push(message("DMA USE", "VT-d translation", "HPA 0x" + translatedHpa.toString(16), LANE.IOMMU, LANE.MEMORY, null, true));
                 }
             } else if (record.kind === "guest_ixgbe_clean_entry")
-                items.push(message("COMPLETION", "inspect test rings", "TX descriptor writeback + RX length", LANE.GUEST, LANE.NIC, record));
+                items.push(message("COMPLETION", "check descriptor completion", "TX DD bit + RX descriptor length", LANE.GUEST, LANE.GUEST, record));
             else if (record.kind === "guest_dma_unmap")
                 items.push(message("COMPLETION", "unmap TX buffer", dma.address + " · " + formatBytes(dma.length), LANE.GUEST, LANE.DMA, record));
             else if (record.kind === "guest_dma_sync_for_cpu")
@@ -450,27 +575,32 @@
             else if (record.kind === "guest_dma_sync_for_device")
                 items.push(message("COMPLETION", "return RX to device", dma.address + " · " + formatBytes(dma.length), LANE.GUEST, LANE.DMA, record));
             else if (record.kind === "guest_ixgbe_clean_exit")
-                items.push(message("COMPLETION", "frames verified", dma.completed + " descriptors + frame patterns", LANE.NIC, LANE.GUEST, record));
+                items.push(message("COMPLETION", "frames verified", dma.completed + " descriptors + frame patterns", LANE.GUEST, LANE.GUEST, record));
             else if (record.kind === "guest_irq_handler_entry") {
-                irqGroup = loopbackActive ? "LOOPBACK IRQ" : (loopbackComplete ? "POST-LOOPBACK IRQ" : "PRE-LOOPBACK IRQ");
-                items.push(message(irqGroup, "IRQ handler enters", interrupt.action + " · IRQ " + interrupt.irq, LANE.NIC, LANE.GUEST, record));
-            } else if (record.kind === "guest_irq_handler_exit") {
-                irqGroup = loopbackActive ? "LOOPBACK IRQ" : (loopbackComplete ? "POST-LOOPBACK IRQ" : "PRE-LOOPBACK IRQ");
-                items.push(message(irqGroup, "IRQ handler exits", "IRQ " + interrupt.irq + " · " + irqDisposition(eventInfo(record).result), LANE.GUEST, LANE.GUEST, record));
-            } else if (record.kind === "guest_ixgbe_run_loopback_exit") {
+                if (route && route.update) {
+                    items.push(message("IRQ DELIVERY", "issue remappable MSI-X", interrupt.action, LANE.NIC, LANE.IOMMU, null, true));
+                    items.push(message("IRQ DELIVERY", "resolve IRTE + PI target", "posted-interrupt route", LANE.IOMMU, LANE.KVM, null, true));
+                    items.push(message("IRQ DELIVERY", "deliver queue vector", interrupt.action + " · guest IRQ " + interrupt.irq, LANE.KVM, LANE.GUEST, null, true));
+                }
+                items.push(message(loopbackActive ? "LOOPBACK IRQ" : (loopbackComplete ? "POST-LOOPBACK IRQ" : "PRE-LOOPBACK IRQ"), "guest queue handler enters", interrupt.action + " · IRQ " + interrupt.irq, LANE.GUEST, LANE.GUEST, record));
+            } else if (record.kind === "guest_irq_handler_exit")
+                items.push(message(loopbackActive ? "LOOPBACK IRQ" : (loopbackComplete ? "POST-LOOPBACK IRQ" : "PRE-LOOPBACK IRQ"), "guest queue handler exits", "IRQ " + interrupt.irq + " · " + irqDisposition(eventInfo(record).result), LANE.GUEST, LANE.GUEST, record));
+            else if (record.kind === "guest_ixgbe_run_loopback_exit") {
                 items.push(message("COMPLETION", "loopback run result", "ret " + eventInfo(record).result, LANE.GUEST, LANE.GUEST, record));
                 loopbackActive = false;
                 loopbackComplete = true;
             }
         });
+
         if (physicalIrq)
-            items.push(message("INTERRUPT", physicalIrq.kind.indexOf("msi") >= 0 ? "VFIO MSI-X handler" : "VFIO INTx handler", "host IRQ " + interruptInfo(physicalIrq).irq, LANE.NIC, LANE.VFIO, physicalIrq));
+            items.push(message("IRQ DELIVERY", physicalIrq.kind.indexOf("msi") >= 0 ? "VFIO MSI-X handler" : "VFIO INTx handler", "host IRQ " + interruptInfo(physicalIrq).irq, LANE.NIC, LANE.VFIO, physicalIrq));
         if (irqfd)
-            items.push(message("INTERRUPT", "wake KVM irqfd", "VFIO eventfd notification", LANE.VFIO, LANE.KVM, irqfd));
+            items.push(message("IRQ DELIVERY", "wake KVM irqfd", "VFIO eventfd notification", LANE.VFIO, LANE.KVM, irqfd));
         if (msiRoute)
-            items.push(message("INTERRUPT", "route guest MSI", "vector " + interruptInfo(msiRoute).vector, LANE.VFIO, LANE.KVM, msiRoute));
+            items.push(message("IRQ DELIVERY", "route guest MSI", "vector " + interruptInfo(msiRoute).vector, LANE.VFIO, LANE.KVM, msiRoute));
         if (apicAccept)
-            items.push(message("INTERRUPT", "LAPIC accepts vector", "vCPU APIC " + interruptInfo(apicAccept).apic_id + " · vector " + interruptInfo(apicAccept).vector, LANE.KVM, LANE.GUEST, apicAccept));
+            items.push(message("IRQ DELIVERY", "LAPIC accepts vector", "vCPU APIC " + interruptInfo(apicAccept).apic_id + " · vector " + interruptInfo(apicAccept).vector, LANE.KVM, LANE.GUEST, apicAccept));
+
         if (teardown) {
             teardownEvents = teardownEventsForChunk(teardown, selectedMap);
             teardownEvents.sort(function (left, right) { return left.time_ns - right.time_ns; });
@@ -513,14 +643,20 @@
             iommu_unmap: "iommu:unmap",
             vfio_page_unpin_enter: "release pinned pages",
             vfio_page_unpin_exit: "page-unpin result",
-            vfio_dma_unmap_exit: "unmap result"
+            vfio_dma_unmap_exit: "unmap result",
+            vfio_irq_set_enter: "VFIO_DEVICE_SET_IRQS",
+            vfio_irq_set_exit: "VFIO IRQ result",
+            irte_alloc: "allocate IRTE",
+            irte_activate: "activate IRTE",
+            interrupt_remap_msi_message: "compose remappable MSI",
+            kvm_pi_irte_update: "target IRTE to vCPU",
+            guest_ixgbe_open: "bring interface up",
+            guest_ixgbe_close: "enter offline test",
+            guest_irq_handler_entry: "guest queue handler enters",
+            guest_irq_handler_exit: "guest queue handler exits"
         };
 
         return titles[record.kind] || record.kind.replace(/_/g, " ");
-    }
-
-    function compactLabel(value) {
-        return String(value || "—");
     }
 
     function renderSetupFacts() {
@@ -572,7 +708,7 @@
     function renderRoadmap() {
         var groups = [
             { phase: "A", label: "DEVICE ASSIGNMENT", items: phaseAItems() },
-            { phase: "B", label: "DMA REMAPPING", items: phaseBItems() }
+            { phase: "B", label: "DMA + INTERRUPT REMAPPING", items: phaseBItems() }
         ];
 
         byId("roadmap").innerHTML = '<header class="roadmap-head"><b>EXECUTION</b><span>PHASE · BOUNDARY</span></header>' + groups.map(function (group) {
@@ -582,7 +718,7 @@
                 return '<button class="boundary-dot' + (active && index === selectedIndex ? " current" : "") + '" type="button" data-boundary-phase="' + group.phase + '" data-boundary-index="' + index + '" title="' + escapeHtml(item.label) + '"></button>';
             }).join("");
             return '<section class="roadmap-zone' + (active ? " active" : "") + '" data-phase-zone="' + group.phase + '" style="flex-grow:' + Math.max(1, group.items.length) + '"><div class="zone-copy"><b><em>' + group.phase + '</em> · ' + group.label + '</b><span>' + group.items.length + ' boundaries' + (current ? " · " + escapeHtml(current.label) : "") + '</span></div><div class="zone-dots">' + dots + '</div></section>';
-        }).join("") + '<section class="roadmap-zone future"><div class="zone-copy"><b><em>C</em> · DMA PROTECTION</b><span>future phase</span></div></section><section class="roadmap-zone future"><div class="zone-copy"><b><em>D</em> · INTERRUPT REMAPPING</b><span>future phase</span></div></section>';
+        }).join("") + '<section class="roadmap-zone future"><div class="zone-copy"><b><em>C</em> · DMA PROTECTION</b><span>future phase</span></div></section>';
 
         byId("roadmap").querySelectorAll("[data-boundary-index]").forEach(function (button) {
             button.onclick = function (event) {
@@ -650,7 +786,10 @@
     function renderMapSelector() {
         byId("map-select").innerHTML = mapTransactions.map(function (transaction, index) {
             var address = addressInfo(transaction.enter);
-            return '<option value="' + index + '">' + (index + 1) + ' · IOVA ' + escapeHtml(address.iova) + ' · ' + escapeHtml(formatBytes(address.size)) + ' · ' + transaction.chunks.length + ' maps</option>';
+            var request = eventInfo(transaction.enter).request_id || "legacy";
+            var prefix = index === workloadTransaction ? "workload · " : "";
+
+            return '<option value="' + index + '">' + prefix + 'req ' + request + ' · ' + escapeHtml(address.iova) + ' · ' + escapeHtml(formatBytes(address.size)) + '</option>';
         }).join("");
         byId("map-select").value = String(selectedTransaction);
     }
@@ -673,7 +812,7 @@
             var title = "IOVA " + address.iova + " → HPA " + address.hpa + " · " + address.size;
             return '<button class="chunk ' + (index === selectedChunk ? "active" : "") + '" type="button" data-chunk="' + index + '" title="' + escapeHtml(title) + '"><b>' + String(index + 1).padStart(2, "0") + '</b><span>' + escapeHtml(formatBytes(address.size)) + '</span></button>';
         }).join("") || '<span class="chunk">No correlated IOMMU maps.</span>';
-        byId("map-summary").textContent = transaction ? "request " + (eventInfo(transaction.enter).request_id || "legacy") : "no mappings";
+        byId("map-summary").textContent = transaction ? (selectedTransaction === workloadTransaction ? "workload active · " : "") + transaction.chunks.length + " iommu:map records · request " + (eventInfo(transaction.enter).request_id || "legacy") : "no mappings";
         byId("chunk-list").querySelectorAll("[data-chunk]").forEach(function (button) {
             button.onclick = function () {
                 selectedChunk = Number(button.dataset.chunk);
@@ -703,18 +842,18 @@
             else if (actor.id === "guest-dma")
                 resource = "guest DMA addresses";
             else if (actor.id === "kvm")
-                resource = "GPA memslots";
+                resource = "memslots + posted IRQ";
             else if (actor.id === "vfio")
                 resource = transaction ? "fd " + eventInfo(transaction.enter).fd : "container";
             else if (actor.id === "memory")
                 resource = "pinned pages";
             else if (actor.id === "iommu")
-                resource = "IOVA mappings";
+                resource = "IOVA maps + IRTEs";
             else if (actor.id === "nic")
                 resource = candidate.bdf || "PCIe requester";
             else
                 resource = "DMA descriptors";
-            return '<div class="lifeline-actor' + (active ? " active" : "") + '"><small>' + actor.role + '</small><b>' + escapeHtml(actorName) + '</b><span>' + escapeHtml(resource) + '</span></div>';
+            return '<div class="lifeline-actor ' + actor.scope + '-domain' + (active ? " active" : "") + '"><small>' + actor.role + '</small><b>' + escapeHtml(actorName) + '</b><span>' + escapeHtml(resource) + '</span></div>';
         }).join("");
         byId("lifeline-lines").innerHTML = actors.map(function (_, index) {
             return '<i style="left:' + ((index + 0.5) / actors.length * 100) + '%"></i>';
@@ -728,9 +867,10 @@
         var width = distance / actors.length * 100;
         var direction = item.to > item.from ? " forward" : (item.to < item.from ? " reverse" : " self");
         var evidence = item.architectural ? " architectural" : " observed";
+        var scope = item.scope === "guest" ? " guest-scope" : " outside-scope";
         var style = distance ? "left:" + left + "%;width:" + width + "%" : "left:" + ((item.from + 0.5) / actors.length * 100) + "%";
 
-        return '<button class="interaction-row' + (index === selectedIndex ? " current" : "") + evidence + '" type="button" data-message="' + index + '"><span class="message-group">' + escapeHtml(item.group) + '</span><span class="message-line' + direction + '" style="' + style + '"><i></i><span class="message-copy"><b>' + escapeHtml(item.label) + '</b><small>' + escapeHtml(item.detail) + '</small></span></span></button>';
+        return '<button class="interaction-row' + (index === selectedIndex ? " current" : "") + evidence + scope + '" type="button" data-message="' + index + '"><span class="message-group">' + escapeHtml(item.group) + '</span><span class="message-line' + direction + '" style="' + style + '"><i></i><span class="message-copy"><b>' + escapeHtml(item.label) + '</b><small>' + escapeHtml(item.detail) + '</small></span></span></button>';
     }
 
     function renderPhaseB() {
@@ -738,7 +878,7 @@
 
         renderActors(current);
         byId("interaction-rows").innerHTML = phaseItems.map(renderMessage).join("");
-        byId("flow-caption").textContent = current ? current.group + " · " + current.label : "Select a message to inspect its captured boundary.";
+        byId("flow-caption").textContent = current ? (current.scope === "guest" ? "GUEST" : "NOT GUEST") + " · " + current.group + " · " + current.label : "Select a message to inspect its captured boundary.";
         byId("interaction-rows").querySelectorAll("[data-message]").forEach(function (button) {
             button.onclick = function () { selectRecord(Number(button.dataset.message)); };
         });
@@ -774,8 +914,9 @@
         var context = record && record.context ? record.context : {};
 
         if (!record)
-            return { classification: "architecture", relationship: actors[item.from].name + " → " + actors[item.to].name };
+            return { domain: item.scope === "guest" ? "guest" : "not guest", classification: "architecture", relationship: actors[item.from].name + " → " + actors[item.to].name };
         return {
+            domain: item.scope === "guest" ? "guest" : "not guest",
             hook: info.hook,
             operation: info.operation,
             request_id: info.request_id || null,
@@ -798,9 +939,19 @@
             direction: dmaDirection(dma.direction),
             completed: dma.completed || null,
             IRQ: interrupt.irq || null,
-            vector: interrupt.vector || null,
+            IRQ_index: record.kind.indexOf("vfio_irq_set_") === 0 ? interrupt.index : null,
+            vector_start: record.kind.indexOf("vfio_irq_set_") === 0 ? interrupt.start : null,
+            vector_count: record.kind.indexOf("vfio_irq_set_") === 0 ? interrupt.count : null,
+            IRTE: record.kind === "irte_alloc" ? interrupt.irte_index : null,
+            GSI: record.kind === "kvm_pi_irte_update" ? interrupt.gsi : null,
+            vCPU: record.kind === "kvm_pi_irte_update" ? interrupt.vcpu_id : null,
+            posted: record.kind === "kvm_pi_irte_update" ? interrupt.posted : null,
+            PI_descriptor: record.kind === "kvm_pi_irte_update" ? interrupt.pi_desc_address : null,
+            vector: interrupt.vector ? "0x" + Number(interrupt.vector).toString(16) : null,
             APIC: interrupt.apic_id || null,
             action: interrupt.action || null,
+            MSI_address: record.kind === "interrupt_remap_msi_message" ? interrupt.address : null,
+            MSI_data: record.kind === "interrupt_remap_msi_message" ? interrupt.data : null,
             MMIO_GPA: mmio.gpa || null,
             MMIO_value: mmio.value || null,
             MMIO_bytes: mmio.length || null,
@@ -831,7 +982,7 @@
         }).map(function (key) {
             return '<dt>' + escapeHtml(key) + '</dt><dd title="' + escapeHtml(fields[key]) + '">' + escapeHtml(fields[key]) + '</dd>';
         }).join("");
-        byId("source-badge").textContent = record ? compactLabel(eventInfo(record).hook || record.source) : "architecture";
+        byId("source-badge").textContent = item.architectural ? "architecture" : (item.scope === "guest" ? "guest" : "not guest");
         byId("event-title").textContent = item.label;
         byId("selected-time").textContent = record ? "t = " + record.time_ns + " ns" : "architectural path";
     }
@@ -856,8 +1007,8 @@
         selectedPhase = phase;
         byId("phase-a-state").classList.toggle("hidden", phase !== "A");
         byId("phase-b-state").classList.toggle("hidden", phase !== "B");
-        byId("machine-title").textContent = phase === "A" ? "Device assignment" : "DMA remapping";
-        byId("machine-caption").textContent = phase === "A" ? "One physical function, changing software ownership." : "QEMU registers memory; VFIO and VT-d make it reachable to the assigned device.";
+        byId("machine-title").textContent = phase === "A" ? "Device assignment" : "DMA + interrupt remapping";
+        byId("machine-caption").textContent = phase === "A" ? "One physical function, changing software ownership." : "VFIO maps guest memory; VT-d translates DMA and posts MSI-X vectors to the target vCPU.";
         phaseItems = phase === "A" ? phaseAItems() : phaseBItems();
         if (phase === "B") {
             selectedIndex = -1;
@@ -885,7 +1036,7 @@
     byId("next").onclick = function () { selectRecord(selectedIndex + 1); };
     byId("map-select").onchange = function () {
         selectedTransaction = Number(this.value);
-        selectedChunk = 0;
+        selectedChunk = selectedTransaction === workloadTransaction ? workloadChunkIndex(mapTransactions[selectedTransaction]) : 0;
         phaseItems = phaseBItems();
         renderChunks();
         selectedIndex = -1;

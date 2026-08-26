@@ -6,13 +6,13 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>VT·D</title>
     <link rel="stylesheet" href="../../theme.css">
-    <link rel="stylesheet" href="virt-vtd.css?v=29">
+    <link rel="stylesheet" href="virt-vtd.css?v=35">
 </head>
 <body>
 <main class="vtd">
     <header class="hero">
         <div>
-            <div class="eyebrow">DIRECT PCIe ASSIGNMENT · DMA REMAPPING</div>
+            <div class="eyebrow">DIRECT PCIe ASSIGNMENT · DMA + INTERRUPT REMAPPING</div>
             <h1>VT·D</h1>
             <p>Physical PCIe ownership, guest enumeration, and VT-d translation from one assignment run.</p>
         </div>
@@ -117,19 +117,12 @@
                     </div>
 
                     <div id="phase-b-state" class="phase-state dma-state hidden">
-                        <section class="mapping-console">
-                            <div class="mapping-picker">
-                                <label for="map-select">VFIO MAP</label>
-                                <select id="map-select"></select>
-                                <span id="map-summary">—</span>
-                            </div>
-                        </section>
-
                         <section class="interaction-view">
                             <header class="interaction-head">
-                                <div><b>ADDRESS-SPACE REGISTRATION AND DMA USE</b><span id="flow-caption">Select a message to inspect its captured boundary.</span></div>
+                                <div><b>DMA + INTERRUPT REMAPPING LIFECYCLE</b><span id="flow-caption">Select a message to inspect its captured boundary.</span></div>
                                 <div class="evidence-key" aria-label="Evidence legend">
-                                    <span class="observed-key"><i></i>captured</span>
+                                    <span class="guest-key"><i></i>guest</span>
+                                    <span class="outside-key"><i></i>not guest</span>
                                     <span class="architecture-key"><i></i>architecture</span>
                                 </div>
                             </header>
@@ -145,6 +138,11 @@
                                 <div><b>ONE VFIO RANGE · IOMMU MAP RECORDS</b><span id="chunk-caption">Select a captured mapping.</span></div>
                                 <code id="chunk-count">—</code>
                             </header>
+                            <div class="side-map-picker">
+                                <label for="map-select">VFIO range</label>
+                                <div class="select-shell"><select id="map-select"></select></div>
+                                <span id="map-summary">—</span>
+                            </div>
                             <div class="range-axis"><code id="range-start">—</code><span>IOVA range</span><code id="range-end">—</code></div>
                             <div id="chunk-list" class="chunk-list"></div>
                         </section>
@@ -170,6 +168,6 @@
         </aside>
     </section>
 </main>
-    <script src="virt-vtd.js?v=29"></script>
+    <script src="virt-vtd.js?v=35"></script>
 </body>
 </html>

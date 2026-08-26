@@ -9,6 +9,7 @@
 /* These x86 ioctl values are resolved from the target UAPI headers. */
 #define VFIO_IOMMU_MAP_DMA 0x3b71
 #define VFIO_IOMMU_UNMAP_DMA 0x3b72
+#define VFIO_DEVICE_SET_IRQS 0x3b6e
 #define KVM_SET_USER_MEMORY_REGION 0x4020ae46
 #define KVM_SET_USER_MEMORY_REGION2 0x40a0ae49
 
@@ -27,6 +28,14 @@ struct vfio_dma_unmap_request {
     __u32 flags;
     __u64 iova;
     __u64 size;
+};
+
+struct vfio_irq_set_request {
+    __u32 argsz;
+    __u32 flags;
+    __u32 index;
+    __u32 start;
+    __u32 count;
 };
 
 struct kvm_memory_region_request {
@@ -78,6 +87,16 @@ struct trace_event_raw_kvm_mmio {
     __u64 value;
 };
 
+struct trace_event_raw_kvm_pi_irte_update {
+    __u8 common[8];
+    __u32 host_irq;
+    __u32 vcpu_id;
+    __u32 gsi;
+    __u32 gvec;
+    __u64 pi_desc_addr;
+    __u8 set;
+};
+
 struct active_operation {
     __u32 operation;
     __u32 fd;
@@ -92,6 +111,19 @@ struct active_operation {
     __u64 gpa;
     __u64 iova;
     __u64 size;
+    __u32 irq_index;
+    __u32 irq_start;
+    __u32 irq_count;
+};
+
+struct active_irte_allocation {
+    __u32 virq;
+    __u32 count;
+};
+
+struct active_msi_compose {
+    __u64 message;
+    __u32 irq;
 };
 
 struct guest_path_state {
@@ -152,6 +184,20 @@ struct {
     __type(key, __u64);
     __type(value, __u32);
 } active_irq_chains SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 64);
+    __type(key, __u64);
+    __type(value, struct active_irte_allocation);
+} active_irte_allocations SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 64);
+    __type(key, __u64);
+    __type(value, struct active_msi_compose);
+} active_msi_composes SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_HASH);
@@ -336,11 +382,14 @@ static __always_inline void copy_operation(struct vtd_event *event, const struct
     event->state.gpa = operation->gpa;
     event->state.iova = operation->iova;
     event->state.size = operation->size;
+    event->state.irq_index = operation->irq_index;
+    event->state.irq_start = operation->irq_start;
+    event->state.irq_count = operation->irq_count;
 }
 
 static __always_inline int is_tracked_ioctl(__u64 command)
 {
-    return command == VFIO_IOMMU_MAP_DMA || command == VFIO_IOMMU_UNMAP_DMA ||
+    return command == VFIO_IOMMU_MAP_DMA || command == VFIO_IOMMU_UNMAP_DMA || command == VFIO_DEVICE_SET_IRQS ||
         command == KVM_SET_USER_MEMORY_REGION || command == KVM_SET_USER_MEMORY_REGION2;
 }
 
@@ -351,6 +400,7 @@ int enter_ioctl(struct trace_event_raw_sys_enter *context)
     struct active_operation operation = {};
     struct vfio_dma_map_request map_request = {};
     struct vfio_dma_unmap_request unmap_request = {};
+    struct vfio_irq_set_request irq_request = {};
     struct kvm_memory_region_request memory_request = {};
     struct vtd_event *event;
 
@@ -383,6 +433,19 @@ int enter_ioctl(struct trace_event_raw_sys_enter *context)
             operation.iova = unmap_request.iova;
             operation.size = unmap_request.size;
             if (unmap_request.argsz < sizeof(unmap_request))
+                operation.sample_status = VTD_SAMPLE_INVALID_ARGUMENT;
+        }
+    } else if (operation.command == VFIO_DEVICE_SET_IRQS) {
+        operation.operation = VTD_OP_VFIO_IRQ_SET;
+        if (bpf_probe_read_user(&irq_request, sizeof(irq_request), (void *)operation.user_argument)) {
+            operation.sample_status = VTD_SAMPLE_READ_FAILED;
+        } else {
+            operation.argsz = irq_request.argsz;
+            operation.flags = irq_request.flags;
+            operation.irq_index = irq_request.index;
+            operation.irq_start = irq_request.start;
+            operation.irq_count = irq_request.count;
+            if (irq_request.argsz < sizeof(irq_request))
                 operation.sample_status = VTD_SAMPLE_INVALID_ARGUMENT;
         }
     } else {
@@ -750,6 +813,123 @@ int host_kvm_mmio(struct trace_event_raw_kvm_mmio *context)
     return 0;
 }
 
+SEC("kprobe/intel_irq_remapping_alloc")
+int BPF_KPROBE(host_irte_alloc_enter, void *domain, unsigned int virq, unsigned int nr_irqs, void *argument)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_irte_allocation allocation = {};
+
+    (void)domain;
+    (void)argument;
+    if (!current_process_is_qemu())
+        return 0;
+    allocation.virq = virq;
+    allocation.count = nr_irqs;
+    bpf_map_update_elem(&active_irte_allocations, &key, &allocation, BPF_ANY);
+    return 0;
+}
+
+SEC("kretprobe/alloc_irte")
+int BPF_KRETPROBE(host_alloc_irte_exit, long index)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_irte_allocation *allocation = bpf_map_lookup_elem(&active_irte_allocations, &key);
+    struct vtd_event *event;
+
+    if (!allocation)
+        return 0;
+    event = reserve_event(VTD_EVENT_IRTE_ALLOC);
+    if (!event)
+        return 0;
+    event->event_info.result = index;
+    event->state.irq = allocation->virq;
+    event->state.irq_count = allocation->count;
+    if (index >= 0)
+        event->state.irte_index = index;
+    bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
+SEC("kretprobe/intel_irq_remapping_alloc")
+int BPF_KRETPROBE(host_irte_alloc_exit)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+
+    bpf_map_delete_elem(&active_irte_allocations, &key);
+    return 0;
+}
+
+SEC("kprobe/intel_irq_remapping_activate")
+int BPF_KPROBE(host_irte_activate, void *domain, struct irq_data *irq_data, bool reserve)
+{
+    struct vtd_event *event;
+
+    (void)domain;
+    if (!current_process_is_qemu())
+        return 0;
+    event = reserve_event(VTD_EVENT_IRTE_ACTIVATE);
+    if (!event)
+        return 0;
+    event->state.irq = BPF_CORE_READ(irq_data, irq);
+    event->event_info.flags = reserve;
+    bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
+SEC("kprobe/intel_ir_compose_msi_msg")
+int BPF_KPROBE(host_ir_msi_entry, struct irq_data *irq_data, struct msi_msg *message)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_msi_compose compose = {};
+
+    if (!current_process_is_qemu())
+        return 0;
+    compose.message = (__u64)message;
+    compose.irq = BPF_CORE_READ(irq_data, irq);
+    bpf_map_update_elem(&active_msi_composes, &key, &compose, BPF_ANY);
+    return 0;
+}
+
+SEC("kretprobe/intel_ir_compose_msi_msg")
+int BPF_KRETPROBE(host_ir_msi_exit)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_msi_compose *compose = bpf_map_lookup_elem(&active_msi_composes, &key);
+    struct msi_msg message = {};
+    struct vtd_event *event;
+
+    if (!compose)
+        return 0;
+    if (!bpf_probe_read_kernel(&message, sizeof(message), (void *)compose->message)) {
+        event = reserve_event(VTD_EVENT_IR_MSI_MESSAGE);
+        if (event) {
+            event->state.irq = compose->irq;
+            event->state.interrupt_address = ((__u64)message.address_hi << 32) | message.address_lo;
+            event->state.interrupt_data = message.data;
+            bpf_ringbuf_submit(event, 0);
+        }
+    }
+    bpf_map_delete_elem(&active_msi_composes, &key);
+    return 0;
+}
+
+SEC("tracepoint/kvm/kvm_pi_irte_update")
+int host_kvm_pi_irte_update(struct trace_event_raw_kvm_pi_irte_update *context)
+{
+    struct vtd_event *event = reserve_event(VTD_EVENT_KVM_PI_IRTE_UPDATE);
+
+    if (!event)
+        return 0;
+    event->state.irq = context->host_irq;
+    event->state.vcpu_id = context->vcpu_id;
+    event->state.gsi = context->gsi;
+    event->state.vector = context->gvec;
+    event->state.pi_desc_address = context->pi_desc_addr;
+    event->state.posted = context->set;
+    bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
 SEC("kprobe/ixgbe_run_loopback_test")
 int BPF_KPROBE(guest_run_entry)
 {
@@ -945,6 +1125,40 @@ int BPF_KRETPROBE(guest_clean_exit, long result)
         }
     }
     bpf_map_delete_elem(&guest_paths, &key);
+    return 0;
+}
+
+static __always_inline int guest_netdev_matches(struct net_device *netdev)
+{
+    char name[VTD_COMM_LEN] = {};
+
+    BPF_CORE_READ_STR_INTO(&name, netdev, name);
+    return guest_irq_name_matches(name);
+}
+
+SEC("kprobe/ixgbe_open")
+int BPF_KPROBE(guest_netdev_open, struct net_device *netdev)
+{
+    struct vtd_event *event;
+
+    if (!guest_netdev_matches(netdev))
+        return 0;
+    event = reserve_unfiltered_event(VTD_EVENT_GUEST_NETDEV_OPEN);
+    if (event)
+        bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
+SEC("kprobe/ixgbe_close")
+int BPF_KPROBE(guest_netdev_close, struct net_device *netdev)
+{
+    struct vtd_event *event;
+
+    if (!guest_netdev_matches(netdev))
+        return 0;
+    event = reserve_unfiltered_event(VTD_EVENT_GUEST_NETDEV_CLOSE);
+    if (event)
+        bpf_ringbuf_submit(event, 0);
     return 0;
 }
 

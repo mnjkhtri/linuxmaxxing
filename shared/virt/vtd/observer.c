@@ -14,8 +14,8 @@
 #include "vtd.skel.h"
 #include "vtd_event.h"
 
-#define VTD_SCHEMA_VERSION 5
-#define MAX_LINKS 40
+#define VTD_SCHEMA_VERSION 6
+#define MAX_LINKS 56
 
 enum capture_mode {
     CAPTURE_HOST,
@@ -35,6 +35,13 @@ struct capture_features {
     bool kvm_msi_route;
     bool kvm_apic_accept;
     bool kvm_mmio;
+    bool irte_alloc_enter;
+    bool irte_index;
+    bool irte_alloc_exit;
+    bool irte_activate;
+    bool ir_msi_entry;
+    bool ir_msi_exit;
+    bool kvm_pi_irte_update;
     bool guest_run_entry;
     bool guest_run_exit;
     bool guest_xmit_entry;
@@ -48,6 +55,8 @@ struct capture_features {
     bool guest_dma_sync_device;
     bool guest_irq_entry;
     bool guest_irq_exit;
+    bool guest_netdev_open;
+    bool guest_netdev_close;
 };
 
 static volatile sig_atomic_t stop_requested;
@@ -85,6 +94,8 @@ static const char *operation_name(unsigned int operation)
         return "vfio_dma_unmap";
     if (operation == VTD_OP_KVM_MEMORY_REGION)
         return "kvm_memory_region";
+    if (operation == VTD_OP_VFIO_IRQ_SET)
+        return "vfio_irq_set";
     return "none";
 }
 
@@ -103,10 +114,14 @@ static const char *event_name(const struct vtd_event *event)
     case VTD_EVENT_IOCTL_ENTER:
         if (event->event_info.operation == VTD_OP_KVM_MEMORY_REGION)
             return "kvm_memory_region_enter";
+        if (event->event_info.operation == VTD_OP_VFIO_IRQ_SET)
+            return "vfio_irq_set_enter";
         return event->event_info.operation == VTD_OP_VFIO_MAP ? "vfio_dma_map_enter" : "vfio_dma_unmap_enter";
     case VTD_EVENT_IOCTL_EXIT:
         if (event->event_info.operation == VTD_OP_KVM_MEMORY_REGION)
             return "kvm_memory_region_exit";
+        if (event->event_info.operation == VTD_OP_VFIO_IRQ_SET)
+            return "vfio_irq_set_exit";
         return event->event_info.operation == VTD_OP_VFIO_MAP ? "vfio_dma_map_exit" : "vfio_dma_unmap_exit";
     case VTD_EVENT_IOMMU_MAP:
         return "iommu_map";
@@ -142,6 +157,14 @@ static const char *event_name(const struct vtd_event *event)
         return "kvm_apic_accept_irq";
     case VTD_EVENT_KVM_MMIO:
         return "kvm_mmio";
+    case VTD_EVENT_IRTE_ALLOC:
+        return "irte_alloc";
+    case VTD_EVENT_IRTE_ACTIVATE:
+        return "irte_activate";
+    case VTD_EVENT_IR_MSI_MESSAGE:
+        return "interrupt_remap_msi_message";
+    case VTD_EVENT_KVM_PI_IRTE_UPDATE:
+        return "kvm_pi_irte_update";
     case VTD_EVENT_GUEST_RUN_ENTRY:
         return "guest_ixgbe_run_loopback_entry";
     case VTD_EVENT_GUEST_RUN_EXIT:
@@ -168,6 +191,10 @@ static const char *event_name(const struct vtd_event *event)
         return "guest_irq_handler_entry";
     case VTD_EVENT_GUEST_IRQ_EXIT:
         return "guest_irq_handler_exit";
+    case VTD_EVENT_GUEST_NETDEV_OPEN:
+        return "guest_ixgbe_open";
+    case VTD_EVENT_GUEST_NETDEV_CLOSE:
+        return "guest_ixgbe_close";
     default:
         return "unknown";
     }
@@ -210,6 +237,14 @@ static const char *event_hook(const struct vtd_event *event)
         return "kvm:kvm_apic_accept_irq";
     case VTD_EVENT_KVM_MMIO:
         return "kvm:kvm_mmio";
+    case VTD_EVENT_IRTE_ALLOC:
+        return "kretprobe:alloc_irte";
+    case VTD_EVENT_IRTE_ACTIVATE:
+        return "kprobe:intel_irq_remapping_activate";
+    case VTD_EVENT_IR_MSI_MESSAGE:
+        return "kretprobe:intel_ir_compose_msi_msg";
+    case VTD_EVENT_KVM_PI_IRTE_UPDATE:
+        return "kvm:kvm_pi_irte_update";
     case VTD_EVENT_GUEST_RUN_ENTRY:
         return "kprobe:ixgbe_run_loopback_test";
     case VTD_EVENT_GUEST_RUN_EXIT:
@@ -236,6 +271,10 @@ static const char *event_hook(const struct vtd_event *event)
         return "irq:irq_handler_entry";
     case VTD_EVENT_GUEST_IRQ_EXIT:
         return "irq:irq_handler_exit";
+    case VTD_EVENT_GUEST_NETDEV_OPEN:
+        return "kprobe:ixgbe_open";
+    case VTD_EVENT_GUEST_NETDEV_CLOSE:
+        return "kprobe:ixgbe_close";
     default:
         return event->event_info.kind == VTD_EVENT_IOCTL_EXIT ? "syscalls:sys_exit_ioctl" : "syscalls:sys_enter_ioctl";
     }
@@ -286,6 +325,13 @@ static int emit_meta(const struct capture_features *features)
     json_bool(&writer, "kvm_msi_route", features->kvm_msi_route);
     json_bool(&writer, "kvm_apic_accept", features->kvm_apic_accept);
     json_bool(&writer, "kvm_mmio", features->kvm_mmio);
+    json_bool(&writer, "irte_alloc_enter", features->irte_alloc_enter);
+    json_bool(&writer, "irte_index", features->irte_index);
+    json_bool(&writer, "irte_alloc_exit", features->irte_alloc_exit);
+    json_bool(&writer, "irte_activate", features->irte_activate);
+    json_bool(&writer, "ir_msi_entry", features->ir_msi_entry);
+    json_bool(&writer, "ir_msi_exit", features->ir_msi_exit);
+    json_bool(&writer, "kvm_pi_irte_update", features->kvm_pi_irte_update);
     json_bool(&writer, "guest_run_entry", features->guest_run_entry);
     json_bool(&writer, "guest_run_exit", features->guest_run_exit);
     json_bool(&writer, "guest_xmit_entry", features->guest_xmit_entry);
@@ -299,6 +345,8 @@ static int emit_meta(const struct capture_features *features)
     json_bool(&writer, "guest_dma_sync_device", features->guest_dma_sync_device);
     json_bool(&writer, "guest_irq_entry", features->guest_irq_entry);
     json_bool(&writer, "guest_irq_exit", features->guest_irq_exit);
+    json_bool(&writer, "guest_netdev_open", features->guest_netdev_open);
+    json_bool(&writer, "guest_netdev_close", features->guest_netdev_close);
     json_object_end(&writer);
     json_object_end(&writer);
     json_object_end(&writer);
@@ -341,7 +389,7 @@ static int emit_record(void *ctx, void *data, size_t size)
     json_object_end(&writer);
 
     json_object_begin_field(&writer, "state");
-    if (event->event_info.kind <= VTD_EVENT_PAGE_UNPIN_EXIT) {
+    if (event->event_info.kind <= VTD_EVENT_PAGE_UNPIN_EXIT && event->event_info.operation != VTD_OP_VFIO_IRQ_SET) {
         json_object_begin_field(&writer, "address_space");
         json_hex(&writer, "hva", event->state.hva);
         json_hex(&writer, "gpa", event->state.gpa);
@@ -363,7 +411,9 @@ static int emit_record(void *ctx, void *data, size_t size)
         json_u32(&writer, "completed_descriptors", event->state.count);
         json_object_end(&writer);
     }
-    if ((event->event_info.kind >= VTD_EVENT_VFIO_MSI_ENTRY && event->event_info.kind <= VTD_EVENT_KVM_APIC_ACCEPT) || (event->event_info.kind == VTD_EVENT_GUEST_IRQ_ENTRY || event->event_info.kind == VTD_EVENT_GUEST_IRQ_EXIT)) {
+    if ((event->event_info.kind >= VTD_EVENT_VFIO_MSI_ENTRY && event->event_info.kind <= VTD_EVENT_KVM_APIC_ACCEPT) ||
+        (event->event_info.kind >= VTD_EVENT_IRTE_ALLOC && event->event_info.kind <= VTD_EVENT_KVM_PI_IRTE_UPDATE) ||
+        event->event_info.operation == VTD_OP_VFIO_IRQ_SET || event->event_info.kind == VTD_EVENT_GUEST_IRQ_ENTRY || event->event_info.kind == VTD_EVENT_GUEST_IRQ_EXIT) {
         json_object_begin_field(&writer, "interrupt");
         json_u32(&writer, "irq", event->state.irq);
         json_u32(&writer, "vector", event->state.vector);
@@ -371,6 +421,14 @@ static int emit_record(void *ctx, void *data, size_t size)
         json_hex(&writer, "address", event->state.interrupt_address);
         json_hex(&writer, "data", event->state.interrupt_data);
         json_string_n(&writer, "action", event->state.action, sizeof(event->state.action));
+        json_u32(&writer, "index", event->state.irq_index);
+        json_u32(&writer, "start", event->state.irq_start);
+        json_u32(&writer, "count", event->state.irq_count);
+        json_u32(&writer, "irte_index", event->state.irte_index);
+        json_u32(&writer, "gsi", event->state.gsi);
+        json_u32(&writer, "vcpu_id", event->state.vcpu_id);
+        json_bool(&writer, "posted", event->state.posted);
+        json_hex(&writer, "pi_desc_address", event->state.pi_desc_address);
         json_object_end(&writer);
     }
     if (event->event_info.kind == VTD_EVENT_KVM_MMIO) {
@@ -490,6 +548,13 @@ static int attach_host_programs(struct vtd_bpf *skeleton, struct bpf_link **link
     links[(*link_count)++] = attach_optional_program(skeleton->progs.host_kvm_msi_route, &features->kvm_msi_route);
     links[(*link_count)++] = attach_optional_program(skeleton->progs.host_kvm_apic_accept, &features->kvm_apic_accept);
     links[(*link_count)++] = attach_optional_program(skeleton->progs.host_kvm_mmio, &features->kvm_mmio);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_irte_alloc_enter, false, "intel_irq_remapping_alloc", &features->irte_alloc_enter);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_alloc_irte_exit, true, "alloc_irte", &features->irte_index);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_irte_alloc_exit, true, "intel_irq_remapping_alloc", &features->irte_alloc_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_irte_activate, false, "intel_irq_remapping_activate", &features->irte_activate);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_ir_msi_entry, false, "intel_ir_compose_msi_msg", &features->ir_msi_entry);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_ir_msi_exit, true, "intel_ir_compose_msi_msg", &features->ir_msi_exit);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.host_kvm_pi_irte_update, &features->kvm_pi_irte_update);
     return 0;
 }
 
@@ -508,6 +573,8 @@ static int attach_guest_programs(struct vtd_bpf *skeleton, struct bpf_link **lin
     links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_sync_device, false, "dma_sync_single_for_device", &features->guest_dma_sync_device);
     links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_irq_entry, &features->guest_irq_entry);
     links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_irq_exit, &features->guest_irq_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_netdev_open, false, "ixgbe_open", &features->guest_netdev_open);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_netdev_close, false, "ixgbe_close", &features->guest_netdev_close);
     if (!features->guest_run_entry || !features->guest_run_exit || !features->guest_xmit_entry || !features->guest_xmit_exit || !features->guest_dma_map_entry || !features->guest_dma_map_exit || !features->guest_clean_entry || !features->guest_clean_exit || !features->guest_irq_entry || !features->guest_irq_exit)
         return -ENOENT;
     return 0;

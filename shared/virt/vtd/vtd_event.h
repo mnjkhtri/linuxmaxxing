@@ -11,6 +11,7 @@ enum vtd_operation {
     VTD_OP_VFIO_MAP,
     VTD_OP_VFIO_UNMAP,
     VTD_OP_KVM_MEMORY_REGION,
+    VTD_OP_VFIO_IRQ_SET,
 };
 
 enum vtd_event_kind {
@@ -33,6 +34,10 @@ enum vtd_event_kind {
     VTD_EVENT_KVM_MSI_ROUTE,
     VTD_EVENT_KVM_APIC_ACCEPT,
     VTD_EVENT_KVM_MMIO,
+    VTD_EVENT_IRTE_ALLOC,
+    VTD_EVENT_IRTE_ACTIVATE,
+    VTD_EVENT_IR_MSI_MESSAGE,
+    VTD_EVENT_KVM_PI_IRTE_UPDATE,
     VTD_EVENT_GUEST_RUN_ENTRY,
     VTD_EVENT_GUEST_RUN_EXIT,
     VTD_EVENT_GUEST_XMIT_ENTRY,
@@ -46,6 +51,8 @@ enum vtd_event_kind {
     VTD_EVENT_GUEST_CLEAN_EXIT,
     VTD_EVENT_GUEST_IRQ_ENTRY,
     VTD_EVENT_GUEST_IRQ_EXIT,
+    VTD_EVENT_GUEST_NETDEV_OPEN,
+    VTD_EVENT_GUEST_NETDEV_CLOSE,
 };
 
 enum vtd_sample_status {
@@ -101,6 +108,14 @@ struct vtd_state {
     unsigned int count;
     unsigned int mmio_length;
     unsigned int mmio_type;
+    unsigned int irq_index;
+    unsigned int irq_start;
+    unsigned int irq_count;
+    unsigned int irte_index;
+    unsigned int gsi;
+    unsigned int vcpu_id;
+    unsigned int posted;
+    unsigned long long pi_desc_address;
     char device[VTD_DEVICE_NAME_LEN];
     char action[VTD_ACTION_NAME_LEN];
 };
