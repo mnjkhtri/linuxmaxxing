@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <linux/kvm.h>
 #include <bpf/libbpf.h>
 #include "io_event.h"
 #include "json_writer.h"
@@ -32,6 +33,7 @@
 
 static unsigned int record_count;
 static unsigned int seq_counter;
+static bool vmx_disposition_available;
 
 static volatile sig_atomic_t exiting;
 
@@ -66,9 +68,124 @@ static const char *event_name(unsigned int event)
 		return "device_dma_transfer";
 	case IO_EVENT_KVM_MSI_SET_IRQ:
 		return "kvm_msi_set_irq";
+	case IO_EVENT_SYS_ENTER_IOCTL:
+		return "sys_enter_ioctl";
+	case IO_EVENT_SYS_EXIT_IOCTL:
+		return "sys_exit_ioctl";
+	case IO_EVENT_VMX_HANDLE_EXIT_RETURN:
+		return "vmx_handle_exit_return";
+	case IO_EVENT_DEVICE_MMIO_WRITE:
+		return "device_mmio_write";
+	case IO_EVENT_DEVICE_EXECUTE_COMMAND:
+		return "device_execute_command";
+	case IO_EVENT_DEVICE_EXECUTE_COMMAND_RETURN:
+		return "device_execute_command_return";
+	case IO_EVENT_DEVICE_DMA_TRANSFER_RETURN:
+		return "device_dma_transfer_return";
 	default:
 		return "unknown";
 	}
+}
+
+static const char *ioctl_request_name(unsigned long long request)
+{
+	switch (request)
+	{
+	case KVM_GET_API_VERSION:
+		return "KVM_GET_API_VERSION";
+	case KVM_CHECK_EXTENSION:
+		return "KVM_CHECK_EXTENSION";
+	case KVM_CREATE_VM:
+		return "KVM_CREATE_VM";
+	case KVM_CREATE_IRQCHIP:
+		return "KVM_CREATE_IRQCHIP";
+	case KVM_SET_USER_MEMORY_REGION:
+		return "KVM_SET_USER_MEMORY_REGION";
+	case KVM_CREATE_VCPU:
+		return "KVM_CREATE_VCPU";
+	case KVM_GET_VCPU_MMAP_SIZE:
+		return "KVM_GET_VCPU_MMAP_SIZE";
+	case KVM_GET_SREGS:
+		return "KVM_GET_SREGS";
+	case KVM_SET_SREGS:
+		return "KVM_SET_SREGS";
+	case KVM_SET_REGS:
+		return "KVM_SET_REGS";
+	case KVM_RUN:
+		return "KVM_RUN";
+	case KVM_IRQ_LINE:
+		return "KVM_IRQ_LINE";
+	case KVM_SIGNAL_MSI:
+		return "KVM_SIGNAL_MSI";
+	default:
+		return "UNKNOWN_IOCTL";
+	}
+}
+
+static const char *device_command_name(unsigned int command)
+{
+	switch (command)
+	{
+	case CMD_IRQ_ONLY:
+		return "CMD_IRQ_ONLY";
+	case CMD_DMA_TO_DEVICE:
+		return "CMD_DMA_TO_DEVICE";
+	case CMD_DMA_FROM_DEVICE:
+		return "CMD_DMA_FROM_DEVICE";
+	case CMD_MSI_ONLY:
+		return "CMD_MSI_ONLY";
+	default:
+		return "UNKNOWN_COMMAND";
+	}
+}
+
+static const char *device_register_name(unsigned int offset)
+{
+	switch (offset)
+	{
+	case REG_COMMAND:
+		return "REG_COMMAND";
+	case REG_STATUS:
+		return "REG_STATUS";
+	case REG_DMA_GPA:
+		return "REG_DMA_GPA";
+	case REG_RESULT:
+		return "REG_RESULT";
+	case REG_IRQ_ACK:
+		return "REG_IRQ_ACK";
+	default:
+		return "REG_BUFFER";
+	}
+}
+
+static const char *exit_disposition_name(int result)
+{
+	if (result > 0)
+		return "resume guest";
+	if (result == 0)
+		return "return userspace";
+	return "error";
+}
+
+static bool kallsyms_has_symbol(const char *wanted)
+{
+	FILE *stream = fopen("/proc/kallsyms", "r");
+	char line[512];
+	char symbol[256];
+	bool found = false;
+
+	if (!stream)
+		return false;
+	while (fgets(line, sizeof(line), stream))
+	{
+		if (sscanf(line, "%*s %*c %255s", symbol) == 1 && strcmp(symbol, wanted) == 0)
+		{
+			found = true;
+			break;
+		}
+	}
+	fclose(stream);
+	return found;
 }
 
 /* The public schema carries the DMA direction as a readable word; the ABI carries the command integer. */
@@ -93,7 +210,7 @@ static const char *dma_direction_name(unsigned int dir)
 static void write_meta(struct json_writer *jw)
 {
 	json_object_begin(jw);
-	json_u32(jw, "schema_version", 1);
+	json_u32(jw, "schema_version", 2);
 	json_string(jw, "experiment", "virt-io");
 	json_string(jw, "kind", "meta");
 	json_string(jw, "source", "ebpf");
@@ -107,6 +224,7 @@ static void write_meta(struct json_writer *jw)
 	json_u32(jw, "events", IO_EVENT_COUNT);
 	json_bool(jw, "ioapic_available", READ_KVM_IOAPIC_RTE_AVAILABLE != 0);
 	json_bool(jw, "lapic_available", READ_KVM_LAPIC_REGS_AVAILABLE != 0);
+	json_bool(jw, "vmx_disposition_available", vmx_disposition_available);
 	json_object_end(jw);
 	json_newline(jw);
 }
@@ -116,6 +234,9 @@ static void write_event_info(struct json_writer *jw, const struct vio_event_info
 	json_object_begin_field(jw, "event_info");
 	json_u32(jw, "event", event_info->event);
 	json_string(jw, "event_name", event_name(event_info->event));
+	json_u64(jw, "vmexit_id", event_info->vmexit_id);
+	json_u64(jw, "operation_id", event_info->operation_id);
+	json_u64(jw, "call_id", event_info->call_id);
 	json_object_end(jw);
 }
 
@@ -172,9 +293,58 @@ static void write_state(struct json_writer *jw, const struct vio_state *state)
 	}
 	json_object_end(jw);
 	json_object_begin_field(jw, "dma");
-	json_bool(jw, "present", state->dma.dir == CMD_DMA_TO_DEVICE || state->dma.dir == CMD_DMA_FROM_DEVICE);
+	json_bool(jw, "present", state->dma.len != 0);
+	json_bool(jw, "completed", state->dma.completed != 0);
 	json_hex(jw, "gpa", state->dma.gpa);
+	json_ptr(jw, "guest_hva", state->dma.guest_hva);
 	json_string(jw, "dir", dma_direction_name(state->dma.dir));
+	json_u32(jw, "len", state->dma.len);
+	json_i64(jw, "result", state->dma.result);
+	json_u32(jw, "checksum", state->dma.checksum);
+	json_u64(jw, "duration_ns", state->dma.duration_ns);
+	json_object_end(jw);
+	json_object_begin_field(jw, "ioctl");
+	json_bool(jw, "present", state->ioctl.present != 0);
+	json_bool(jw, "completed", state->ioctl.completed != 0);
+	if (state->ioctl.present)
+	{
+		json_u32(jw, "fd", (unsigned int)state->ioctl.fd);
+		json_hex(jw, "request", state->ioctl.request);
+		json_string(jw, "request_name", ioctl_request_name(state->ioctl.request));
+		json_hex(jw, "argument", state->ioctl.argument);
+		json_i64(jw, "result", state->ioctl.result);
+		json_u64(jw, "duration_ns", state->ioctl.duration_ns);
+	}
+	json_object_end(jw);
+	json_object_begin_field(jw, "disposition");
+	json_bool(jw, "present", state->disposition.present != 0);
+	if (state->disposition.present)
+	{
+		json_i64(jw, "result", state->disposition.result);
+		json_string(jw, "meaning", exit_disposition_name(state->disposition.result));
+	}
+	json_object_end(jw);
+	json_object_begin_field(jw, "mmio");
+	json_bool(jw, "present", state->mmio.present != 0);
+	if (state->mmio.present)
+	{
+		json_u32(jw, "offset", state->mmio.offset);
+		json_string(jw, "register", device_register_name(state->mmio.offset));
+		json_hex(jw, "value", state->mmio.value);
+	}
+	json_object_end(jw);
+	json_object_begin_field(jw, "command");
+	json_bool(jw, "present", state->command.present != 0);
+	json_bool(jw, "completed", state->command.completed != 0);
+	if (state->command.present)
+	{
+		json_u32(jw, "command", state->command.command);
+		json_string(jw, "command_name", device_command_name(state->command.command));
+		json_hex(jw, "status", state->command.status);
+		json_hex(jw, "dma_gpa", state->command.dma_gpa);
+		json_u32(jw, "result", state->command.result);
+		json_u64(jw, "duration_ns", state->command.duration_ns);
+	}
 	json_object_end(jw);
 	json_object_end(jw);
 }
@@ -182,7 +352,7 @@ static void write_state(struct json_writer *jw, const struct vio_state *state)
 static void write_snapshot(struct json_writer *jw, const struct vio_event *event, unsigned int seq)
 {
 	json_object_begin(jw);
-	json_u32(jw, "schema_version", 1);
+	json_u32(jw, "schema_version", 2);
 	json_string(jw, "experiment", "virt-io");
 	json_string(jw, "kind", "snapshot");
 	json_string(jw, "source", "ebpf");
@@ -235,6 +405,12 @@ int main(void)
 	{
 		fprintf(stderr, "io: failed to open IO BPF skeleton\n");
 		return 1;
+	}
+	vmx_disposition_available = kallsyms_has_symbol("vmx_handle_exit");
+	if (!vmx_disposition_available)
+	{
+		bpf_program__set_autoload(skel->progs.vmx_handle_exit_return, false);
+		fprintf(stderr, "io: vmx_handle_exit unavailable; disposition probe disabled\n");
 	}
 	if (io_bpf__load(skel) != 0)
 	{

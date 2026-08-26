@@ -34,13 +34,23 @@ enum io_event_type
 	IO_EVENT_KVM_APIC = 7,
 	IO_EVENT_DEVICE_DMA_TRANSFER = 8,
 	IO_EVENT_KVM_MSI_SET_IRQ = 9,
-	IO_EVENT_COUNT = 10,
+	IO_EVENT_SYS_ENTER_IOCTL = 10,
+	IO_EVENT_SYS_EXIT_IOCTL = 11,
+	IO_EVENT_VMX_HANDLE_EXIT_RETURN = 12,
+	IO_EVENT_DEVICE_MMIO_WRITE = 13,
+	IO_EVENT_DEVICE_EXECUTE_COMMAND = 14,
+	IO_EVENT_DEVICE_EXECUTE_COMMAND_RETURN = 15,
+	IO_EVENT_DEVICE_DMA_TRANSFER_RETURN = 16,
+	IO_EVENT_COUNT = 17,
 };
 
 /* Which boundary this snapshot belongs to. */
 struct vio_event_info
 {
 	unsigned int event; /* enum io_event_type. */
+	unsigned long long vmexit_id;
+	unsigned long long operation_id;
+	unsigned long long call_id;
 };
 
 /* Where and as whom the probe executed: the VMM thread driving the vCPU. */
@@ -74,7 +84,48 @@ struct vio_msi
 struct vio_dma
 {
 	unsigned long long gpa; /* Guest physical address targeted. */
+	unsigned long long guest_hva;
+	unsigned long long duration_ns;
 	unsigned int dir;		/* CMD_DMA_TO_DEVICE / CMD_DMA_FROM_DEVICE. */
+	unsigned int len;
+	unsigned int checksum;
+	int result;
+	unsigned char completed;
+};
+
+struct vio_ioctl
+{
+	unsigned long long request;
+	unsigned long long argument;
+	unsigned long long duration_ns;
+	int fd;
+	long long result;
+	unsigned char present;
+	unsigned char completed;
+};
+
+struct vio_disposition
+{
+	int result;
+	unsigned char present;
+};
+
+struct vio_mmio
+{
+	unsigned int offset;
+	unsigned int value;
+	unsigned char present;
+};
+
+struct vio_command
+{
+	unsigned long long duration_ns;
+	unsigned int command;
+	unsigned int status;
+	unsigned int dma_gpa;
+	unsigned int result;
+	unsigned char present;
+	unsigned char completed;
 };
 
 /* The interrupt-controller and virtual-DMA state observed after the boundary. */
@@ -87,6 +138,10 @@ struct vio_state
 	struct vio_controller controller;
 	struct vio_msi msi;
 	struct vio_dma dma;
+	struct vio_ioctl ioctl;
+	struct vio_disposition disposition;
+	struct vio_mmio mmio;
+	struct vio_command command;
 };
 
 struct vio_event

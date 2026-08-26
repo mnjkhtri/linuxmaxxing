@@ -62,8 +62,14 @@ mkdir "$trace_dir/instances/$instance_name"
 trace_instance="$trace_dir/instances/$instance_name"
 grep -qw mono "$trace_instance/trace_clock" || exit 1
 echo mono > "$trace_instance/trace_clock"
-for event in kvm_entry kvm_exit kvm_userspace_exit kvm_ioapic_set_irq kvm_apic_accept_irq kvm_inj_virq kvm_eoi kvm_apic kvm_msi_set_irq; do
-	[ -d "$trace_instance/events/kvm/$event" ] || exit 1
+required_events=(kvm_entry kvm_exit kvm_userspace_exit kvm_mmio kvm_pio kvm_page_fault kvm_set_irq kvm_ioapic_set_irq kvm_apic_accept_irq kvm_apic kvm_msi_set_irq)
+optional_events=(kvm_fast_mmio kvm_emulate_insn kvm_cr kvm_ack_irq kvm_inj_virq kvm_eoi)
+for event in "${required_events[@]}"; do
+	[ -d "$trace_instance/events/kvm/$event" ] || { echo "error: required KVM tracepoint missing: $event" >&2; exit 1; }
+	echo 1 > "$trace_instance/events/kvm/$event/enable"
+done
+for event in "${optional_events[@]}"; do
+	[ -d "$trace_instance/events/kvm/$event" ] || continue
 	echo 1 > "$trace_instance/events/kvm/$event/enable"
 done
 echo 1 > "$trace_instance/tracing_on"
@@ -73,5 +79,11 @@ cat "$trace_instance/trace" > captures/virt-io-Trace.txt
 cleanup
 trap - EXIT
 [ -s captures/virt-io-Trace.txt ] && [ -s captures/virt-io.eBPF.ndjson ] || exit 1
+for event in sys_enter_ioctl device_mmio_write device_execute_command_return device_dma_transfer_return; do
+	grep -Fq "event_name\":\"$event\"" captures/virt-io.eBPF.ndjson || { echo "error: missing eBPF event: $event" >&2; exit 1; }
+done
+for event in kvm_mmio kvm_pio kvm_page_fault kvm_set_irq; do
+	grep -q " $event:" captures/virt-io-Trace.txt || { echo "error: missing tracefs event: $event" >&2; exit 1; }
+done
 REMOTE
 fetch_captures

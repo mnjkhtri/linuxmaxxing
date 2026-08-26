@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KVM virt-I/O</title>
-  <link rel="stylesheet" href="virt-io.css?v=57">
+  <link rel="stylesheet" href="virt-io.css?v=71">
 </head>
 <body>
 <main class="io">
@@ -53,23 +53,21 @@
         <div class="support-stack">
         <section class="region interrupts">
           <header class="region-title">
-            <div><b>INTERRUPT ROUTE</b><span>trace route and LAPIC pending/in-service list</span></div>
+            <div><b>INTERRUPT ROUTE</b><span>captured request, routing, and LAPIC state progression</span></div>
             <code class="address" id="irq-address">GSI — → VEC —</code>
           </header>
           <div class="irq-body">
-            <div class="irq-route">
-              <div class="irq-node" id="irq-device"><b>DEVICE</b><span id="device-node-sub">edge source</span></div>
-              <div class="irq-edge" id="edge-gsi"></div>
-              <div class="irq-node" id="irq-ioapic"><b>IOAPIC</b><span id="ioapic-node-sub">pin — · RTE</span></div>
-              <div class="irq-edge" id="edge-lapic"></div>
-              <div class="irq-node" id="irq-lapic"><b>LAPIC</b><span id="lapic-node-sub">apicid 0 · vec —</span></div>
-            </div>
-            <div class="msi-route" id="msi-route">
-              <div class="irq-node" id="irq-device-msi"><b>DEVICE</b><span>MSI source (toy virtual device)</span></div>
-              <div class="irq-edge" id="edge-msg"></div>
-              <div class="irq-node" id="irq-msg"><b>MSI MESSAGE</b><span id="msi-msg-detail">addr — · dest — · fixed · edge</span></div>
-              <div class="irq-edge" id="edge-msi-lapic"></div>
-              <div class="irq-node" id="irq-lapic-msi"><b>LAPIC</b><span id="msi-vec-detail">vec —</span></div>
+            <div class="irq-lifecycle" aria-label="Captured interrupt delivery state">
+              <div class="irq-life-head"><b id="irq-life-mode">no delivery</b><span id="irq-life-summary">waiting for an interrupt request</span></div>
+              <div class="irq-life-steps">
+                <span id="irq-step-request"><b>request</b><small>—</small></span>
+                <span id="irq-step-route"><b>route</b><small>—</small></span>
+                <span id="irq-step-accept"><b>accept</b><small>—</small></span>
+                <span id="irq-step-pending"><b>pending</b><small>—</small></span>
+                <span id="irq-step-service"><b>service</b><small>—</small></span>
+                <span id="irq-step-ack"><b>ack</b><small>—</small></span>
+                <span id="irq-step-cleared"><b>cleared</b><small>—</small></span>
+              </div>
             </div>
             <div class="ctrl-groups">
               <div class="ctrl-group lapic-group">
@@ -140,6 +138,6 @@
     </aside>
   </section>
 </main>
-<script src="virt-io.js?v=57"></script>
+<script src="virt-io.js?v=71"></script>
 </body>
 </html>

@@ -43,19 +43,6 @@
 #define GUEST_MEM_SIZE 0x20000 /* 128 KiB flat guest RAM (code, IDT, stack, buffers) */
 #define GUEST_PAGE_SIZE 0x1000
 
-/*
- * Toy device model: a small set of named MMIO registers plus device-internal storage.
- * MMIO writes update these fields; writing REG_COMMAND starts the operation.  Whatever is not a register lives in the buffer below.
- */
-struct toy_device
-{
-	uint32_t command;					/* REG_COMMAND  last command written by the guest */
-	uint32_t status;					/* REG_STATUS   STATUS_BUSY / STATUS_DONE / STATUS_ERROR */
-	uint32_t dma_gpa;					/* REG_DMA_GPA  DMA target guest physical address */
-	uint32_t result;					/* REG_RESULT   device result / checksum */
-	uint8_t buffer[DEVICE_BUFFER_SIZE]; /* device-internal DMA target/source buffer */
-};
-
 /* Register the guest physical memory region this VMM supplies. */
 static int set_memory_region(int vm, uint32_t slot, uint64_t guest_phys_addr, uint8_t *memory, size_t size, uint32_t flags)
 {
@@ -162,7 +149,7 @@ static void device_signal_msi(int vm)
  * Execute a command synchronously, then signal completion through STATUS + the matching interrupt transport.
  * CMD_MSI_ONLY is the only MSI command; every other successful command uses the legacy KVM_IRQ_LINE edge.
  */
-static void device_execute_command(int vm, struct toy_device *dev, uint8_t *guest_mem, uint64_t guest_mem_size)
+__attribute__((noinline)) static void device_execute_command(int vm, struct toy_device *dev, uint8_t *guest_mem, uint64_t guest_mem_size)
 {
 	int ret = -1;
 
@@ -226,7 +213,7 @@ static void device_mmio_read(struct toy_device *dev, uint32_t offset, uint8_t *d
 }
 
 /* MMIO write: update device state, executing when COMMAND is written. */
-static void device_mmio_write(int vm, struct toy_device *dev, uint32_t offset, uint8_t *data, uint8_t *guest_mem, uint64_t guest_mem_size)
+__attribute__((noinline)) static void device_mmio_write(int vm, struct toy_device *dev, uint32_t offset, uint8_t *data, uint8_t *guest_mem, uint64_t guest_mem_size)
 {
 	uint32_t value;
 

@@ -54,6 +54,16 @@
 #define DEVICE_BUFFER_SIZE 256u
 #define DMA_XFER_SIZE 64u
 
+/* Userspace device state observed by the VMM uprobes. */
+struct toy_device
+{
+	unsigned int command;
+	unsigned int status;
+	unsigned int dma_gpa;
+	unsigned int result;
+	unsigned char buffer[DEVICE_BUFFER_SIZE];
+};
+
 /* Completion / phase-marker PIO ports (markers only; PIO is not the subject). */
 #define MARKER_PORT 0xe9u
 #define DONE_PORT 0x82u
