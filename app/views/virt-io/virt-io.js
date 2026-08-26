@@ -422,141 +422,128 @@ function seqIoLabel(e){
     var meaning=ioMeaning(e);
     return q.dir+' 0x'+q.port.toString(16)+(meaning?' · '+meaning:'');
 }
-/* Rightmost observation column label for any event kind. */
-function seqObsLabel(e){
-    if(e.kind==='entry')return 'kvm_entry';
-    if(e.kind==='exit')return 'kvm_exit · '+(e.reason||'VM exit');
-    if(e.kind==='handoff')return 'kvm_userspace_exit · '+((e.userspace_reason||'KVM_EXIT').replace('KVM_EXIT_',''));
-    if(e.name==='device_dma_transfer')return 'VMM uprobe · device_dma_transfer';
-    return 'KVM tracepoint · '+e.name;
+/* Component lifelines use the same actor/message model as the native I/O view. */
+var COMPONENT_ACTORS=[
+    {id:'vmm',role:'USERSPACE',name:'VMM'},
+    {id:'kvm',role:'HOST KERNEL',name:'KVM'},
+    {id:'guest',role:'GUEST',name:'vCPU 0'},
+    {id:'lapic',role:'KVM IRQCHIP',name:'LAPIC'},
+    {id:'ioapic',role:'KVM IRQCHIP',name:'IOAPIC'},
+    {id:'device',role:'USERSPACE',name:'TOY DEVICE'},
+    {id:'memory',role:'GUEST MEMORY',name:'RAM'}
+];
+function actorDetail(actor){
+    if(actor.id==='vmm')return D.events[0].comm+'-'+D.events[0].pid;
+    if(actor.id==='kvm')return'KVM_RUN + irqchip';
+    if(actor.id==='guest')return'guest execution';
+    if(actor.id==='lapic')return'vec '+vecHex(metaVec())+' / '+vecHex(metaMsiVec());
+    if(actor.id==='ioapic')return'GSI '+metaGsi();
+    if(actor.id==='device')return D.meta.device_buffer_size+' B buffer';
+    var gpas=[];
+    D.events.forEach(function(event){if(event.dma_present&&gpas.indexOf(event.dma_gpa)<0)gpas.push(event.dma_gpa)});
+    return gpas.length?gpas.join(' / '):'DMA GPAs';
 }
-/* Walking residency guess: update one domain per boundary event. */
+function actorIndex(id){
+    for(var i=0;i<COMPONENT_ACTORS.length;i++)if(COMPONENT_ACTORS[i].id===id)return i;
+    return 0;
+}
 function executionStateBefore(index){
-    var s='unknown';
+    var state='unknown';
     for(var i=0;i<index;i++){
-        var e=D.events[i];
-        if(e.kind==='entry')s='guest';
-        else if(e.kind==='exit')s='kvm';
-        else if(e.kind==='handoff')s='vmm';
+        var event=D.events[i];
+        if(event.kind==='entry')state='guest';
+        else if(event.kind==='exit')state='kvm';
+        else if(event.kind==='handoff')state='vmm';
     }
-    return s;
+    return state;
 }
-function stateAfterEvent(e,prior){
-    if(e.kind==='entry')return 'guest';
-    if(e.kind==='exit')return 'kvm';
-    if(e.kind==='handoff')return 'vmm';
-    return prior;
+function interruptTransport(index){
+    for(var i=index-1;i>=0;i--){
+        if(D.events[i].name==='kvm_msi_set_irq')return'msi';
+        if(D.events[i].name==='kvm_ioapic_set_irq')return'ioapic';
+        if(D.events[i].name==='kvm_apic_accept_irq')break;
+    }
+    return'ioapic';
 }
-
+function componentMessage(from,to,label,kind,inferred){
+    return{from:from,to:to,label:label,kind:kind||'control',inferred:!!inferred};
+}
+function componentFlow(event,index){
+    var flow=[],vector=event.vec!=null?vecHex(event.vec):vecHex(metaVec());
+    if(event.kind==='entry'){
+        if(executionStateBefore(index)==='vmm')flow.push(componentMessage('vmm','kvm','ioctl(KVM_RUN)','run',true));
+        flow.push(componentMessage('kvm','guest','kvm_entry'+(event.rip?' · '+event.rip:''),'entry'));
+    }else if(event.kind==='exit'){
+        flow.push(componentMessage('guest','kvm',event.reason==='IO_INSTRUCTION'?seqIoLabel(event):(event.reason||'VM exit'),'exit'));
+    }else if(event.kind==='handoff'){
+        flow.push(componentMessage('kvm','vmm',(event.userspace_reason||'KVM_EXIT').replace('KVM_EXIT_',''),'handoff'));
+    }else if(event.name==='kvm_ioapic_set_irq'){
+        flow.push(componentMessage('device','ioapic','assert GSI '+(event.pin!=null?event.pin:metaGsi()),'interrupt'));
+    }else if(event.name==='kvm_msi_set_irq'){
+        flow.push(componentMessage('device','kvm','KVM_SIGNAL_MSI','run',true));
+        flow.push(componentMessage('kvm','lapic','MSI message · vec '+vecHex(event.msi_vector!=null?event.msi_vector:metaMsiVec()),'interrupt'));
+    }else if(event.name==='kvm_apic_accept_irq'){
+        flow.push(componentMessage(interruptTransport(index)==='msi'?'kvm':'ioapic','lapic','accept '+vector,'interrupt'));
+    }else if(event.name==='kvm_inj_virq'){
+        flow.push(componentMessage('lapic','guest','inject '+vector,'interrupt'));
+    }else if(event.name==='kvm_eoi'){
+        flow.push(componentMessage('guest','lapic','EOI '+vector,'apic'));
+    }else if(event.name==='kvm_apic'){
+        flow.push(componentMessage('guest','lapic','APIC '+(event.apic_reg||'register')+' write','apic'));
+    }else if(event.name==='device_dma_transfer'){
+        if(event.dma_dir==='to_device')flow.push(componentMessage('memory','device','DMA read · '+event.dma_gpa,'dma'));
+        else flow.push(componentMessage('device','memory','DMA write · '+event.dma_gpa,'dma'));
+    }else{
+        flow.push(componentMessage('kvm','kvm',compactObs(event),'local'));
+    }
+    return flow;
+}
 function renderExec(e){
-    var ep=D.episodes[episodeFor(cursor)];
-    var idxs=ep.indices,startIdx=idxs[0],endIdx=idxs[idxs.length-1];
-    var slice=D.events.slice(startIdx,endIdx+1);
-    var host=$('exec-html');
+    var ep=D.episodes[episodeFor(cursor)],host=$('exec-html'),interactions=[];
+    ep.indices.forEach(function(global){
+        componentFlow(D.events[global],global).forEach(function(flow){interactions.push({global:global,event:D.events[global],flow:flow})});
+    });
+    var currentFlows=componentFlow(e,cursor),active={};
+    currentFlows.forEach(function(flow){active[flow.from]=true;active[flow.to]=true});
     $('rip-head').textContent=e.rip?('RIP '+e.rip):'RIP —';
 
-    var head='<div class="seq-head">'
-        +'<div class="seq-side-head">SEQ / Δt</div>'
-        +'<div class="seq-domains">'
-        +'<div class="seq-domain"><b>USERSPACE VMM</b><span>KVM_RUN caller · device model</span></div>'
-        +'<div class="seq-domain"><b>KVM</b><span>VM-exit handling · irqchip</span></div>'
-        +'<div class="seq-domain"><b>GUEST vCPU 0</b><span>runs between entry and exit</span></div>'
-        +'</div>'
-        +'<div class="seq-side-head right">OBSERVATION</div>'
-        +'</div>';
-
-    var state=executionStateBefore(startIdx),rows='';
-
-    slice.forEach(function(evt,i){
-        var global=startIdx+i,cur=global===cursor,before=state,after=stateAfterEvent(evt,before);
-        var dom='<span class="seq-life vmm"></span><span class="seq-life kvm"></span><span class="seq-life guest"></span>';
-
-        if(before==='vmm')dom+='<span class="seq-res top vmm"></span>';
-        else if(before==='kvm')dom+='<span class="seq-res top kvm"></span>';
-        else if(before==='guest')dom+='<span class="seq-res top guest"></span>';
-
-        if(after==='vmm')dom+='<span class="seq-res bottom vmm"></span>';
-        else if(after==='kvm')dom+='<span class="seq-res bottom kvm"></span>';
-        else if(after==='guest')dom+='<span class="seq-res bottom guest"></span>';
-
-        if(evt.kind==='entry'){
-            var prev=D.events[global-1];
-            var fromUserspace=before==='vmm'||(prev&&prev.kind==='handoff');
-            if(fromUserspace){
-                dom+='<span class="seq-arrow run"></span>'
-                    +'<span class="seq-label run">ioctl(KVM_RUN) · boundary untraced</span>'
-                    +'<span class="seq-arrow entry after-run"></span>'
-                    +'<span class="seq-point kvm entry" style="top:70%"></span>'
-                    +'<span class="seq-point guest entry" style="top:70%"></span>'
-                    +'<span class="seq-label entry-after-run">kvm_entry'+(evt.rip?' · '+esc(evt.rip):'')+'</span>';
-            }else{
-                dom+='<span class="seq-arrow entry"></span>'
-                    +'<span class="seq-point kvm entry"></span>'
-                    +'<span class="seq-point guest entry"></span>'
-                    +'<span class="seq-label between-kg">kvm_entry'+(evt.rip?' · '+esc(evt.rip):'')+'</span>';
-            }
-        }else if(evt.kind==='exit'){
-            var label=evt.reason||'VM exit',cls='';
-            if(evt.reason==='IO_INSTRUCTION'){label=seqIoLabel(evt);var eq=ioQualification(evt);cls=(eq&&eq.port===0xe9)?'marker':'io'}
-            dom+='<span class="seq-arrow exit"></span>'
-                +'<span class="seq-point guest exit"></span>'
-                +'<span class="seq-point kvm exit"></span>'
-                +'<span class="seq-label between-kg '+cls+'">'+esc(label)+(evt.rip?'<span class="sub">'+esc(evt.rip)+'</span>':'')+'</span>';
-        }else if(evt.kind==='handoff'){
-            dom+='<span class="seq-arrow handoff"></span>'
-                +'<span class="seq-point kvm handoff"></span>'
-                +'<span class="seq-point vmm handoff"></span>'
-                +'<span class="seq-label between-vk handoff">'+esc((evt.userspace_reason||'KVM_EXIT').replace('KVM_EXIT_',''))+'</span>';
-        }else if(evt.name==='device_dma_transfer'){
-            dom+='<span class="seq-hook vmm"></span>'
-                +'<span class="seq-label vmm-hook">'+esc(compactObs(evt))+'</span>';
-        }else{
-            if(before==='kvm')dom+='<span class="seq-pulse"></span>'
-                +'<span class="seq-label between-vk pulse">VMM ioctl ↔ KVM</span>';
-            dom+='<span class="seq-hook kvm"></span>'
-                +'<span class="seq-label kvm-hook">'+esc(compactObs(evt))+'</span>';
+    var head='<div class="component-head">'+COMPONENT_ACTORS.map(function(actor){
+        return'<article class="component-actor '+(active[actor.id]?'active':'')+'"><small>'+esc(actor.role)+'</small><b>'+esc(actor.name)+'</b><em>'+esc(actorDetail(actor))+'</em></article>';
+    }).join('')+'</div>';
+    var laneLines='<div class="component-lifelines">'+COMPONENT_ACTORS.map(function(actor,index){
+        return'<i class="'+(active[actor.id]?'active':'')+'" style="left:'+((index+.5)/COMPONENT_ACTORS.length*100)+'%"></i>';
+    }).join('')+'</div>';
+    var rows=interactions.map(function(item){
+        var flow=item.flow,fromIndex=actorIndex(flow.from),toIndex=actorIndex(flow.to),selected=item.global===cursor?' current':'',inferred=flow.inferred?' inferred':'',kind=' '+flow.kind;
+        var from=(fromIndex+.5)/COMPONENT_ACTORS.length*100,to=(toIndex+.5)/COMPONENT_ACTORS.length*100;
+        var time='<span class="component-time">+'+Number(item.event.time_us).toFixed(3)+'µs</span>';
+        if(fromIndex===toIndex){
+            return'<button type="button" class="component-row local'+selected+'" data-index="'+item.global+'">'+time+'<i class="component-local '+flow.kind+'" style="left:'+from+'%"></i><code style="left:'+from+'%" title="'+esc(item.event.raw)+'">'+esc(flow.label)+'</code></button>';
         }
-
-        var dt=evt.dt_prev_us!=null?('+'+Number(evt.dt_prev_us).toFixed(3)+'µs'):'';
-        rows+='<div class="seq-row '+(cur?'current':'')+'" data-index="'+global+'">'
-            +'<div class="seq-num"><span>'+dt+'</span></div>'
-            +'<div class="seq-domain-space">'+dom+'</div>'
-            +'<div class="seq-obs">'+esc(seqObsLabel(evt))+'</div>'
-            +'</div>';
-
-        state=after;
-    });
-
-    var inner='<div class="seq-inner '+(slice.length>32?'long':'')+'" style="--rows:'+slice.length+'">'+rows+'</div>';
-    var tail=ep.egress?'<div class="seq-phase-tail"><b>phase boundary:</b> '+esc(ep.egress)+'</div>':'';
-    var prevTrack=host.querySelector('.seq-track');
-    var prevTop=prevTrack?prevTrack.scrollTop:null;
-    host.innerHTML=head+'<div class="seq-track">'+inner+'</div>'+tail;
-
-    host.querySelectorAll('.seq-row').forEach(function(row){
-        row.addEventListener('click',function(){select(+row.dataset.index)});
-    });
-    var newTrack=host.querySelector('.seq-track');
-    if(newTrack&&prevTop!=null)newTrack.scrollTop=prevTop;
-    var selected=host.querySelector('.seq-row.current');
+        var left=Math.min(from,to),width=Math.abs(to-from),direction=to>from?'forward':'reverse';
+        return'<button type="button" class="component-row'+selected+'" data-index="'+item.global+'">'+time+'<i class="component-arrow '+direction+kind+inferred+'" style="left:'+left+'%;width:'+width+'%"></i><i class="component-point" style="left:'+from+'%"></i><i class="component-point" style="left:'+to+'%"></i><code style="left:'+((from+to)/2)+'%" title="'+esc(item.event.raw)+'">'+esc(flow.label)+'</code></button>';
+    }).join('');
+    var tail=ep.egress?'<div class="component-tail"><b>phase boundary:</b> '+esc(ep.egress)+'</div>':'';
+    var previous=host.querySelector('.component-track'),previousTop=previous?previous.scrollTop:null;
+    host.innerHTML=head+'<div class="component-track"><div class="component-body" style="--rows:'+Math.max(interactions.length,1)+'">'+laneLines+rows+'</div></div>'+tail;
+    host.querySelectorAll('.component-row').forEach(function(row){row.addEventListener('click',function(){select(+row.dataset.index)})});
+    var track=host.querySelector('.component-track');
+    if(track&&previousTop!=null)track.scrollTop=previousTop;
+    var selected=host.querySelector('.component-row.current');
     if(selected)selected.scrollIntoView({block:'nearest'});
 
-    $('flow-kind').textContent=(e.kind==='entry'||e.kind==='exit'||e.kind==='handoff')?'boundary transition':'observation';
+    $('flow-kind').textContent=currentFlows[0]&&currentFlows[0].inferred?'inferred boundary':'captured message';
     if(e.kind==='entry'){
-        $('flow-caption').textContent='kvm_entry is a host-KVM tracepoint immediately before VM entry: KVM → guest';
+        $('flow-caption').textContent='kvm_entry marks KVM handing execution to the guest vCPU'+(executionStateBefore(cursor)==='vmm'?'; the preceding KVM_RUN call is not traced':'');
     }else if(e.kind==='exit'){
-        var fq=ioQualification(e);
-        if(e.reason==='IO_INSTRUCTION'&&fq){
-            $('flow-caption').textContent='guest executed '+fq.dir+' port 0x'+fq.port.toString(16)+' → VM-exit → KVM'+(e.paired_handoff?(' ; next kvm_userspace_exit returns '+e.paired_handoff+' to VMM'):' ; KVM handles this exit without a userspace return');
-        }else{
-            $('flow-caption').textContent=(e.reason||'VM exit')+' means guest → KVM'+(e.paired_handoff?(' ; next event returns '+e.paired_handoff+' to VMM'):'');
-        }
+        var qualification=ioQualification(e);
+        $('flow-caption').textContent=e.reason==='IO_INSTRUCTION'&&qualification?'guest '+qualification.dir+' port 0x'+qualification.port.toString(16)+' exits to KVM':(e.reason||'VM exit')+' transfers control from guest to KVM';
     }else if(e.kind==='handoff'){
-        $('flow-caption').textContent=(e.userspace_reason||'')+' : KVM_RUN returns KVM → userspace VMM';
+        $('flow-caption').textContent=(e.userspace_reason||'KVM exit')+' returns KVM_RUN to the userspace VMM';
     }else if(e.name==='device_dma_transfer'){
-        $('flow-caption').textContent='device_dma_transfer executes in the userspace VMM/device model';
+        $('flow-caption').textContent='the userspace device model copies '+D.meta.dma_xfer_size+' B '+e.dma_dir.replace('_',' ')+' at guest physical address '+e.dma_gpa;
     }else{
-        $('flow-caption').textContent='this hook executes in host KVM; it is an observation site, not a guest-residency transition';
+        $('flow-caption').textContent='captured '+e.name+' interaction inside KVM interrupt virtualization';
     }
 }
 function irqStateMap(e){

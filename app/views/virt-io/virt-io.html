@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KVM virt-I/O</title>
-  <link rel="stylesheet" href="virt-io.css?v=55">
+  <link rel="stylesheet" href="virt-io.css?v=57">
 </head>
 <body>
 <main class="io">
@@ -43,11 +43,11 @@
       <div class="stage">
         <section class="region execution">
           <header class="region-title">
-            <div><b>EXECUTION DOMAINS</b><span>phase-scoped residency across VMM, KVM, and guest; hook location shown separately</span></div>
+            <div><b>COMPONENT LIFELINES</b><span>phase-scoped messages among VMM, KVM, guest, irqchip, device, and memory</span></div>
             <code class="address" id="rip-head">RIP —</code>
           </header>
-          <div id="exec-html" class="exec-html" role="img" aria-label="KVM execution-domain residency chronogram"></div>
-          <footer class="region-foot"><strong id="flow-kind">entry</strong><span id="flow-caption">KVM → guest</span></footer>
+          <div id="exec-html" class="exec-html" role="img" aria-label="KVM virtual I/O component lifelines"></div>
+          <footer class="region-foot"><strong id="flow-kind">captured message</strong><span id="flow-caption">Select a message boundary.</span></footer>
         </section>
 
         <div class="support-stack">
@@ -140,6 +140,6 @@
     </aside>
   </section>
 </main>
-<script src="virt-io.js?v=54"></script>
+<script src="virt-io.js?v=57"></script>
 </body>
 </html>
