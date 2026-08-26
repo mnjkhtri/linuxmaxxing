@@ -459,14 +459,14 @@
         var items = [];
 
         if (kvmEnter) {
-            preparation.push(message("MEMORY", "KVM_SET_USER_MEMORY_REGION", "slot " + eventInfo(kvmEnter).slot + " · GPA " + addressInfo(kvmEnter).gpa + " · " + formatBytes(addressInfo(kvmEnter).size), LANE.QEMU, LANE.KVM, kvmEnter));
+            preparation.push(message("MEM", "KVM_SET_USER_MEMORY_REGION", "slot " + eventInfo(kvmEnter).slot + " · GPA " + addressInfo(kvmEnter).gpa + " · " + formatBytes(addressInfo(kvmEnter).size), LANE.QEMU, LANE.KVM, kvmEnter));
             if (kvmExit)
-                preparation.push(message("MEMORY", "memslot result", "ret " + eventInfo(kvmExit).result, LANE.KVM, LANE.QEMU, kvmExit));
+                preparation.push(message("MEM", "memslot result", "ret " + eventInfo(kvmExit).result, LANE.KVM, LANE.QEMU, kvmExit));
         } else {
-            preparation.push(message("MEMORY", "KVM memslot registration", "GPA → QEMU HVA", LANE.QEMU, LANE.KVM, null, true));
+            preparation.push(message("MEM", "KVM memslot registration", "GPA → QEMU HVA", LANE.QEMU, LANE.KVM, null, true));
         }
         if (attach)
-            preparation.push(message("DOMAIN", "attach requester", addressInfo(attach).device, LANE.VFIO, LANE.IOMMU, attach));
+            preparation.push(message("ATTACH", "attach requester", addressInfo(attach).device, LANE.VFIO, LANE.IOMMU, attach));
         preparation.sort(function (left, right) {
             if (!left.record)
                 return -1;
@@ -484,53 +484,53 @@
                 var entering;
 
                 if (record.kind === "vfio_dma_map_enter")
-                    items.push(message("DMA MAP", "VFIO_IOMMU_MAP_DMA", "fd " + eventInfo(record).fd + " · IOVA " + address.iova + " · " + formatBytes(address.size), LANE.QEMU, LANE.VFIO, record));
+                    items.push(message("MAP", "VFIO_IOMMU_MAP_DMA", "fd " + eventInfo(record).fd + " · IOVA " + address.iova + " · " + formatBytes(address.size), LANE.QEMU, LANE.VFIO, record));
                 else if (record.kind === "vfio_type1_map_enter")
-                    items.push(message("DMA MAP", "validate map request", "VFIO type1 backend", LANE.VFIO, LANE.VFIO, record));
+                    items.push(message("MAP", "validate map request", "VFIO type1 backend", LANE.VFIO, LANE.VFIO, record));
                 else if (record.kind === "vfio_type1_map_exit")
-                    items.push(message("DMA MAP", "type1 map result", "ret " + eventInfo(record).result, LANE.VFIO, LANE.VFIO, record));
+                    items.push(message("MAP", "type1 map result", "ret " + eventInfo(record).result, LANE.VFIO, LANE.VFIO, record));
                 else if (record.kind.indexOf("vfio_page_pin_") === 0) {
                     entering = record.kind === "vfio_page_pin_enter";
-                    items.push(message("DMA MAP", entering ? "pin backing pages" : "page-pin result", entering ? "HVA " + address.hva + " · " + address.page_count + " pages" : "pinned " + eventInfo(record).result + " pages", entering ? LANE.VFIO : LANE.MEMORY, entering ? LANE.MEMORY : LANE.VFIO, record));
+                    items.push(message("MAP", entering ? "pin backing pages" : "page-pin result", entering ? "HVA " + address.hva + " · " + address.page_count + " pages" : "pinned " + eventInfo(record).result + " pages", entering ? LANE.VFIO : LANE.MEMORY, entering ? LANE.MEMORY : LANE.VFIO, record));
                 } else if (record.kind === "iommu_map")
-                    items.push(message("DMA MAP", "iommu:map", "IOVA " + address.iova + " → HPA " + address.hpa + " · " + formatBytes(address.size), LANE.VFIO, LANE.IOMMU, record));
+                    items.push(message("MAP", "iommu:map", "IOVA " + address.iova + " → HPA " + address.hpa + " · " + formatBytes(address.size), LANE.VFIO, LANE.IOMMU, record));
                 else if (record.kind === "vfio_dma_map_exit")
-                    items.push(message("DMA MAP", "map result", "ret " + eventInfo(record).result, LANE.VFIO, LANE.QEMU, record));
+                    items.push(message("MAP", "map result", "ret " + eventInfo(record).result, LANE.VFIO, LANE.QEMU, record));
             });
             if (!selectedPins.length) {
                 var mapRequestIndex = items.findIndex(function (item) { return item.record === transaction.enter; });
-                items.splice(mapRequestIndex + 1, 0, message("DMA MAP", "pin backing pages", "QEMU HVA → resident host pages", LANE.VFIO, LANE.MEMORY, null, true));
+                items.splice(mapRequestIndex + 1, 0, message("MAP", "pin backing pages", "QEMU HVA → resident host pages", LANE.VFIO, LANE.MEMORY, null, true));
             }
         }
 
         if (route && route.allocation) {
             var allocationInfo = interruptInfo(route.allocation);
-            items.push(message("IRQ SETUP", "allocate IRTE", "host IRQ " + allocationInfo.irq + " · IRTE " + allocationInfo.irte_index, LANE.VFIO, LANE.IOMMU, route.allocation));
+            items.push(message("IRQ CFG", "allocate IRTE", "host IRQ " + allocationInfo.irq + " · IRTE " + allocationInfo.irte_index, LANE.VFIO, LANE.IOMMU, route.allocation));
         }
         if (msix.address) {
             var addressMmio = mmioInfo(msix.address);
-            items.push(message("IRQ SETUP", "program MSI-X address", addressMmio.gpa + " ← " + addressMmio.value, LANE.GUEST, LANE.KVM, msix.address));
+            items.push(message("IRQ CFG", "program MSI-X address", addressMmio.gpa + " ← " + addressMmio.value, LANE.GUEST, LANE.KVM, msix.address));
         }
         if (msix.data) {
             var dataMmio = mmioInfo(msix.data);
-            items.push(message("IRQ SETUP", "program MSI-X data", dataMmio.gpa + " ← " + dataMmio.value, LANE.GUEST, LANE.KVM, msix.data));
+            items.push(message("IRQ CFG", "program MSI-X data", dataMmio.gpa + " ← " + dataMmio.value, LANE.GUEST, LANE.KVM, msix.data));
         }
         if (route && route.enter) {
             var irqRequest = interruptInfo(route.enter);
-            items.push(message("IRQ SETUP", "VFIO_DEVICE_SET_IRQS", "MSI-X " + irqRequest.start + " · count " + irqRequest.count + " · eventfd", LANE.QEMU, LANE.VFIO, route.enter));
+            items.push(message("IRQ CFG", "VFIO_DEVICE_SET_IRQS", "MSI-X " + irqRequest.start + " · count " + irqRequest.count + " · eventfd", LANE.QEMU, LANE.VFIO, route.enter));
         }
         if (route && route.activation)
-            items.push(message("IRQ SETUP", "activate IRTE", "host IRQ " + interruptInfo(route.activation).irq, LANE.VFIO, LANE.IOMMU, route.activation));
+            items.push(message("IRQ CFG", "activate IRTE", "host IRQ " + interruptInfo(route.activation).irq, LANE.VFIO, LANE.IOMMU, route.activation));
         if (route && route.message) {
             var remappable = interruptInfo(route.message);
-            items.push(message("IRQ SETUP", "compose remappable MSI", remappable.address + " · data " + remappable.data, LANE.VFIO, LANE.IOMMU, route.message));
+            items.push(message("IRQ CFG", "compose remappable MSI", remappable.address + " · data " + remappable.data, LANE.VFIO, LANE.IOMMU, route.message));
         }
         if (route && route.update) {
             var posted = interruptInfo(route.update);
-            items.push(message("IRQ SETUP", "target IRTE to vCPU", "IRQ " + posted.irq + " · vCPU " + posted.vcpu_id + " · vector 0x" + Number(posted.vector).toString(16), LANE.KVM, LANE.IOMMU, route.update));
+            items.push(message("IRQ CFG", "target IRTE to vCPU", "IRQ " + posted.irq + " · vCPU " + posted.vcpu_id + " · vector 0x" + Number(posted.vector).toString(16), LANE.KVM, LANE.IOMMU, route.update));
         }
         if (route && route.exit)
-            items.push(message("IRQ SETUP", "VFIO IRQ result", "ret " + eventInfo(route.exit).result, LANE.VFIO, LANE.QEMU, route.exit));
+            items.push(message("IRQ CFG", "VFIO IRQ result", "ret " + eventInfo(route.exit).result, LANE.VFIO, LANE.QEMU, route.exit));
 
         guestRecords.forEach(function (record) {
             var dma = dmaInfo(record);
@@ -540,22 +540,22 @@
             var translatedHpa;
 
             if (record.kind === "guest_ixgbe_open") {
-                items.push(message("INTERFACE", firstOpenSeen ? "restore interface" : "bring interface up", record.context.comm + " → ixgbe_open()", LANE.GUEST, LANE.GUEST, record));
+                items.push(message("NET", firstOpenSeen ? "restore interface" : "bring interface up", record.context.comm + " → ixgbe_open()", LANE.GUEST, LANE.GUEST, record));
                 firstOpenSeen = true;
             } else if (record.kind === "guest_ixgbe_close")
-                items.push(message("INTERFACE", "enter offline test", record.context.comm + " → ixgbe_close()", LANE.GUEST, LANE.GUEST, record));
+                items.push(message("NET", "enter offline test", record.context.comm + " → ixgbe_close()", LANE.GUEST, LANE.GUEST, record));
             else if (record.kind === "guest_ixgbe_run_loopback_entry") {
                 loopbackActive = true;
-                items.push(message("DMA USE", "run loopback test", "64 TX/RX frames per batch", LANE.GUEST, LANE.GUEST, record));
+                items.push(message("DMA", "run loopback test", "64 TX/RX frames per batch", LANE.GUEST, LANE.GUEST, record));
             } else if (record.kind === "guest_ixgbe_xmit_entry")
-                items.push(message("DMA USE", "submit test frame", formatBytes(dma.length) + " skb", LANE.GUEST, LANE.GUEST, record));
+                items.push(message("DMA", "submit test frame", formatBytes(dma.length) + " skb", LANE.GUEST, LANE.GUEST, record));
             else if (record.kind === "guest_dma_map_entry")
-                items.push(message("DMA USE", "map TX buffer", formatBytes(dma.length) + " · DMA_TO_DEVICE", LANE.GUEST, LANE.DMA, record));
+                items.push(message("DMA", "map TX buffer", formatBytes(dma.length) + " · DMA_TO_DEVICE", LANE.GUEST, LANE.DMA, record));
             else if (record.kind === "guest_dma_map_exit")
-                items.push(message("DMA USE", "return DMA address", dma.address + " · " + formatBytes(dma.length), LANE.DMA, LANE.GUEST, record));
+                items.push(message("DMA", "return DMA address", dma.address + " · " + formatBytes(dma.length), LANE.DMA, LANE.GUEST, record));
             else if (record.kind === "guest_ixgbe_xmit_exit") {
-                items.push(message("DMA USE", "TX submission returns", "ixgbe_xmit_frame_ring() · ret " + eventInfo(record).result, LANE.GUEST, LANE.GUEST, record));
-                items.push(message("DMA USE", "ring TX tail doorbell", "device begins descriptor fetch", LANE.GUEST, LANE.NIC, null, true, "guest"));
+                items.push(message("DMA", "TX submission returns", "ixgbe_xmit_frame_ring() · ret " + eventInfo(record).result, LANE.GUEST, LANE.GUEST, record));
+                items.push(message("DMA", "ring TX tail doorbell", "device begins descriptor fetch", LANE.GUEST, LANE.NIC, null, true, "guest"));
                 mappedDma = guestEvent("guest_dma_map_exit");
                 translatedChunk = mappedDma && transaction && transaction.chunks.find(function (chunkRecord) {
                     var chunk = addressInfo(chunkRecord);
@@ -563,43 +563,43 @@
                 });
                 if (translatedChunk) {
                     translatedHpa = big(addressInfo(translatedChunk).hpa) + big(dmaInfo(mappedDma).address) - big(addressInfo(translatedChunk).iova);
-                    items.push(message("DMA USE", "fetch TX descriptor/data", "IOVA " + dmaInfo(mappedDma).address, LANE.NIC, LANE.IOMMU, null, true));
-                    items.push(message("DMA USE", "VT-d translation", "HPA 0x" + translatedHpa.toString(16), LANE.IOMMU, LANE.MEMORY, null, true));
+                    items.push(message("DMA", "fetch TX descriptor/data", "IOVA " + dmaInfo(mappedDma).address, LANE.NIC, LANE.IOMMU, null, true));
+                    items.push(message("DMA", "VT-d translation", "HPA 0x" + translatedHpa.toString(16), LANE.IOMMU, LANE.MEMORY, null, true));
                 }
             } else if (record.kind === "guest_ixgbe_clean_entry")
-                items.push(message("COMPLETION", "check descriptor completion", "TX DD bit + RX descriptor length", LANE.GUEST, LANE.GUEST, record));
+                items.push(message("DONE", "check descriptor completion", "TX DD bit + RX descriptor length", LANE.GUEST, LANE.GUEST, record));
             else if (record.kind === "guest_dma_unmap")
-                items.push(message("COMPLETION", "unmap TX buffer", dma.address + " · " + formatBytes(dma.length), LANE.GUEST, LANE.DMA, record));
+                items.push(message("DONE", "unmap TX buffer", dma.address + " · " + formatBytes(dma.length), LANE.GUEST, LANE.DMA, record));
             else if (record.kind === "guest_dma_sync_for_cpu")
-                items.push(message("COMPLETION", "sync RX for CPU", dma.address + " · " + formatBytes(dma.length), LANE.GUEST, LANE.DMA, record));
+                items.push(message("DONE", "sync RX for CPU", dma.address + " · " + formatBytes(dma.length), LANE.GUEST, LANE.DMA, record));
             else if (record.kind === "guest_dma_sync_for_device")
-                items.push(message("COMPLETION", "return RX to device", dma.address + " · " + formatBytes(dma.length), LANE.GUEST, LANE.DMA, record));
+                items.push(message("DONE", "return RX to device", dma.address + " · " + formatBytes(dma.length), LANE.GUEST, LANE.DMA, record));
             else if (record.kind === "guest_ixgbe_clean_exit")
-                items.push(message("COMPLETION", "frames verified", dma.completed + " descriptors + frame patterns", LANE.GUEST, LANE.GUEST, record));
+                items.push(message("DONE", "frames verified", dma.completed + " descriptors + frame patterns", LANE.GUEST, LANE.GUEST, record));
             else if (record.kind === "guest_irq_handler_entry") {
                 if (route && route.update) {
-                    items.push(message("IRQ DELIVERY", "issue remappable MSI-X", interrupt.action, LANE.NIC, LANE.IOMMU, null, true));
-                    items.push(message("IRQ DELIVERY", "resolve IRTE + PI target", "posted-interrupt route", LANE.IOMMU, LANE.KVM, null, true));
-                    items.push(message("IRQ DELIVERY", "deliver queue vector", interrupt.action + " · guest IRQ " + interrupt.irq, LANE.KVM, LANE.GUEST, null, true));
+                    items.push(message("IRQ", "issue remappable MSI-X", interrupt.action, LANE.NIC, LANE.IOMMU, null, true));
+                    items.push(message("IRQ", "resolve IRTE + PI target", "posted-interrupt route", LANE.IOMMU, LANE.KVM, null, true));
+                    items.push(message("IRQ", "deliver queue vector", interrupt.action + " · guest IRQ " + interrupt.irq, LANE.KVM, LANE.GUEST, null, true));
                 }
-                items.push(message(loopbackActive ? "LOOPBACK IRQ" : (loopbackComplete ? "POST-LOOPBACK IRQ" : "PRE-LOOPBACK IRQ"), "guest queue handler enters", interrupt.action + " · IRQ " + interrupt.irq, LANE.GUEST, LANE.GUEST, record));
+                items.push(message(loopbackActive ? "LOOP IRQ" : (loopbackComplete ? "POST IRQ" : "PRE IRQ"), "guest queue handler enters", interrupt.action + " · IRQ " + interrupt.irq, LANE.GUEST, LANE.GUEST, record));
             } else if (record.kind === "guest_irq_handler_exit")
-                items.push(message(loopbackActive ? "LOOPBACK IRQ" : (loopbackComplete ? "POST-LOOPBACK IRQ" : "PRE-LOOPBACK IRQ"), "guest queue handler exits", "IRQ " + interrupt.irq + " · " + irqDisposition(eventInfo(record).result), LANE.GUEST, LANE.GUEST, record));
+                items.push(message(loopbackActive ? "LOOP IRQ" : (loopbackComplete ? "POST IRQ" : "PRE IRQ"), "guest queue handler exits", "IRQ " + interrupt.irq + " · " + irqDisposition(eventInfo(record).result), LANE.GUEST, LANE.GUEST, record));
             else if (record.kind === "guest_ixgbe_run_loopback_exit") {
-                items.push(message("COMPLETION", "loopback run result", "ret " + eventInfo(record).result, LANE.GUEST, LANE.GUEST, record));
+                items.push(message("DONE", "loopback run result", "ret " + eventInfo(record).result, LANE.GUEST, LANE.GUEST, record));
                 loopbackActive = false;
                 loopbackComplete = true;
             }
         });
 
         if (physicalIrq)
-            items.push(message("IRQ DELIVERY", physicalIrq.kind.indexOf("msi") >= 0 ? "VFIO MSI-X handler" : "VFIO INTx handler", "host IRQ " + interruptInfo(physicalIrq).irq, LANE.NIC, LANE.VFIO, physicalIrq));
+            items.push(message("IRQ", physicalIrq.kind.indexOf("msi") >= 0 ? "VFIO MSI-X handler" : "VFIO INTx handler", "host IRQ " + interruptInfo(physicalIrq).irq, LANE.NIC, LANE.VFIO, physicalIrq));
         if (irqfd)
-            items.push(message("IRQ DELIVERY", "wake KVM irqfd", "VFIO eventfd notification", LANE.VFIO, LANE.KVM, irqfd));
+            items.push(message("IRQ", "wake KVM irqfd", "VFIO eventfd notification", LANE.VFIO, LANE.KVM, irqfd));
         if (msiRoute)
-            items.push(message("IRQ DELIVERY", "route guest MSI", "vector " + interruptInfo(msiRoute).vector, LANE.VFIO, LANE.KVM, msiRoute));
+            items.push(message("IRQ", "route guest MSI", "vector " + interruptInfo(msiRoute).vector, LANE.VFIO, LANE.KVM, msiRoute));
         if (apicAccept)
-            items.push(message("IRQ DELIVERY", "LAPIC accepts vector", "vCPU APIC " + interruptInfo(apicAccept).apic_id + " · vector " + interruptInfo(apicAccept).vector, LANE.KVM, LANE.GUEST, apicAccept));
+            items.push(message("IRQ", "LAPIC accepts vector", "vCPU APIC " + interruptInfo(apicAccept).apic_id + " · vector " + interruptInfo(apicAccept).vector, LANE.KVM, LANE.GUEST, apicAccept));
 
         if (teardown) {
             teardownEvents = teardownEventsForChunk(teardown, selectedMap);
@@ -609,14 +609,14 @@
                 var entering;
 
                 if (record.kind === "vfio_dma_unmap_enter")
-                    items.push(message("TEARDOWN", "VFIO_IOMMU_UNMAP_DMA", "IOVA " + address.iova + " · " + formatBytes(address.size), LANE.QEMU, LANE.VFIO, record));
+                    items.push(message("UNMAP", "VFIO_IOMMU_UNMAP_DMA", "IOVA " + address.iova + " · " + formatBytes(address.size), LANE.QEMU, LANE.VFIO, record));
                 else if (record.kind === "iommu_unmap")
-                    items.push(message("TEARDOWN", "iommu:unmap", "IOVA " + address.iova + " · removed " + formatBytes(address.returned_size), LANE.VFIO, LANE.IOMMU, record));
+                    items.push(message("UNMAP", "iommu:unmap", "IOVA " + address.iova + " · removed " + formatBytes(address.returned_size), LANE.VFIO, LANE.IOMMU, record));
                 else if (record.kind.indexOf("vfio_page_unpin_") === 0) {
                     entering = record.kind === "vfio_page_unpin_enter";
-                    items.push(message("TEARDOWN", entering ? "release pinned pages" : "page-unpin result", entering ? address.page_count + " pages" : "released " + eventInfo(record).result + " pages", entering ? LANE.VFIO : LANE.MEMORY, entering ? LANE.MEMORY : LANE.VFIO, record));
+                    items.push(message("UNMAP", entering ? "release pinned pages" : "page-unpin result", entering ? address.page_count + " pages" : "released " + eventInfo(record).result + " pages", entering ? LANE.VFIO : LANE.MEMORY, entering ? LANE.MEMORY : LANE.VFIO, record));
                 } else if (record.kind === "vfio_dma_unmap_exit")
-                    items.push(message("TEARDOWN", "unmap result", "ret " + eventInfo(record).result + " · removed " + formatBytes(address.returned_size), LANE.VFIO, LANE.QEMU, record));
+                    items.push(message("UNMAP", "unmap result", "ret " + eventInfo(record).result + " · removed " + formatBytes(address.returned_size), LANE.VFIO, LANE.QEMU, record));
             });
         }
         return items;
