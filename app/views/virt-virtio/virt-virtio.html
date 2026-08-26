@@ -4,18 +4,18 @@
     <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>Virtio paravirtual I/O</title>
-        <link rel="stylesheet" href="virt-virtio.css?v=25" />
+        <title>Virtio I/O</title>
+        <link rel="stylesheet" href="virt-virtio.css?v=30" />
     </head>
     <body>
-        <main class="paraio">
+        <main class="virt-virtio">
             <header class="hero">
                 <div>
                     <div class="eyebrow">TRACE → eBPF SNAPSHOT → VIRTQUEUE STATE</div>
-                    <h1>Paravirtual <span>I/O</span></h1>
+                    <h1>Virtio <span>I/O</span></h1>
                     <p>Descriptor rings, MMIO doorbells, and irqfd completions from one virtqueue run.</p>
                 </div>
-                <div id="status" role="status"><i class="trace-dot"></i><span>loading para-I/O capture…</span></div>
+                <div id="status" role="status"><i class="trace-dot"></i><span>loading virtio capture…</span></div>
             </header>
 
             <section class="laboratory">
@@ -25,7 +25,7 @@
                     <section class="machine panel">
                         <header class="panel-head">
                             <div>
-                                <h2>Paravirtual I/O machine</h2>
+                                <h2>Virtio component path</h2>
                                 <span id="machine-caption">Selected capture boundary drives every active state.</span>
                             </div>
                             <code id="selected-time">t = —</code>
@@ -34,13 +34,16 @@
                         <div class="topology-stage">
                             <section class="execution-region region">
                                 <header class="region-title">
-                                    <div><b>EXECUTION CHRONOGRAM</b><span id="timeline-scope">Phase A</span></div>
+                                    <div><b>LIFELINES</b><span id="timeline-scope">Phase A</span></div>
                                     <code>TIME ↓</code>
                                 </header>
                                 <div class="lane-head">
-                                    <span>Δt</span>
-                                    <div><b>USERSPACE VMM</b><b>KVM</b><b>GUEST</b></div>
-                                    <span>OBSERVATION</span>
+                                    <article class="component-actor" data-component-actor="vmm"><small>USERSPACE</small><b>VMM</b><em>do_mmio</em></article>
+                                    <article class="component-actor" data-component-actor="kvm"><small>HOST KERNEL</small><b>KVM</b><em>KVM_RUN</em></article>
+                                    <article class="component-actor" data-component-actor="guest"><small>GUEST</small><b>vCPU 0</b><em>virtio driver</em></article>
+                                    <article class="component-actor" data-component-actor="irqchip"><small>KVM IRQCHIP</small><b>PIC</b><em>GSI 5</em></article>
+                                    <article class="component-actor" data-component-actor="backend"><small>USERSPACE</small><b>BACKEND</b><em>process_queue</em></article>
+                                    <article class="component-actor" data-component-actor="memory"><small>GUEST MEMORY</small><b>VIRTQUEUE</b><em>desc · avail · used</em></article>
                                 </div>
                                 <div id="timeline" class="timeline"></div>
                                 <footer class="region-foot"><b>SELECTED BOUNDARY</b><span>Captured state changes are highlighted.</span></footer>
@@ -49,26 +52,20 @@
                             <div class="support-stack">
                                 <section class="queue-region region">
                                     <header class="region-title">
-                                        <div><b>SPLIT VIRTQUEUE</b><span>shared guest RAM is the protocol</span></div>
+                                        <div><b>SPLIT VIRTQUEUE</b><span>publication · consumption · completion</span></div>
                                         <code id="queue-summary">waiting for capture metadata</code>
                                     </header>
-                                    <div id="protocol-stage" class="protocol-stage">
-                                        <div class="actor guest-actor" data-node="guest">
-                                            <i></i><strong>GUEST DRIVER</strong><small>descriptor + rings in RAM</small>
+                                    <div class="queue-state">
+                                        <div class="queue-ledger" aria-label="Selected split virtqueue state">
+                                            <article data-queue-counter="avail"><small>DRIVER PUBLISHED</small><b>avail.idx</b><code id="queue-avail">—</code></article>
+                                            <article data-queue-counter="consumed"><small>BACKEND CONSUMED</small><b>last_avail_idx</b><code id="queue-consumed">—</code></article>
+                                            <article data-queue-counter="used"><small>DEVICE COMPLETED</small><b>used.idx</b><code id="queue-used">—</code></article>
+                                            <article data-queue-counter="pending"><small>READY TO CONSUME</small><b>avail − consumed</b><code id="queue-pending">—</code></article>
                                         </div>
-                                        <div class="participant-link guest-to-doorbell"><span id="guest-notify-link">MMIO write</span></div>
-                                        <div class="doorbell" data-node="notify">
-                                            <i></i><b id="doorbell-title">MMIO DOORBELL</b><code id="notify-card-value">QueueNotify</code>
-                                        </div>
-                                        <div class="participant-link doorbell-to-backend"><span id="backend-notify-link">dispatch</span></div>
-                                        <div class="actor backend" data-node="backend">
-                                            <i></i><strong id="backend-title">USERSPACE VMM</strong><small id="backend-role">virtio-mmio control plane</small>
-                                        </div>
-                                        <div id="completion-route" class="completion-route"><span>call_fd → KVM_IRQFD → guest IRQ</span></div>
                                         <section class="guest-memory">
                                             <header>
                                                 <div><b>GUEST RAM · KVM MEMORY SLOT</b><span id="guest-memory-summary">waiting for capture metadata</span></div>
-                                                <small>capture metadata</small>
+                                                <small id="queue-sample-state">not sampled</small>
                                             </header>
                                             <div id="memory-map" class="memory-map"></div>
                                         </section>
@@ -83,7 +80,7 @@
                     <header class="panel-head">
                         <div>
                             <h2>Observation notebook</h2>
-                            <span>one boundary · one coherent sample</span>
+                            <span>one record · one sampled state</span>
                         </div>
                         <code id="source-badge">—</code>
                     </header>
@@ -103,6 +100,6 @@
                 </aside>
             </section>
         </main>
-        <script src="virt-virtio.js?v=23"></script>
+        <script src="virt-virtio.js?v=29"></script>
     </body>
 </html>

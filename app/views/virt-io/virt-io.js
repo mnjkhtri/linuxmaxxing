@@ -447,7 +447,7 @@ function detailType(e){
 function renderRoadmap(){
     var active=episodeFor(cursor);
     $('roadmap').innerHTML=D.episodes.map(function(ep,ei){
-        return '<div class="zone '+(ei===active?'active':'')+'" data-ep="'+ei+'"><div class="zone-label">'+esc(ep.name)+'</div></div>';
+        return '<div class="zone '+(ei===active?'active':'')+'" data-ep="'+ei+'"><div class="zone-label">'+esc(ep.name.toUpperCase())+'</div></div>';
     }).join('');
     $('roadmap').querySelectorAll('.zone').forEach(function(z){
         z.addEventListener('click',function(){select(D.episodes[+z.dataset.ep].start-1)});

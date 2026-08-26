@@ -6,7 +6,7 @@
     var stamp = Date.now();
     var BPF = "../../shared/_captures/virt-virtio.eBPF.ndjson?v=" + stamp;
     var TRACE = "../../shared/_captures/virt-virtio-Trace.txt?v=" + stamp;
-    var M = { meta: null, events: [], phase: "A", landmarks: { notifies: [], kicks: [], calls: [], begins: [], ends: [] }, setupMmio: 0, notifyMmio: 0, ioeventfdKicks: 0, irqfdSignals: 0 };
+    var M = { meta: null, events: [], phase: "A", landmarks: { kicks: [], begins: [], ends: [] }, notifyMmio: 0, ioeventfdKicks: 0, irqfdSignals: 0 };
     var cursor = 0,
         playTimer = null;
 
@@ -135,6 +135,19 @@
                     event.info.offset = hexNumber(mmio[3]) - 0x10000000;
                     event.info.register = REGISTER[event.info.offset] || "unknown";
                 }
+            } else if (event.name === "kvm_set_irq") {
+                var irqLine = event.info.body.match(/gsi\s+(\d+)\s+level\s+(\d+)\s+source\s+(\d+)/i);
+                if (irqLine) {
+                    event.info.gsi = Number(irqLine[1]);
+                    event.info.level = Number(irqLine[2]);
+                    event.info.irqSource = Number(irqLine[3]);
+                }
+            } else if (event.name === "kvm_inj_virq") {
+                var injected = event.info.body.match(/IRQ\s+(0x[0-9a-f]+)(?:\s+\[reinjected\])?/i);
+                if (injected) {
+                    event.info.vector = injected[1];
+                    event.info.reinjected = /\[reinjected\]/i.test(event.info.body);
+                }
             }
             out.push(event);
         });
@@ -177,27 +190,122 @@
     }
 
     function lane(event) {
-        if (event.source === "ebpf" && ["ioeventfd_kick", "queue_backend_begin", "queue_backend_end", "irqfd_signal"].indexOf(event.name) >= 0) return "USERSPACE BACKEND";
-        if (event.source === "ebpf") return "USERSPACE VMM";
-        if (event.name === "kvm_entry") return "KVM → GUEST";
-        if (event.name === "kvm_exit") return "GUEST → KVM";
-        if (event.name === "kvm_userspace_exit") return "KVM → VMM";
-        if (event.name === "kvm_mmio") return "KVM MMIO";
+        if (event.source === "ebpf" && event.name === "sys_enter_ioctl") return "KVM REQUEST";
+        if (event.source === "ebpf" && event.name === "sys_exit_ioctl") return "KVM RETURN";
+        if (event.source === "ebpf" && event.name === "vmx_handle_exit_return") return "EXIT DISPOSITION";
+        if (event.source === "ebpf" && event.name === "queue_backend_begin") return "BACKEND CALL";
+        if (event.source === "ebpf" && event.name === "queue_backend_end") return "BACKEND RETURN";
+        if (event.source === "ebpf" && event.name === "ioeventfd_kick") return "IOEVENTFD WAKE";
+        if (event.source === "ebpf" && event.name === "irqfd_signal") return "IRQFD SIGNAL";
+        if (event.source === "ebpf" && event.name === "virtio_mmio_return") return "VMM MMIO RETURN";
+        if (event.source === "ebpf" && /_(kick|signal)_return$/.test(event.name)) return "BACKEND RETURN";
+        if (event.source === "ebpf") return "VMM MMIO";
+        if (event.name === "kvm_entry") return "KVM ENTRY";
+        if (event.name === "kvm_exit") return "VM EXIT";
+        if (event.name === "kvm_userspace_exit") return "VMM HANDOFF";
+        if (event.name === "kvm_mmio") return "MMIO ACCESS";
         return "KVM";
     }
 
+    function componentPoint(actor) {
+        return { vmm: 8.333, kvm: 25, guest: 41.667, irqchip: 58.333, backend: 75, memory: 91.667 }[actor];
+    }
+
+    function componentActors(event) {
+        var ioctlState = event.state && event.state.ioctl;
+        var disposition = event.state && event.state.disposition;
+        if (event.name === "sys_enter_ioctl") return { from: "vmm", to: "kvm", label: (ioctlState && ioctlState.request_name) || "ioctl" };
+        if (event.name === "sys_exit_ioctl") return { from: "vmm", to: "vmm", label: ((ioctlState && ioctlState.request_name) || "ioctl") + " ret " + (ioctlState && ioctlState.result) };
+        if (event.name === "vmx_handle_exit_return") return { from: "kvm", to: "kvm", label: (disposition && disposition.meaning) || "exit handled" };
+        if (event.name === "kvm_entry") return { from: "kvm", to: "guest", label: "enter guest" };
+        if (event.name === "kvm_exit") return { from: "guest", to: "kvm", label: event.info.reason || "VM exit" };
+        if (event.name === "kvm_userspace_exit") return { from: "kvm", to: "vmm", label: (event.info.reason || "KVM handoff").replace(/^KVM_EXIT_/, "") };
+        if (event.name === "kvm_mmio") return { from: "kvm", to: "kvm", label: (event.info.register || "MMIO") + " · " + (event.info.operation || "access") };
+        if (event.name === "kvm_set_irq" || event.name === "kvm_ioapic_set_irq") return { from: "kvm", to: "irqchip", label: !missing(event.info.gsi) ? "GSI " + event.info.gsi + " = " + event.info.level : "route IRQ" };
+        if (event.name === "kvm_apic_accept_irq") return { from: "irqchip", to: "irqchip", label: event.info.vector ? "accept " + event.info.vector : "accept IRQ" };
+        if (event.name === "kvm_inj_virq") return { from: "irqchip", to: "guest", label: event.info.vector ? "inject " + event.info.vector : "inject IRQ" };
+        if (event.name === "kvm_eoi") return { from: "guest", to: "irqchip", label: "EOI" };
+        if (event.name === "kvm_msi_set_irq") return { from: "kvm", to: "irqchip", label: "route MSI" };
+        if (event.source === "ebpf" && event.name === "virtio_mmio") {
+            var register = event.info.mmio && event.info.mmio.register;
+            if (register === "QueueNotify") return { from: "vmm", to: "backend", label: "dispatch QueueNotify" };
+            return { from: "vmm", to: "vmm", label: register || "MMIO handler" };
+        }
+        if (event.source === "ebpf" && event.name === "virtio_mmio_return") return { from: "vmm", to: "vmm", label: "MMIO ret " + event.info.return_value };
+        if (event.source === "ebpf" && event.name === "queue_backend_begin") return { from: "backend", to: "memory", label: "read avail ring" };
+        if (event.source === "ebpf" && event.name === "queue_backend_end") return { from: "backend", to: "memory", label: "publish used ring" };
+        if (event.source === "ebpf" && event.name === "ioeventfd_kick") return { from: "kvm", to: "backend", label: "ioeventfd wake" };
+        if (event.source === "ebpf" && event.name === "irqfd_signal") return { from: "backend", to: "kvm", label: "irqfd signal" };
+        if (event.source === "ebpf" && (event.name === "ioeventfd_kick_return" || event.name === "irqfd_signal_return")) return { from: "backend", to: "backend", label: event.name.replace(/_return$/, "") + " ret " + event.info.return_value };
+        if (event.source === "tracefs") return { from: "kvm", to: "kvm", label: event.title };
+        return { from: "vmm", to: "vmm", label: event.title };
+    }
+
+    function componentKind(event) {
+        if (event.name === "kvm_entry") return "entry";
+        if (event.name === "kvm_exit") return "exit";
+        if (event.name === "kvm_userspace_exit" || event.name === "virtio_mmio") return "handoff";
+        if (/^kvm_(set_irq|ioapic_set_irq|apic_accept_irq|inj_virq|eoi|msi_set_irq)$/.test(event.name) || event.name === "irqfd_signal") return "interrupt";
+        if (/^queue_backend_/.test(event.name) || event.name === "ioeventfd_kick") return "queue";
+        if (event.name === "sys_enter_ioctl" || event.name === "sys_exit_ioctl" || event.name === "vmx_handle_exit_return") return "run";
+        return "handoff";
+    }
+
+    function activateComponentActors(event) {
+        var relation = componentActors(event);
+        document.querySelectorAll("[data-component-actor]").forEach(function (node) {
+            node.classList.toggle("active", node.dataset.componentActor === relation.from || node.dataset.componentActor === relation.to);
+        });
+    }
+
+    function componentFlowMarkup(event) {
+        var relation = componentActors(event), kind = componentKind(event), from = componentPoint(relation.from), to = componentPoint(relation.to), dom =
+            '<i class="component-life vmm"></i><i class="component-life kvm"></i><i class="component-life guest"></i><i class="component-life irqchip"></i><i class="component-life backend"></i><i class="component-life memory"></i>';
+        if (from === to) {
+            dom += '<i class="component-local ' + kind + '" style="left:' + from + '%"></i>';
+            dom += '<span class="component-arrow-label local" style="left:' + from + '%">' + esc(relation.label) + '</span>';
+        } else {
+            var left = Math.min(from, to), width = Math.abs(to - from), direction = to > from ? "forward" : "reverse";
+            dom += '<i class="component-arrow ' + direction + ' ' + kind + '" style="left:' + left + '%;width:' + width + '%"></i>';
+            dom += '<span class="component-arrow-label" style="left:' + ((from + to) / 2) + '%">' + esc(relation.label) + '</span>';
+
+        }
+        return dom;
+    }
+
     function title(event) {
-        if (event.source === "ebpf" && event.name === "virtio_mmio") return "do_mmio()";
+        var ioctlState = event.state && event.state.ioctl;
+        var disposition = event.state && event.state.disposition;
+        if (event.source === "ebpf" && event.name === "sys_enter_ioctl") return (ioctlState && ioctlState.request_name) || "ioctl";
+        if (event.source === "ebpf" && event.name === "sys_exit_ioctl") return ((ioctlState && ioctlState.request_name) || "ioctl") + " · return";
+        if (event.source === "ebpf" && event.name === "vmx_handle_exit_return") return "vmx_handle_exit · " + ((disposition && disposition.meaning) || "unknown");
+        if (event.source === "ebpf" && event.name === "virtio_mmio") return "do_mmio · " + ((event.info.mmio && event.info.mmio.register) || "MMIO");
+        if (event.source === "ebpf" && event.name === "virtio_mmio_return") return "do_mmio return · " + ((event.info.mmio && event.info.mmio.register) || "MMIO") + " · " + event.info.return_value;
+        if (event.source === "ebpf" && (event.name === "ioeventfd_kick_return" || event.name === "irqfd_signal_return")) return event.name.replace(/_return$/, "") + " · return " + event.info.return_value;
         if (event.source === "ebpf") return event.name;
         if (event.name === "kvm_exit") return "kvm_exit · " + (event.info.reason || "unknown");
         if (event.name === "kvm_userspace_exit") return event.info.reason || event.name;
         if (event.name === "kvm_mmio") return "kvm_mmio · " + (event.info.register || "MMIO") + " · " + (event.info.operation || "access");
+        if (event.name === "kvm_set_irq" && !missing(event.info.gsi)) return "kvm_set_irq · GSI " + event.info.gsi + " = " + event.info.level;
+        if (event.name === "kvm_inj_virq" && event.info.vector) return "kvm_inj_virq · " + event.info.vector + (event.info.reinjected ? " · reinjected" : "");
+        if (/^kvm_(ioapic_set_irq|apic_accept_irq|eoi|msi_set_irq)$/.test(event.name)) return event.name;
         return event.name;
+    }
+
+    function tracePhaseAt(trace, timeNs) {
+        var phase = "A";
+        for (var index = 0; index < trace.length && trace[index].timeNs <= timeNs; index++) phase = trace[index].phase || phase;
+        return phase;
     }
 
     /* Fuse both monotonic sources without inventing events for untrapped guest-memory stores. */
     function buildModel(ebpf, trace) {
         classifyTracePhases(trace, ebpf);
+        ebpf.forEach(function (event) {
+            var ioctlState = event.state && event.state.ioctl;
+            if (event.name === "vmx_handle_exit_return" || (ioctlState && ioctlState.request_name === "KVM_RUN")) event.phase = tracePhaseAt(trace, event.timeNs);
+            if (ioctlState && (ioctlState.request_name === "KVM_IOEVENTFD" || ioctlState.request_name === "KVM_IRQFD")) event.phase = "D";
+        });
         M.events = ebpf.concat(trace).sort(function (a, b) {
             return a.timeNs - b.timeNs || (a.source === "tracefs" ? -1 : 1);
         });
@@ -210,10 +318,7 @@
         });
         M.events.forEach(function (event, index) {
             if (event.source === "ebpf" && event.name === "virtio_mmio") {
-                if (event.info.mmio.register === "QueueNotify") {
-                    M.notifyMmio++;
-                    M.landmarks.notifies.push(index);
-                } else M.setupMmio++;
+                if (event.info.mmio.register === "QueueNotify") M.notifyMmio++;
             }
             if (event.source === "ebpf" && event.name === "queue_backend_begin") M.landmarks.begins.push(index);
             if (event.source === "ebpf" && event.name === "queue_backend_end") M.landmarks.ends.push(index);
@@ -221,11 +326,7 @@
                 M.ioeventfdKicks++;
                 M.landmarks.kicks.push(index);
             }
-            if (event.source === "ebpf" && event.name === "irqfd_signal") {
-                M.irqfdSignals++;
-                M.landmarks.calls.push(index);
-            }
-            if (event.source === "tracefs" && event.name === "kvm_userspace_exit" && event.info.reason === "KVM_EXIT_IO") M.landmarks.success = index;
+            if (event.source === "ebpf" && event.name === "irqfd_signal") M.irqfdSignals++;
         });
         ["A", "B", "C", "D"].forEach(function (phase) {
             for (var i = 0; i < M.events.length; i++)
@@ -267,7 +368,7 @@
             .join("");
     }
     function stateGroup(event, name) {
-        var group = event.state && event.state[name];
+        var group = event && event.state && event.state[name];
         return group && group.present ? group : null;
     }
 
@@ -378,8 +479,7 @@
         if (cursor < memoryEnd) items.push(memoryContext(cursor, memoryEnd - 1, "UNREPORTED", true));
         $("guest-memory-summary").textContent =
             "slot " + slot + " · " + byteCount(memorySize) + " · GPA " + gpa(memoryStart) + "–" + gpa(memoryEnd - 1) + " · increasing GPA ↓";
-        $("queue-summary").textContent = "queue " + meta.queue_index + " · size " + meta.queue_size;
-        $("notify-card-value").textContent = "QueueNotify = " + meta.queue_index;
+        $("queue-summary").textContent = "queue " + meta.queue_index + " · " + meta.queue_size + " entries";
         $("memory-map").innerHTML = items.join("");
     }
 
@@ -400,7 +500,27 @@
             avail = stateGroup(event, "avail"),
             used = stateGroup(event, "used"),
             queue = stateGroup(event, "queue"),
-            preview = stateGroup(event, "buffer_preview");
+            preview = stateGroup(event, "buffer_preview"),
+            sampled = Boolean(queue && avail && used),
+            pending = sampled ? (avail.idx - queue.last_avail_idx) & 0xffff : null,
+            previous = previousSample(event),
+            previousQueue = stateGroup(previous, "queue"),
+            previousAvail = stateGroup(previous, "avail"),
+            previousUsed = stateGroup(previous, "used"),
+            previousPending = previousQueue && previousAvail ? (previousAvail.idx - previousQueue.last_avail_idx) & 0xffff : null;
+        $("queue-avail").textContent = sampled ? avail.idx : "—";
+        $("queue-consumed").textContent = sampled ? queue.last_avail_idx : "—";
+        $("queue-used").textContent = sampled ? used.idx : "—";
+        $("queue-pending").textContent = sampled ? pending : "—";
+        $("queue-sample-state").textContent = sampled ? event.name : "not sampled at this boundary";
+        document.querySelectorAll("[data-queue-counter]").forEach(function (counter) {
+            var changed = false;
+            if (sampled && counter.dataset.queueCounter === "avail") changed = Boolean(previousAvail) && avail.idx !== previousAvail.idx;
+            if (sampled && counter.dataset.queueCounter === "consumed") changed = Boolean(previousQueue) && queue.last_avail_idx !== previousQueue.last_avail_idx;
+            if (sampled && counter.dataset.queueCounter === "used") changed = Boolean(previousUsed) && used.idx !== previousUsed.idx;
+            if (sampled && counter.dataset.queueCounter === "pending") changed = previousPending !== null && pending !== previousPending;
+            counter.classList.toggle("changed", changed);
+        });
         $("desc-fields").innerHTML = slotCells(descriptor && descriptor.entries, function (entry, index) {
             if (!entry) return emptySlot(index);
             var populated = hexNumber(entry.addr) !== 0 || entry.len !== 0 || hexNumber(entry.flags) !== 0;
@@ -454,13 +574,24 @@
                 ["counter", event.info.ioeventfd.count],
             );
         if (event.source === "ebpf" && event.info.irqfd && event.info.irqfd.present) rows.push(["irqfd counter", event.info.irqfd.count], ["GSI", event.info.irqfd.gsi]);
+        if (event.source === "ebpf" && event.info.operation_id) rows.push(["operation ID", event.info.operation_id]);
+        if (event.source === "ebpf" && event.info.duration_ns) rows.push(["duration", event.info.duration_ns + " ns"]);
         if (event.source === "ebpf" && !missing(event.info.return_value)) rows.push(["return", event.info.return_value]);
+        var ioctlState = event.state && event.state.ioctl;
+        var disposition = event.state && event.state.disposition;
+        if (ioctlState && ioctlState.present) {
+            rows.push(["request", ioctlState.request_name], ["fd", ioctlState.fd], ["argument", ioctlState.argument]);
+            if (ioctlState.completed) rows.push(["result", ioctlState.result], ["duration", ioctlState.duration_ns + " ns"]);
+        }
+        if (disposition && disposition.present) rows.push(["disposition", disposition.meaning], ["handler result", disposition.result]);
         if (event.source === "tracefs") {
             if (event.info.reason) rows.push(["reason", event.info.reason]);
             if (event.info.rip) rows.push(["guest RIP", event.info.rip]);
             if (event.info.address) rows.push(["MMIO GPA", event.info.address]);
             if (event.info.offset !== undefined) rows.push(["offset", "0x" + event.info.offset.toString(16)]);
             if (event.info.value) rows.push(["raw value", event.info.value]);
+            if (!missing(event.info.gsi)) rows.push(["GSI", event.info.gsi], ["level", event.info.level], ["source", event.info.irqSource]);
+            if (event.info.vector) rows.push(["vector", event.info.vector], ["reinjected", event.info.reinjected]);
         }
         return rows;
     }
@@ -494,7 +625,10 @@
 
     /* Card highlights compare structured samples and never predict a later state transition. */
     function previousSample(event) {
-        for (var index = event.index - 1; index >= 0; index--) if (M.events[index].state) return M.events[index];
+        for (var index = event.index - 1; index >= 0; index--) {
+            var state = M.events[index].state;
+            if (state && ["device", "queue", "descriptor", "avail", "used", "buffer_preview"].some(function (name) { return state[name] && state[name].present; })) return M.events[index];
+        }
         return null;
     }
     function sampledGroupChanged(event, previous, name) {
@@ -502,26 +636,10 @@
             before = previous && previous.state && previous.state[name];
         return Boolean(previous && current && current.present) && JSON.stringify(current) !== JSON.stringify(before || null);
     }
-    function selectedParticipant(event) {
-        if (event.source === "ebpf" && event.name === "queue_backend_begin") return "backend";
-        if (event.source === "ebpf" && event.name === "queue_backend_end") return "backend";
-        if (event.source === "ebpf" && event.name === "ioeventfd_kick") return "backend";
-        if (event.source === "ebpf" && event.name === "irqfd_signal") return "backend";
-        if (event.source === "ebpf" && event.name === "virtio_mmio") return "backend";
-        if (event.name === "kvm_mmio" && event.info.register === "QueueNotify") return "notify";
-        if (event.name === "kvm_userspace_exit") return "backend";
-        if (event.name === "kvm_entry" || event.name === "kvm_exit") return "guest";
-        return null;
-    }
     function highlightChanges(event) {
         document.querySelectorAll("[data-node]").forEach(function (node) {
             node.classList.remove("hot");
         });
-        var participant = selectedParticipant(event);
-        if (participant) {
-            var participantNode = document.querySelector('[data-node="' + participant + '"]');
-            if (participantNode) participantNode.classList.add("hot");
-        }
         if (!event.state) return;
         var previous = previousSample(event),
             names = [];
@@ -537,110 +655,33 @@
 
     function renderMachine(event) {
         highlightChanges(event);
-        var ioeventfd = event.phase === "D";
-        var dataPlane = event.phase === "C" || event.phase === "D";
-        $("doorbell-title").textContent = ioeventfd ? "IOEVENTFD KICK" : "MMIO DOORBELL";
-        $("guest-notify-link").textContent = "MMIO write";
-        $("backend-notify-link").textContent = ioeventfd ? "kick_fd" : "dispatch";
-        $("backend-title").textContent = dataPlane ? "USERSPACE BACKEND" : "USERSPACE VMM";
-        $("backend-role").textContent = dataPlane ? "backend.c · process_queue()" : "virtio-mmio control plane";
-        $("completion-route").firstElementChild.innerHTML = ["call_fd", "KVM_IRQFD", "guest IRQ", "ISR", "InterruptACK"].map(function(step){return "<b>" + step + "</b>"}).join("<i>→</i>");
-        $("completion-route").classList.toggle("visible", ioeventfd);
+        activateComponentActors(event);
         $("machine-caption").textContent = event.state
             ? "Highlights show fields changed since the preceding sampled boundary."
             : "Raw chronology boundary; queue fields are not sampled or highlighted.";
-    }
-
-    function executionStateBefore(index) {
-        var state = "vmm";
-        for (var i = 0; i < index; i++) {
-            var event = M.events[i];
-            if (event.name === "kvm_entry") state = "guest";
-            else if (event.name === "kvm_exit") state = "kvm";
-            else if (event.name === "kvm_userspace_exit") state = "vmm";
-        }
-        return state;
-    }
-
-    function executionStateAfter(event, before) {
-        if (event.name === "kvm_entry") return "guest";
-        if (event.name === "kvm_exit") return "kvm";
-        if (event.name === "kvm_userspace_exit") return "vmm";
-        return before;
-    }
-
-    /* Each row shows the execution context of that boundary rather than inheriting an unrelated thread's residency. */
-    function boundaryResidency(event, state) {
-        var residency;
-
-        if (event.source === "ebpf") return { before: "vmm", after: "vmm", continuing: state === "vmm" ? null : state };
-        if (event.name === "kvm_entry") residency = { before: "kvm", after: "guest" };
-        else if (event.name === "kvm_exit") residency = { before: "guest", after: "kvm" };
-        else if (event.name === "kvm_userspace_exit") residency = { before: "kvm", after: "vmm" };
-        else if (event.name === "kvm_mmio") residency = { before: "kvm", after: "kvm" };
-        else residency = { before: state, after: executionStateAfter(event, state) };
-        residency.bridgeFrom = state === residency.before ? null : state;
-        return residency;
-    }
-
-    /* Lifelines preserve the same USERSPACE VMM, KVM, GUEST ordering used by the VIRT.IO visualization. */
-    function lifelineMarkup(event, residency) {
-        var dom =
-            '<i class="life guest"></i><i class="life kvm"></i><i class="life vmm"></i><i class="residency top ' +
-            residency.before +
-            '"></i><i class="residency bottom ' +
-            residency.after +
-            '"></i>';
-        if (residency.continuing) dom += '<i class="parallel-continuation ' + residency.continuing + '"></i><i class="concurrent-bridge ' + residency.continuing + '-vmm"></i><span class="concurrent-label ' + residency.continuing + '-vmm">concurrent</span>';
-        if (residency.bridgeFrom) dom += '<i class="inferred-bridge ' + residency.bridgeFrom + "-" + residency.before + '"></i>';
-        if (event.name === "ioeventfd_kick") dom += '<i class="eventfd-branch"></i><span class="eventfd-branch-label">eventfd wake</span>';
-        if (event.name === "irqfd_signal") dom += '<i class="irqfd-branch"></i><span class="irqfd-branch-label">call_fd → GSI 5</span>';
-        if (event.name === "kvm_entry")
-            dom +=
-                '<i class="boundary-arrow entry"></i><i class="life-point guest"></i><i class="life-point kvm"></i><span class="boundary-label guest-kvm">kvm_entry</span>';
-        else if (event.name === "kvm_exit")
-            dom +=
-                '<i class="boundary-arrow exit"></i><i class="life-point guest"></i><i class="life-point kvm"></i><span class="boundary-label guest-kvm">' +
-                esc(event.info.reason || "VM exit") +
-                "</span>";
-        else if (event.name === "kvm_userspace_exit")
-            dom +=
-                '<i class="boundary-arrow handoff"></i><i class="life-point kvm"></i><i class="life-point vmm"></i><span class="boundary-label kvm-vmm">' +
-                esc((event.info.reason || "KVM_EXIT").replace("KVM_EXIT_", "")) +
-                "</span>";
-        else if (event.source === "ebpf") dom += '<i class="life-hook vmm ebpf"></i><span class="boundary-label hook">' + esc(event.title) + "</span>";
-        else if (event.name === "kvm_mmio") dom += '<i class="life-hook kvm"></i><span class="boundary-label kvm-hook">kvm_mmio</span>';
-        else dom += '<i class="life-hook kvm"></i><span class="boundary-label kvm-hook">' + esc(event.title) + "</span>";
-        return dom;
     }
 
     function renderTimeline() {
         var filtered = M.events.filter(function (event) {
             return event.phase === M.phase;
         });
-        $("timeline-scope").textContent = "Phase " + M.phase + " · " + filtered.length + " real boundaries";
+        $("timeline-scope").textContent = "Phase " + M.phase + " · " + filtered.length + " observed messages";
         $("timeline").style.setProperty("--rows", filtered.length);
-        var state = filtered.length ? executionStateBefore(filtered[0].index) : "vmm";
         $("timeline").innerHTML = filtered
             .map(function (event) {
                 var previous = event.index > 0 ? M.events[event.index - 1] : null,
-                    delta = previous ? ((event.timeNs - previous.timeNs) / 1000).toFixed(3) : "0.000";
-                var residency = boundaryResidency(event, state),
-                    lifelines = lifelineMarkup(event, residency),
-                    observation = event.source === "ebpf" ? "" : event.title;
-                if (event.source !== "ebpf") state = residency.after;
+                    delta = previous ? ((event.timeNs - previous.timeNs) / 1000).toFixed(3) : "0.000",
+                    lifelines = componentFlowMarkup(event);
                 return (
                     '<button class="timeline-row ' +
                     (event.index === cursor ? "active" : "") +
                     '" data-index="' +
                     event.index +
-                    '"><span>+' +
-                    delta +
-                    'µs</span><span class="life-space">' +
+                    '"><span class="life-space">' +
                     lifelines +
-                    '</span><span class="event-label">' +
-                    esc(observation) +
-                    "</span></button>"
+                    '</span><span class="component-time">+' +
+                    delta +
+                    "µs</span></button>"
                 );
             })
             .join("");
@@ -655,66 +696,30 @@
         if (active) active.scrollIntoView({ block: "nearest" });
     }
 
-    function phaseSamples(phase) {
-        /* Like VIRT.IO, roadmap dots represent structured capture records; raw tracefs boundaries remain in the chronogram. */
-        return M.events.filter(function (event) {
-            return event.phase === phase && event.source === "ebpf";
-        });
-    }
-
     function renderRoadmap() {
-        var definitions = { A: "VIRTIO BRING-UP", B: "QUEUE CONFIG", C: "PARAVIRTUALIZED I/O", D: "ACCELERATED NOTIFICATION" };
+        var definitions = { A: "BRING-UP", B: "QUEUE CONFIG", C: "MMIO POLL", D: "EVENTFD + IRQFD" };
         $("roadmap").innerHTML = ["A", "B", "C", "D"]
             .map(function (phase) {
-                var samples = phaseSamples(phase),
-                    dots = samples
-                        .map(function (event) {
-                            return (
-                                '<button class="phase-dot ' +
-                                (event.index < cursor ? "seen " : "") +
-                                (event.index === cursor ? "current" : "") +
-                                '" data-index="' +
-                                event.index +
-                                '" title="' +
-                                esc(event.title) +
-                                '"></button>'
-                            );
-                        })
-                        .join("");
                 return (
-                    '<section class="phase-zone ' +
+                    '<button class="phase-zone ' +
                     (phase === M.phase ? "active" : "") +
                     '" data-phase="' +
                     phase +
-                    '" style="--phase-weight:' +
-                    Math.max(1, samples.length) +
-                    '"><span class="phase-letter">' +
+                    '"><span class="phase-label">PHASE ' +
                     phase +
-                    '</span><div class="phase-copy"><h2>' +
+                    " · " +
                     definitions[phase] +
-                    '</h2></div><div class="phase-dots">' +
-                    dots +
-                    "</div></section>"
+                    "</span></button>"
                 );
             })
             .join("");
         $("roadmap")
             .querySelectorAll(".phase-zone")
             .forEach(function (zone) {
-                zone.addEventListener("click", function (event) {
-                    if (!event.target.classList.contains("phase-dot")) choosePhase(zone.dataset.phase);
+                zone.addEventListener("click", function () {
+                    choosePhase(zone.dataset.phase);
                 });
             });
-        $("roadmap")
-            .querySelectorAll(".phase-dot")
-            .forEach(function (dot) {
-                dot.addEventListener("click", function (event) {
-                    event.stopPropagation();
-                    select(Number(dot.dataset.index), true);
-                });
-            });
-        var currentDot = $("roadmap").querySelector(".phase-dot.current");
-        if (currentDot) currentDot.scrollIntoView({ block: "nearest" });
     }
 
     function select(index, changePhase) {
@@ -734,8 +739,8 @@
 
     function choosePhase(phase) {
         M.phase = phase;
-        var target = M.landmarks["phase" + phase];
-        select(target || 0, false);
+        var target = phase === "C" ? M.landmarks.begins[0] : phase === "D" ? M.landmarks.kicks[0] : M.landmarks["phase" + phase];
+        select(missing(target) ? 0 : target, false);
     }
     function stopPlay() {
         if (!playTimer) return;
@@ -806,13 +811,13 @@
             if (!M.meta || !ebpf.length || !trace.length) throw Error("capture is incomplete");
             renderMemoryMap(M.meta);
             buildModel(ebpf, trace);
-            if (M.meta.schema_version !== 4 || M.landmarks.begins.length !== 3 || M.landmarks.ends.length !== 3 || M.notifyMmio !== 2 || M.ioeventfdKicks !== 1 || M.irqfdSignals !== 1) throw Error("required Phase-C and Phase-D observations are missing");
+            if ([4, 5, 6].indexOf(M.meta.schema_version) < 0 || M.landmarks.begins.length !== 3 || M.landmarks.ends.length !== 3 || M.notifyMmio !== 2 || M.ioeventfdKicks !== 1 || M.irqfdSignals !== 1) throw Error("required Phase-C and Phase-D observations are missing");
             $("scrub").max = M.events.length - 1;
             $("status").lastElementChild.textContent = M.events.length + " boundaries · " + M.notifyMmio + " userspace notify exits · " + M.ioeventfdKicks + " kick · " + M.irqfdSignals + " call";
             wire();
-            select(M.landmarks.phaseC, true);
+            select(M.landmarks.phaseA, true);
         })
         .catch(function (error) {
-            $("status").lastElementChild.textContent = "para-I/O data error · " + error.message;
+            $("status").lastElementChild.textContent = "virtio data error · " + error.message;
         });
 })();

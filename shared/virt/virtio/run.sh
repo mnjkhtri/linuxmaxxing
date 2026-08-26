@@ -81,6 +81,16 @@ for event in kvm_entry kvm_exit kvm_userspace_exit; do
 	echo 1 > "$trace_instance/events/kvm/$event/enable"
 done
 
+# These are existing KVM tracepoints. Enable whichever the target kernel exports so the
+# interrupt handoff remains observable without making the experiment kernel-specific.
+for event in kvm_set_irq kvm_ioapic_set_irq kvm_apic_accept_irq kvm_inj_virq kvm_eoi kvm_msi_set_irq; do
+	if [ -r "$trace_root/events/kvm/$event/format" ]; then
+		cat "$trace_root/events/kvm/$event/format" >> captures/virt-virtio-trace-formats.log
+		echo 1 > "$trace_instance/events/kvm/$event/enable"
+		echo "tracefs: enabled optional $event" >&2
+	fi
+done
+
 if [ -r "$trace_root/events/kvm/kvm_mmio/format" ]; then
 	cat "$trace_root/events/kvm/kvm_mmio/format" >> captures/virt-virtio-trace-formats.log
 	if grep -q 'field:.*gpa' "$trace_root/events/kvm/kvm_mmio/format"; then
@@ -109,7 +119,8 @@ import sys
 records = [json.loads(line) for line in open(sys.argv[1]) if line.strip()]
 meta = records[0]
 snapshots = records[1:]
-assert meta["schema_version"] == 4
+assert meta["schema_version"] == 6
+assert meta["structured_event_types"] == 11
 assert meta["queue_size"] == 8
 assert meta["phase_c_request_count"] == 5
 assert meta["total_request_count"] == 6
@@ -120,18 +131,35 @@ assert meta["phase_d_completion_notification"] == "KVM_IRQFD"
 assert meta["irqfd_gsi"] == 5
 assert meta["backend_location"] == "userspace"
 
-notifies = [record for record in snapshots if record["event_info"]["mmio"]["register"] == "QueueNotify"]
+notifies = [record for record in snapshots if record["event_info"]["event_name"] == "virtio_mmio" and record["event_info"]["mmio"]["register"] == "QueueNotify"]
 kicks = [record for record in snapshots if record["event_info"]["event_name"] == "ioeventfd_kick"]
 calls = [record for record in snapshots if record["event_info"]["event_name"] == "irqfd_signal"]
+mmio_returns = [record for record in snapshots if record["event_info"]["event_name"] == "virtio_mmio_return"]
+kick_returns = [record for record in snapshots if record["event_info"]["event_name"] == "ioeventfd_kick_return"]
+call_returns = [record for record in snapshots if record["event_info"]["event_name"] == "irqfd_signal_return"]
 begins = [record for record in snapshots if record["event_info"]["event_name"] == "queue_backend_begin"]
 ends = [record for record in snapshots if record["event_info"]["event_name"] == "queue_backend_end"]
-status_reads = [record for record in snapshots if record["event_info"]["mmio"]["register"] == "InterruptStatus"]
-ack_writes = [record for record in snapshots if record["event_info"]["mmio"]["register"] == "InterruptACK"]
+ioctl_enters = [record for record in snapshots if record["event_info"]["event_name"] == "sys_enter_ioctl"]
+ioctl_exits = [record for record in snapshots if record["event_info"]["event_name"] == "sys_exit_ioctl"]
+dispositions = [record for record in snapshots if record["event_info"]["event_name"] == "vmx_handle_exit_return"]
+status_reads = [record for record in mmio_returns if record["event_info"]["mmio"]["register"] == "InterruptStatus"]
+ack_writes = [record for record in mmio_returns if record["event_info"]["mmio"]["register"] == "InterruptACK"]
 assert len(notifies) == 2
 assert len(kicks) == 1
 assert len(calls) == 1
+assert len(mmio_returns) == len([record for record in snapshots if record["event_info"]["event_name"] == "virtio_mmio"]) == 36
+assert len(kick_returns) == 1
+assert len(call_returns) == 1
+assert kick_returns[0]["event_info"]["operation_id"] == kicks[0]["event_info"]["operation_id"]
+assert call_returns[0]["event_info"]["operation_id"] == calls[0]["event_info"]["operation_id"]
 assert len(begins) == 3
 assert len(ends) == 3
+assert [record["event_info"]["operation_id"] for record in begins] == [record["event_info"]["operation_id"] for record in ends]
+assert len(ioctl_enters) == len(ioctl_exits) and len(ioctl_enters) > 0
+ioctl_names = {record["state"]["ioctl"]["request_name"] for record in ioctl_enters}
+assert {"KVM_SET_USER_MEMORY_REGION", "KVM_RUN", "KVM_IOEVENTFD", "KVM_IRQFD"} <= ioctl_names
+if meta["vmx_disposition_available"]:
+    assert dispositions
 assert len(status_reads) == 1
 assert len(ack_writes) == 1
 assert kicks[0]["event_info"]["phase"] == "D"

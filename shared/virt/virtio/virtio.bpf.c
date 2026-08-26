@@ -84,6 +84,8 @@ struct process_args
 {
 	__u64 dev;
 	__u64 guest_mem;
+	__u64 started_ns;
+	__u64 operation_id;
 };
 
 struct mmio_args
@@ -91,6 +93,26 @@ struct mmio_args
 	__u64 dev;
 	__u64 guest_mem;
 	__u64 run;
+	__u64 started_ns;
+	__u64 operation_id;
+};
+
+struct helper_args
+{
+	__u64 dev;
+	__u64 guest_mem;
+	__u64 started_ns;
+	__u64 operation_id;
+	__u64 count;
+};
+
+struct ioctl_call
+{
+	__u64 request;
+	__u64 argument;
+	__u64 started_ns;
+	__u64 call_id;
+	int fd;
 };
 
 struct
@@ -116,6 +138,46 @@ struct
 	__type(key, __u64);
 	__type(value, struct mmio_args);
 } active_mmio SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 64);
+	__type(key, __u64);
+	__type(value, struct helper_args);
+} active_ioeventfd SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 64);
+	__type(key, __u64);
+	__type(value, struct helper_args);
+} active_irqfd SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 64);
+	__type(key, __u64);
+	__type(value, struct ioctl_call);
+} active_ioctl SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 64);
+	__type(key, __u64);
+	__type(value, __u64);
+} ioctl_counters SEC(".maps");
+
+struct
+{
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, 64);
+	__type(key, __u64);
+	__type(value, __u64);
+} operation_counters SEC(".maps");
 
 struct
 {
@@ -239,6 +301,87 @@ static __always_inline void emit_event(struct virtio_event *event)
 		bpf_ringbuf_output(&events, event, sizeof(*event), 0);
 }
 
+static __always_inline __u64 next_operation_id(__u64 key)
+{
+	__u64 next = 1;
+	__u64 *last = bpf_map_lookup_elem(&operation_counters, &key);
+
+	if (last)
+		next = *last + 1;
+	bpf_map_update_elem(&operation_counters, &key, &next, BPF_ANY);
+	return next;
+}
+
+SEC("tracepoint/syscalls/sys_enter_ioctl")
+int observe_ioctl_enter(struct trace_event_raw_sys_enter *ctx)
+{
+	__u64 key = bpf_get_current_pid_tgid();
+	__u64 next = 1;
+	__u64 *last;
+	struct ioctl_call call = {};
+	struct virtio_event *event = new_event(VIRTIO_EVENT_SYS_ENTER_IOCTL);
+
+	if (!event)
+		return 0;
+	last = bpf_map_lookup_elem(&ioctl_counters, &key);
+	if (last)
+		next = *last + 1;
+	call.fd = (int)ctx->args[0];
+	call.request = ctx->args[1];
+	call.argument = ctx->args[2];
+	call.started_ns = event->time_ns;
+	call.call_id = next;
+	bpf_map_update_elem(&ioctl_counters, &key, &next, BPF_ANY);
+	bpf_map_update_elem(&active_ioctl, &key, &call, BPF_ANY);
+	event->event_info.call_id = next;
+	event->state.ioctl.present = 1;
+	event->state.ioctl.fd = call.fd;
+	event->state.ioctl.request = call.request;
+	event->state.ioctl.argument = call.argument;
+	emit_event(event);
+	return 0;
+}
+
+SEC("tracepoint/syscalls/sys_exit_ioctl")
+int observe_ioctl_exit(struct trace_event_raw_sys_exit *ctx)
+{
+	__u64 key = bpf_get_current_pid_tgid();
+	struct ioctl_call *call = bpf_map_lookup_elem(&active_ioctl, &key);
+	struct virtio_event *event;
+
+	if (!call)
+		return 0;
+	event = new_event(VIRTIO_EVENT_SYS_EXIT_IOCTL);
+	if (event)
+	{
+		event->event_info.call_id = call->call_id;
+		event->state.ioctl.present = 1;
+		event->state.ioctl.completed = 1;
+		event->state.ioctl.fd = call->fd;
+		event->state.ioctl.request = call->request;
+		event->state.ioctl.argument = call->argument;
+		event->state.ioctl.result = ctx->ret;
+		event->state.ioctl.duration_ns = event->time_ns - call->started_ns;
+		emit_event(event);
+	}
+	bpf_map_delete_elem(&active_ioctl, &key);
+	return 0;
+}
+
+/* This optional kretprobe records whether KVM resumes the guest or returns KVM_RUN to userspace. */
+SEC("kretprobe/vmx_handle_exit")
+int BPF_KRETPROBE(observe_vmx_handle_exit_return, int result)
+{
+	struct virtio_event *event = new_event(VIRTIO_EVENT_VMX_HANDLE_EXIT_RETURN);
+
+	if (!event)
+		return 0;
+	event->state.disposition.present = 1;
+	event->state.disposition.result = result;
+	emit_event(event);
+	return 0;
+}
+
 SEC("uprobe/build/vmm:do_mmio")
 int BPF_UPROBE(observe_do_mmio, void *dev, void *guest_mem, struct observed_kvm_run *run)
 {
@@ -249,17 +392,15 @@ int BPF_UPROBE(observe_do_mmio, void *dev, void *guest_mem, struct observed_kvm_
 
 	if (!event || !run || bpf_probe_read_user(&observed, sizeof(observed), run) != 0)
 		return 0;
+	args.started_ns = event->time_ns;
+	args.operation_id = next_operation_id(key);
+	bpf_map_update_elem(&active_mmio, &key, &args, BPF_ANY);
+	event->event_info.operation_id = args.operation_id;
 	event->event_info.mmio_present = 1;
 	event->event_info.mmio_address = observed.mmio.phys_addr;
 	event->event_info.mmio_offset = (__u32)(observed.mmio.phys_addr - VIRTIO_MMIO_BASE);
 	event->event_info.mmio_length = observed.mmio.len;
 	event->event_info.mmio_is_write = observed.mmio.is_write != 0;
-	/* Status reads and ACK writes are emitted on return so the event contains the returned value or cleared state. */
-	if ((event->event_info.mmio_offset == VIRTIO_MMIO_INTERRUPT_STATUS && !observed.mmio.is_write) || (event->event_info.mmio_offset == VIRTIO_MMIO_INTERRUPT_ACK && observed.mmio.is_write))
-	{
-		bpf_map_update_elem(&active_mmio, &key, &args, BPF_ANY);
-		return 0;
-	}
 	if (observed.mmio.is_write)
 	{
 		event->event_info.mmio_value_present = 1;
@@ -281,9 +422,11 @@ int BPF_URETPROBE(observe_do_mmio_end, int result)
 
 	if (!args)
 		return 0;
-	event = new_event(VIRTIO_EVENT_MMIO);
+	event = new_event(VIRTIO_EVENT_MMIO_RETURN);
 	if (event && bpf_probe_read_user(&observed, sizeof(observed), (const void *)args->run) == 0)
 	{
+		event->event_info.operation_id = args->operation_id;
+		event->event_info.duration_ns = event->time_ns - args->started_ns;
 		event->event_info.mmio_present = 1;
 		event->event_info.mmio_address = observed.mmio.phys_addr;
 		event->event_info.mmio_offset = (__u32)(observed.mmio.phys_addr - VIRTIO_MMIO_BASE);
@@ -308,9 +451,12 @@ int BPF_UPROBE(observe_process_queue_begin, void *dev, void *guest_mem)
 	struct process_args args = {.dev = (__u64)dev, .guest_mem = (__u64)guest_mem};
 	struct virtio_event *event = new_event(VIRTIO_EVENT_QUEUE_BACKEND_BEGIN);
 
-	bpf_map_update_elem(&active_process, &key, &args, BPF_ANY);
 	if (!event)
 		return 0;
+	args.started_ns = event->time_ns;
+	args.operation_id = next_operation_id(key);
+	bpf_map_update_elem(&active_process, &key, &args, BPF_ANY);
+	event->event_info.operation_id = args.operation_id;
 	sample_device(event, dev);
 	sample_queue_memory(event, guest_mem);
 	emit_event(event);
@@ -320,11 +466,17 @@ int BPF_UPROBE(observe_process_queue_begin, void *dev, void *guest_mem)
 SEC("uprobe/build/vmm:process_ioeventfd_kick")
 int BPF_UPROBE(observe_ioeventfd_kick, void *dev, void *guest_mem, void *backend, __u64 eventfd_count)
 {
+	__u64 key = bpf_get_current_pid_tgid();
+	struct helper_args args = {.dev = (__u64)dev, .guest_mem = (__u64)guest_mem, .count = eventfd_count};
 	struct virtio_event *event = new_event(VIRTIO_EVENT_IOEVENTFD_KICK);
 
 	(void)backend;
 	if (!event)
 		return 0;
+	args.started_ns = event->time_ns;
+	args.operation_id = next_operation_id(key);
+	bpf_map_update_elem(&active_ioeventfd, &key, &args, BPF_ANY);
+	event->event_info.operation_id = args.operation_id;
 	event->event_info.ioeventfd_present = 1;
 	event->event_info.ioeventfd_count = eventfd_count;
 	sample_device(event, dev);
@@ -333,19 +485,77 @@ int BPF_UPROBE(observe_ioeventfd_kick, void *dev, void *guest_mem, void *backend
 	return 0;
 }
 
+SEC("uretprobe/build/vmm:process_ioeventfd_kick")
+int BPF_URETPROBE(observe_ioeventfd_kick_end, int result)
+{
+	__u64 key = bpf_get_current_pid_tgid();
+	struct helper_args *args = bpf_map_lookup_elem(&active_ioeventfd, &key);
+	struct virtio_event *event;
+
+	if (!args)
+		return 0;
+	event = new_event(VIRTIO_EVENT_IOEVENTFD_KICK_RETURN);
+	if (event)
+	{
+		event->event_info.operation_id = args->operation_id;
+		event->event_info.duration_ns = event->time_ns - args->started_ns;
+		event->event_info.return_present = 1;
+		event->event_info.return_value = result;
+		event->event_info.ioeventfd_present = 1;
+		event->event_info.ioeventfd_count = args->count;
+		sample_device(event, (const void *)args->dev);
+		sample_queue_memory(event, (const void *)args->guest_mem);
+		emit_event(event);
+	}
+	bpf_map_delete_elem(&active_ioeventfd, &key);
+	return 0;
+}
+
 SEC("uprobe/build/vmm:signal_irqfd_completion")
 int BPF_UPROBE(observe_irqfd_signal, void *dev, void *guest_mem, void *backend, __u64 call_count)
 {
+	__u64 key = bpf_get_current_pid_tgid();
+	struct helper_args args = {.dev = (__u64)dev, .guest_mem = (__u64)guest_mem, .count = call_count};
 	struct virtio_event *event = new_event(VIRTIO_EVENT_IRQFD_SIGNAL);
 
 	(void)backend;
 	if (!event)
 		return 0;
+	args.started_ns = event->time_ns;
+	args.operation_id = next_operation_id(key);
+	bpf_map_update_elem(&active_irqfd, &key, &args, BPF_ANY);
+	event->event_info.operation_id = args.operation_id;
 	event->event_info.irqfd_present = 1;
 	event->event_info.irqfd_count = call_count;
 	sample_device(event, dev);
 	sample_queue_memory(event, guest_mem);
 	emit_event(event);
+	return 0;
+}
+
+SEC("uretprobe/build/vmm:signal_irqfd_completion")
+int BPF_URETPROBE(observe_irqfd_signal_end, int result)
+{
+	__u64 key = bpf_get_current_pid_tgid();
+	struct helper_args *args = bpf_map_lookup_elem(&active_irqfd, &key);
+	struct virtio_event *event;
+
+	if (!args)
+		return 0;
+	event = new_event(VIRTIO_EVENT_IRQFD_SIGNAL_RETURN);
+	if (event)
+	{
+		event->event_info.operation_id = args->operation_id;
+		event->event_info.duration_ns = event->time_ns - args->started_ns;
+		event->event_info.return_present = 1;
+		event->event_info.return_value = result;
+		event->event_info.irqfd_present = 1;
+		event->event_info.irqfd_count = args->count;
+		sample_device(event, (const void *)args->dev);
+		sample_queue_memory(event, (const void *)args->guest_mem);
+		emit_event(event);
+	}
+	bpf_map_delete_elem(&active_irqfd, &key);
 	return 0;
 }
 
@@ -362,6 +572,8 @@ int BPF_URETPROBE(observe_process_queue_end, int result)
 		event->event_info.return_value = result;
 		if (args)
 		{
+			event->event_info.operation_id = args->operation_id;
+			event->event_info.duration_ns = event->time_ns - args->started_ns;
 			sample_device(event, (const void *)args->dev);
 			sample_queue_memory(event, (const void *)args->guest_mem);
 			if (result == 0)
