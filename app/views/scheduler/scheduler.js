@@ -27,8 +27,8 @@
   var NODE_RADIUS = 22;
   var ZERO_ADDR = '0000000000000000';
   var SCHEMA_VERSION = 1;
-  var NDJSON_PATH = '/shared/_captures/scheduler.eBPF.ndjson';
-  var TRACE_PATH = '/shared/_captures/scheduler-Trace.txt';
+  var NDJSON_PATH = '../../shared/_captures/scheduler.eBPF.ndjson';
+  var TRACE_PATH = '../../shared/_captures/scheduler-Trace.txt';
 
   /* ------------------------------------------------------------------ */
   /* State                                                              */
