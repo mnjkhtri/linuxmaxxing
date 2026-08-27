@@ -28,6 +28,8 @@ jobs:
         run: |
           mkdir -p _site/shared/_captures
           cp -R app/. _site/
+          rm -f _site/shared
+          mkdir -p _site/shared/_captures
           cp shared/_captures/* _site/shared/_captures/
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
