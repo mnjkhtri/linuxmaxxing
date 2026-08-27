@@ -26,7 +26,7 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Stage app and captures
         run: |
-          mkdir -p _site/shared/_captures
+          mkdir -p _site
           cp -R app/. _site/
           rm -rf _site/shared
           mkdir -p _site/shared/_captures
