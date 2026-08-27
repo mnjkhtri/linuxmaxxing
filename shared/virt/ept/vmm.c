@@ -21,7 +21,7 @@
 #define DATA_GFN (DATA_GPA / GUEST_PAGE_SIZE)
 #define CONTROL_PORT 0xe9
 
-static int set_memory_region(int vm, uint32_t slot, uint64_t guest_phys_addr, uint8_t *memory, size_t size, uint32_t flags)
+static __attribute__((noinline)) int set_memory_region(int vm, uint32_t slot, uint64_t guest_phys_addr, uint8_t *memory, size_t size, uint32_t flags)
 {
 	struct kvm_userspace_memory_region region = {
 		.slot = slot,
@@ -36,6 +36,95 @@ static int set_memory_region(int vm, uint32_t slot, uint64_t guest_phys_addr, ui
 
 /* The Command-4 huge slot backing, kept alive so Command 5 can re-register the same mapping with dirty logging. */
 static uint8_t *huge_mem;
+
+/* Handle one guest-requested EPT transition; the stable function boundary is also the userspace control-plane observation point. */
+static __attribute__((noinline)) int handle_control_command(int vm, uint8_t command, uint8_t **active_mem, uint8_t *replacement_mem, size_t guest_size)
+{
+	if (command == 1)
+	{
+		/* Discard the host page backing data GFN 7 so the host MM invalidates KVM's translation. */
+		if (madvise(*active_mem + DATA_GPA, GUEST_PAGE_SIZE, MADV_DONTNEED) < 0)
+		{
+			perror("madvise(MADV_DONTNEED)");
+			return -1;
+		}
+	}
+	else if (command == 2)
+	{
+		/* Delete slot 0 and register the same GPA range over replacement host memory. */
+		memcpy(replacement_mem, *active_mem, guest_size);
+		if (set_memory_region(vm, 0, 0, NULL, 0, 0) < 0 || set_memory_region(vm, 0, 0, replacement_mem, guest_size, 0) < 0)
+		{
+			perror("replace KVM memory region");
+			return -1;
+		}
+		*active_mem = replacement_mem;
+	}
+	else if (command == 3)
+	{
+		unsigned long clear_bitmap = 1UL << DATA_GFN;
+		struct kvm_clear_dirty_log clear = {.slot = 0, .num_pages = guest_size / GUEST_PAGE_SIZE, .first_page = 0, .dirty_bitmap = &clear_bitmap};
+
+		/* Enable dirty logging, then clear only data GFN 7's dirty state. */
+		if (set_memory_region(vm, 0, 0, *active_mem, guest_size, KVM_MEM_LOG_DIRTY_PAGES) < 0)
+		{
+			perror("enable KVM dirty logging");
+			return -1;
+		}
+		if (ioctl(vm, KVM_CLEAR_DIRTY_LOG, &clear) < 0)
+		{
+			perror("KVM_CLEAR_DIRTY_LOG");
+			return -1;
+		}
+	}
+	else if (command == 4)
+	{
+		uint8_t *mapping = mmap(NULL, THP_MAPPING_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+
+		if (mapping == MAP_FAILED)
+		{
+			perror("mmap THP candidate");
+			return -1;
+		}
+		huge_mem = (uint8_t *)(((uintptr_t)mapping + HUGE_MEM_SIZE - 1) & ~(uintptr_t)(HUGE_MEM_SIZE - 1));
+		size_t prefix = (size_t)(huge_mem - mapping);
+		size_t suffix = THP_MAPPING_SIZE - prefix - HUGE_MEM_SIZE;
+		if ((prefix && munmap(mapping, prefix) < 0) || (suffix && munmap(huge_mem + HUGE_MEM_SIZE, suffix) < 0))
+		{
+			perror("align THP candidate");
+			return -1;
+		}
+		if (madvise(huge_mem, HUGE_MEM_SIZE, MADV_HUGEPAGE) < 0)
+			perror("warning: madvise(MADV_HUGEPAGE)");
+		for (size_t offset = 0; offset < HUGE_MEM_SIZE; offset += GUEST_PAGE_SIZE)
+			huge_mem[offset] = (uint8_t)(offset / GUEST_PAGE_SIZE);
+		if (set_memory_region(vm, 1, HUGE_GPA, huge_mem, HUGE_MEM_SIZE, 0) < 0)
+		{
+			perror("install 2 MiB KVM memory region");
+			return -1;
+		}
+	}
+	else if (command == 5)
+	{
+		/* Re-register slot 1 with dirty logging so KVM must split or protect the huge translation. */
+		if (!huge_mem)
+		{
+			fprintf(stderr, "command 5 before a command 4 huge slot\n");
+			return -1;
+		}
+		if (set_memory_region(vm, 1, HUGE_GPA, huge_mem, HUGE_MEM_SIZE, KVM_MEM_LOG_DIRTY_PAGES) < 0)
+		{
+			perror("enable dirty logging on 2 MiB slot");
+			return -1;
+		}
+	}
+	else
+	{
+		fprintf(stderr, "unexpected control command: %u\n", command);
+		return -1;
+	}
+	return 0;
+}
 
 int main(void)
 {
@@ -176,113 +265,8 @@ int main(void)
 			/* Port 0xe9 carries synchronization requests from this toy guest. */
 			if (run->io.direction == KVM_EXIT_IO_OUT && run->io.port == CONTROL_PORT)
 			{
-				/* Command 1 discards the host page backing guest data GFN 7. */
-				if (data[0] == 1)
-				{
-					/* The host-MM invalidation makes KVM remove the corresponding EPT mapping. */
-					if (madvise(active_mem + DATA_GPA, 0x1000, MADV_DONTNEED) < 0)
-					{
-						perror("madvise(MADV_DONTNEED)");
-						return 1;
-					}
-				}
-
-				/* Command 2 replaces the entire KVM memory slot with new host memory. */
-				else if (data[0] == 2)
-				{
-					/* Preserve code and GFN 7 while leaving the unused GFN 1-6 gap untouched. */
-					memcpy(replacement_mem, active_mem, guest_size);
-					memcpy(replacement_mem + DATA_GPA, active_mem + DATA_GPA, GUEST_PAGE_SIZE);
-
-					/* Delete slot 0, then recreate it over the replacement host mapping. */
-					if (set_memory_region(vm, 0, 0, NULL, 0, 0) < 0 ||
-						set_memory_region(vm, 0, 0, replacement_mem, guest_mem_size, 0) < 0)
-					{
-						perror("replace KVM memory region");
-						return 1;
-					}
-					/* Use the replacement mapping for subsequent host-side guest-memory operations. */
-					active_mem = replacement_mem;
-				}
-
-				/* Command 3 keeps the mapping but resets dirty tracking for data GFN 7. */
-				else if (data[0] == 3)
-				{
-					unsigned long clear_bitmap = 1UL << DATA_GFN;
-					struct kvm_clear_dirty_log clear = {
-						.slot = 0,
-						.num_pages = guest_mem_size / GUEST_PAGE_SIZE,
-						.first_page = 0,
-						.dirty_bitmap = &clear_bitmap,
-					};
-
-					/* Enable dirty tracking, then clear only data GFN 7's dirty state. */
-					if (set_memory_region(vm, 0, 0, active_mem, guest_mem_size, KVM_MEM_LOG_DIRTY_PAGES) < 0)
-					{
-						perror("enable KVM dirty logging");
-						return 1;
-					}
-					/* KVM clears EPT D (or write-protects without A/D), then invalidates cached translations. */
-					if (ioctl(vm, KVM_CLEAR_DIRTY_LOG, &clear) < 0)
-					{
-						perror("KVM_CLEAR_DIRTY_LOG");
-						return 1;
-					}
-				}
-
-				/* Command 4 adds one aligned 2 MiB THP-backed data slot at GPA 0x200000. */
-				else if (data[0] == 4)
-				{
-					uint8_t *mapping = mmap(NULL, THP_MAPPING_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-
-					if (mapping == MAP_FAILED)
-					{
-						perror("mmap THP candidate");
-						return 1;
-					}
-					huge_mem = (uint8_t *)(((uintptr_t)mapping + HUGE_MEM_SIZE - 1) & ~(uintptr_t)(HUGE_MEM_SIZE - 1));
-					size_t prefix = (size_t)(huge_mem - mapping);
-					size_t suffix = THP_MAPPING_SIZE - prefix - HUGE_MEM_SIZE;
-
-					/* Keep only one 2 MiB-aligned anonymous VMA. */
-					if ((prefix && munmap(mapping, prefix) < 0) ||
-						(suffix && munmap(huge_mem + HUGE_MEM_SIZE, suffix) < 0))
-					{
-						perror("align THP candidate");
-						return 1;
-					}
-					/* Ask for THP backing; base pages remain a valid observable fallback. */
-					if (madvise(huge_mem, HUGE_MEM_SIZE, MADV_HUGEPAGE) < 0)
-						perror("warning: madvise(MADV_HUGEPAGE)");
-					for (size_t offset = 0; offset < HUGE_MEM_SIZE; offset += GUEST_PAGE_SIZE)
-						huge_mem[offset] = (uint8_t)(offset / GUEST_PAGE_SIZE);
-					/* Slot 0 keeps executable code; slot 1 is data-only so KVM can use an L2 leaf. */
-					if (set_memory_region(vm, 1, HUGE_GPA, huge_mem, HUGE_MEM_SIZE, 0) < 0)
-					{
-						perror("install 2 MiB KVM memory region");
-						return 1;
-					}
-				}
-
-				/*
-				 * Command 5 enables fine-grained dirty tracking on the existing huge slot.
-				 * The same slot, GPA, HVA, and size stay; only the flags change to KVM_MEM_LOG_DIRTY_PAGES.
-				 * Eager write-protection splits the level-2 huge leaf into level-1 4 KiB leaves on TDP-MMU kernels.
-				 * The EPT observer reports whatever structure the kernel actually produces, not an assumed one.
-				 */
-				else if (data[0] == 5)
-				{
-					if (!huge_mem)
-					{
-						fprintf(stderr, "command 5 before a command 4 huge slot\n");
-						return 1;
-					}
-					if (set_memory_region(vm, 1, HUGE_GPA, huge_mem, HUGE_MEM_SIZE, KVM_MEM_LOG_DIRTY_PAGES) < 0)
-					{
-						perror("enable dirty logging on 2 MiB slot");
-						return 1;
-					}
-				}
+				if (handle_control_command(vm, data[0], &active_mem, replacement_mem, guest_mem_size) < 0)
+					return 1;
 
 				/* EPT workload controls remain guest I/O. */
 			}

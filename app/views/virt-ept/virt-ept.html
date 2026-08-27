@@ -1,17 +1,95 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: GPL-2.0 -->
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>KVM VIRT</title>
-<link rel="stylesheet" href="../../theme.css">
-<link rel="stylesheet" href="virt-ept.css?v=2">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>KVM EPT</title>
+    <link rel="stylesheet" href="virt-ept.css?v=9" />
 </head>
 <body>
-<main class="virt">
-<header class="head"><div><div class="eyebrow">VIRT / KVM / EPT</div><h1>KVM <span>VIRT</span></h1><p>EPT state and in-kernel MMU invalidation from the toy-VMM KVM run.</p></div><div id="status" role="status"><i class="trace-dot"></i><span>following EPT execution...</span></div></header>
-<section class="workbench"><section class="panel stage"><header class="panel-head"><h2>KVM VIRT</h2><span id="flow-summary">-</span></header><div class="flow"><section class="activity-card"><div id="timeline" class="rows"></div></section><div class="state-stack"><section class="ept-card"><div class="card-label"><span>EPT STATE</span><span id="ept-event">-</span></div><div class="ept-legend"><span><i class="ept-key empty"></i>EMPTY</span><span><i class="ept-key table"></i>TABLE</span><span><i class="ept-key ram"></i>RAM</span><span><i class="ept-key huge"></i>2M LEAF</span><span><i class="ept-key mmio"></i>MMIO</span></div><div class="ept-state-body"><div id="ept-state"></div><div id="walk-detail" class="walk-card"></div></div></section></div></div><footer class="legend" id="legend"><span><i class="sw entry"></i>entry</span><span><i class="sw exit"></i>exit</span><span><i class="sw handoff"></i>handoff</span><span><i class="sw notify"></i>mmu notify</span><span><i class="sw flush"></i>tlb flush</span><span><i class="sw settle"></i>spte install</span><span>→ chronological flow chain</span></footer></section><aside class="panel note"><header class="panel-head"><h2>Transition internals</h2></header><div class="note-body"><div class="type"><i class="trace-dot"></i><span id="detail-type">EPT state</span></div><h2 id="detail-title">Building EPT model</h2><dl class="fields" id="fields"><dt>state</dt><dd>initializing</dd></dl></div></aside></section>
+<main class="ept">
+    <header class="hero">
+        <div>
+            <div class="eyebrow">TRACEFS → eBPF SNAPSHOT → EPT STATE</div>
+            <h1>KVM <span>EPT</span></h1>
+            <p>Demand mapping, invalidation, MMIO markers, and huge-page splitting from one toy-VMM run.</p>
+        </div>
+        <div id="status" role="status"><i class="trace-dot"></i><span>loading EPT capture…</span></div>
+    </header>
+
+    <nav id="roadmap" class="roadmap panel" aria-label="EPT phases"></nav>
+
+    <section class="workbench">
+        <section class="machine panel">
+            <header class="panel-head">
+                <div><h2>EPT translation path</h2><span id="phase-caption">Guest accesses drive KVM's second-level page tables.</span></div>
+                <code id="selected-time">t = —</code>
+            </header>
+
+            <div class="stage">
+                <section class="lifeline-region region">
+                    <header class="region-title">
+                        <div><b>LIFELINES</b><span id="timeline-scope">Phase A · Boot map</span></div>
+                        <code>TIME ↓</code>
+                    </header>
+                    <div class="actor-head">
+                        <article data-actor="vmm"><small>USERSPACE</small><b>VMM</b><em>KVM ioctls</em></article>
+                        <article data-actor="kvmcore"><small>HOST KERNEL</small><b>KVM CORE</b><em>KVM_RUN + VMX</em></article>
+                        <article data-actor="guest"><small>GUEST</small><b>vCPU 0</b><em>memory access</em></article>
+                        <article data-actor="kvmmmu"><small>HOST KERNEL</small><b>KVM MMU</b><em>fault + notifier</em></article>
+                        <article data-actor="ept"><small>TRANSLATION</small><b>EPT</b><em>SPTE hierarchy</em></article>
+                        <article data-actor="hostmm"><small>HOST MEMORY</small><b>HOST MM</b><em>HVA backing</em></article>
+                    </div>
+                    <div id="timeline" class="timeline" aria-label="EPT phase lifelines"></div>
+                    <footer class="region-foot"><b id="flow-kind">LOADING</b><span id="flow-caption">reading capture…</span></footer>
+                </section>
+
+                <section class="state-region region">
+                    <header class="region-title">
+                        <div><b>EPT MAPPING STATE</b><span id="state-source">phase endpoint snapshot</span></div>
+                        <code id="root-address">ROOT —</code>
+                    </header>
+                    <div class="state-body">
+                        <div class="state-ledger">
+                            <article><small>RAM LEAFS</small><b id="mapped-count">—</b></article>
+                            <article><small>MMIO MARKERS</small><b id="mmio-count">—</b></article>
+                            <article><small>FOCUS GFN</small><b id="focus-gfn">—</b></article>
+                        </div>
+                        <div class="translation-lifecycle" aria-label="Captured EPT lifecycle">
+                            <article id="life-trigger"><small>TRIGGER</small><b id="life-trigger-value">—</b></article>
+                            <article id="life-boundary"><small>KVM CONTROL</small><b id="life-boundary-value">—</b></article>
+                            <article id="life-mmu"><small>MMU UPDATE</small><b id="life-mmu-value">—</b></article>
+                            <article id="life-coherence"><small>COHERENCE</small><b id="life-coherence-value">—</b></article>
+                        </div>
+                        <section class="walk-section">
+                            <header><b>GPA → EPT WALK → HPA</b><span id="walk-summary">select a sampled GFN</span></header>
+                            <div id="walk" class="walk"></div>
+                        </section>
+                        <section class="map-section">
+                            <header><b>SAMPLED GFNs</b><span><i class="key ram"></i>RAM <i class="key huge"></i>2 MiB <i class="key mmio"></i>MMIO</span></header>
+                            <div id="gfn-map" class="gfn-map"></div>
+                        </section>
+                    </div>
+                    <footer class="region-foot"><b id="state-kind">NO EPT ROOT</b><span id="state-caption">EPT state begins after the first vCPU entry.</span></footer>
+                </section>
+            </div>
+        </section>
+
+        <aside class="inspector panel">
+            <header class="panel-head"><div><h2>Transition internals</h2><span>selected capture boundary</span></div><code id="source-badge">—</code></header>
+            <div class="inspector-body">
+                <div class="selected-kind"><i class="trace-dot"></i><span id="event-kind">LOADING</span></div>
+                <h2 id="event-title">Reading EPT capture…</h2>
+                <dl id="fields" class="fields"></dl>
+            </div>
+            <footer class="toolbar">
+                <button id="prev" title="Previous observation">←</button><button id="play" title="Play or pause">▶</button><button id="next" title="Next observation">→</button>
+                <input id="scrub" type="range" min="0" value="0" aria-label="Phase observation scrubber" /><span id="counter">— / —</span>
+            </footer>
+        </aside>
+    </section>
 </main>
-<script src="virt-ept.js?v=1"></script>
+<script src="virt-ept.js?v=9"></script>
 </body>
 </html>

@@ -38,7 +38,9 @@ $(BUILD_DIR):
 	mkdir -p $@
 
 $(VMM): $(DIR)vmm.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -pthread $< -o $@
+	$(CC) $(CFLAGS) -fno-omit-frame-pointer -pthread $< -o $@
+	nm -a $@ | grep -qw handle_control_command
+	nm -a $@ | grep -qw set_memory_region
 
 $(GUEST_OBJ): $(DIR)guest.S | $(BUILD_DIR)
 	$(AS) --32 $< -o $@

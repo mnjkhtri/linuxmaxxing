@@ -3,12 +3,14 @@
  * Ring-buffer ABI shared between the BPF side (ept.bpf.c) and the userspace loader (observer.c).
  * This is the binary format only: the loader serializes it into the canonical NDJSON envelope.
  *
- * One KVM boundary snapshot, grouped into three semantic facts:
+ * One timestamped observation with optional typed payloads:
  *
- *   time_ns    CLOCK_MONOTONIC (bpf_ktime_get_ns()), comparable with the tracefs instance clock (mono)
- *   event_info which KVM boundary produced this snapshot
- *   context    where and as whom the probe executed (the VMM thread)
- *   state      the observed EPT root and per-GFN walk after that boundary
+ *   time_ns                    CLOCK_MONOTONIC, shared with the mono tracefs instance
+ *   event_info                 captured boundary type
+ *   context                    VMM task and host CPU
+ *   control/memslot/syscalls   userspace request and paired-return facts
+ *   disposition                optional in-kernel VM-exit decision
+ *   state                      EPT root and bounded per-GFN walks
  *
  * The header intentionally contains no JSON vocabulary and no JSON representation choices.
  * Events are integers here, pointers are raw u64 here, and present/mmio flags are 0/1 here.
@@ -36,6 +38,20 @@ enum ept_event_type
 	EPT_EVENT_KVM_MMU_SPTE_REQUESTED = 4,
 	EPT_EVENT_KVM_MMU_SET_SPTE = 5,
 	EPT_EVENT_KVM_FLUSH_REMOTE_TLBS = 6,
+	EPT_EVENT_CONTROL_BEGIN = 7,
+	EPT_EVENT_CONTROL_END = 8,
+	EPT_EVENT_MEMSLOT_BEGIN = 9,
+	EPT_EVENT_MEMSLOT_END = 10,
+	EPT_EVENT_SYS_ENTER_IOCTL = 11,
+	EPT_EVENT_SYS_EXIT_IOCTL = 12,
+	EPT_EVENT_VMX_HANDLE_EXIT_RETURN = 13,
+	EPT_EVENT_KVM_PAGE_FAULT = 14,
+	EPT_EVENT_KVM_MMU_SPLIT_HUGE_PAGE = 15,
+	EPT_EVENT_MARK_MMIO_SPTE = 16,
+	EPT_EVENT_SYS_ENTER_MADVISE = 17,
+	EPT_EVENT_SYS_EXIT_MADVISE = 18,
+	EPT_EVENT_SYS_ENTER_MMAP = 19,
+	EPT_EVENT_SYS_EXIT_MMAP = 20,
 };
 
 /* One EPT/TDP page-table entry observed on the way to a sampled GFN. */
@@ -75,6 +91,90 @@ struct ept_event_info
 	unsigned int event; /* enum ept_event_type. */
 };
 
+/* One guest control command handled by the userspace VMM. */
+struct ept_control_info
+{
+	unsigned char present;
+	unsigned char completed;
+	unsigned char command;
+	unsigned char reserved;
+	int result;
+	unsigned long long operation_id;
+	unsigned long long duration_ns;
+};
+
+/* One set_memory_region() request and its paired return. */
+struct ept_memslot_info
+{
+	unsigned char present;
+	unsigned char completed;
+	unsigned char control_command;
+	unsigned char reserved;
+	int vm_fd;
+	int result;
+	unsigned int slot;
+	unsigned int flags;
+	unsigned long long guest_phys_addr;
+	unsigned long long userspace_addr;
+	unsigned long long size;
+	unsigned long long operation_id;
+	unsigned long long duration_ns;
+};
+
+/* One ioctl(2) request issued by the VMM and its paired syscall return. */
+struct ept_ioctl_info
+{
+	unsigned char present;
+	unsigned char completed;
+	unsigned char reserved[2];
+	int fd;
+	long long result;
+	unsigned long long request;
+	unsigned long long argument;
+	unsigned long long call_id;
+	unsigned long long duration_ns;
+};
+
+/* One madvise(2) request that changes the host backing of guest RAM. */
+struct ept_madvise_info
+{
+	unsigned char present;
+	unsigned char completed;
+	unsigned char reserved[2];
+	int advice;
+	long long result;
+	unsigned long long start;
+	unsigned long long length;
+	unsigned long long call_id;
+	unsigned long long duration_ns;
+};
+
+/* One mmap(2) request that creates userspace backing or maps the shared kvm_run page. */
+struct ept_mmap_info
+{
+	unsigned char present;
+	unsigned char completed;
+	unsigned char reserved[2];
+	int prot;
+	int flags;
+	int fd;
+	int reserved2;
+	long long result;
+	unsigned long long requested_addr;
+	unsigned long long length;
+	unsigned long long offset;
+	unsigned long long call_id;
+	unsigned long long duration_ns;
+};
+
+/* vmx_handle_exit() result: resume in-kernel, return to userspace, or error. */
+struct ept_disposition_info
+{
+	unsigned char present;
+	unsigned char reserved[3];
+	int result;
+};
+
 /* Where and as whom the probe executed: the VMM thread driving the vCPU. */
 struct ept_context
 {
@@ -87,6 +187,8 @@ struct ept_context
 /* The KVM EPT state observed after the boundary. */
 struct ept_state
 {
+	unsigned char present;
+	unsigned char reserved[7];
 	unsigned long long vcpu;	 /* struct kvm_vcpu pointer that owns this snapshot. */
 	unsigned long long kvm;		 /* Owning struct kvm pointer for this vCPU. */
 	unsigned long long mmu;		 /* vcpu->arch.mmu, KVM's software MMU/EPT state object. */
@@ -101,6 +203,12 @@ struct ept_event
 	unsigned long long time_ns;
 	struct ept_event_info event_info;
 	struct ept_context context;
+	struct ept_control_info control;
+	struct ept_memslot_info memslot;
+	struct ept_ioctl_info ioctl;
+	struct ept_madvise_info madvise;
+	struct ept_mmap_info mmap;
+	struct ept_disposition_info disposition;
 	struct ept_state state;
 };
 
