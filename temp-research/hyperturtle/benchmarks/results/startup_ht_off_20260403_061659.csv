@@ -1,0 +1,7 @@
+image,run,time_s
+launch_bash_alpine,1,2.605
+launch_bash_ubuntu,1,2.415
+launch_java,1,2.537
+launch_js,1,2.519
+launch_python,1,2.682
+launch_pd,1,2.726

@@ -1,0 +1,7 @@
+image,run,time_s
+launch_bash_alpine,1,2.676
+launch_bash_alpine,2,2.577
+launch_bash_alpine,3,2.492
+launch_bash_alpine,4,2.584
+launch_bash_alpine,5,2.677
+launch_bash_alpine,6,2.568

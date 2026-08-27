@@ -31,3 +31,5 @@ The three research trees were migrated here without generated build outputs or f
 - `riscv-assembly/build/` — generated build output; preserved at `../large-research-artifacts/riscv-assembly/build/`
 
 - `hyperturtle/cloudlab-copy/` — 2.5 GiB disposable CloudLab working copy with cloned Linux/QEMU/libbpf trees; preserved at `../large-research-artifacts/hyperturtle/cloudlab-copy/`
+
+- Additional generated hyperturtle binaries, nested `.git` metadata, editor swap files, and build logs from `benchmarks/` and `mutilate/` were preserved under `../large-research-artifacts/hyperturtle/source-generated/`.

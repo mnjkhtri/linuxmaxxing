@@ -1,0 +1,3 @@
+image,run,time_s
+launch_bash_alpine,1,6.615
+launch_bash_ubuntu,1,6.261
