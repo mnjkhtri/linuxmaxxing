@@ -1,0 +1,190 @@
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 178/178   #P:40
+#
+#                                _-----=> irqs-off/BH-disabled
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+             vmm-24609   [014] d..1. 87078.851603: kvm_entry: vcpu 0, rip 0x0
+             vmm-24609   [014] d..1. 87078.851629: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x0 info1 0x0000000000000784 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851639: kvm_page_fault: vcpu 0 rip 0x0 address 0x0000000000000000 error_code 0x784
+             vmm-24609   [014] d..1. 87078.851670: kvm_entry: vcpu 0, rip 0x0
+             vmm-24609   [014] d..1. 87078.851681: kvm_exit: vcpu 0 reason CR_ACCESS rip 0xd info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851684: kvm_cr: cr_write 0 = 0x60000011
+             vmm-24609   [014] d..1. 87078.851698: kvm_entry: vcpu 0, rip 0x10
+             vmm-24609   [014] d..1. 87078.851709: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x147 info1 0x0000000000000782 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851710: kvm_page_fault: vcpu 0 rip 0x147 address 0x0000000000001200 error_code 0x782
+             vmm-24609   [014] d..1. 87078.851724: kvm_entry: vcpu 0, rip 0x147
+             vmm-24609   [014] d..1. 87078.851734: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x2e info1 0x0000000000210040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851736: kvm_pio: pio_write at 0x21 size 1 count 1 val 0xff 
+             vmm-24609   [014] d..1. 87078.851755: kvm_entry: vcpu 0, rip 0x30
+             vmm-24609   [014] d..1. 87078.851765: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x30 info1 0x0000000000a10040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851766: kvm_pio: pio_write at 0xa1 size 1 count 1 val 0xff 
+             vmm-24609   [014] d..1. 87078.851780: kvm_entry: vcpu 0, rip 0x32
+             vmm-24609   [014] d..1. 87078.851789: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x37 info1 0x0000000000000782 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851790: kvm_page_fault: vcpu 0 rip 0x37 address 0x00000000fee00080 error_code 0x782
+             vmm-24609   [014] d..1. 87078.851805: kvm_entry: vcpu 0, rip 0x37
+             vmm-24609   [014] d..1. 87078.851816: kvm_exit: vcpu 0 reason APIC_WRITE rip 0x46 info1 0x00000000000000f0 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851825: kvm_apic: apic_write APIC_SPIV = 0x1ff
+             vmm-24609   [014] d..1. 87078.851848: kvm_entry: vcpu 0, rip 0x46
+             vmm-24609   [014] d..1. 87078.851858: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x4b info1 0x0000000000000782 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851860: kvm_page_fault: vcpu 0 rip 0x4b address 0x00000000fec00000 error_code 0x782
+             vmm-24609   [014] ..... 87078.851874: kvm_emulate_insn: 0:4b:a3 00 00 c0 fe (prot32)
+             vmm-24609   [014] ..... 87078.851879: kvm_mmio: mmio write len 4 gpa 0xfec00000 val 0x18
+             vmm-24609   [014] d..1. 87078.851893: kvm_entry: vcpu 0, rip 0x50
+             vmm-24609   [014] d..1. 87078.851905: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x55 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851910: kvm_emulate_insn: 0:55:a3 10 00 c0 fe (prot32)
+             vmm-24609   [014] ..... 87078.851911: kvm_mmio: mmio write len 4 gpa 0xfec00010 val 0x40
+             vmm-24609   [014] d..1. 87078.851928: kvm_entry: vcpu 0, rip 0x5a
+             vmm-24609   [014] d..1. 87078.851940: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x5f info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851944: kvm_emulate_insn: 0:5f:a3 00 00 c0 fe (prot32)
+             vmm-24609   [014] ..... 87078.851945: kvm_mmio: mmio write len 4 gpa 0xfec00000 val 0x19
+             vmm-24609   [014] d..1. 87078.851957: kvm_entry: vcpu 0, rip 0x64
+             vmm-24609   [014] d..1. 87078.851968: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x69 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.851972: kvm_emulate_insn: 0:69:a3 10 00 c0 fe (prot32)
+             vmm-24609   [014] ..... 87078.851973: kvm_mmio: mmio write len 4 gpa 0xfec00010 val 0x0
+             vmm-24609   [014] d..1. 87078.851989: kvm_entry: vcpu 0, rip 0x6e
+             vmm-24609   [014] d..1. 87078.852001: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x70 info1 0x0000000000e90040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.852022: kvm_pio: pio_write at 0xe9 size 1 count 1 val 0x11 
+             vmm-24609   [014] ..... 87078.852040: kvm_userspace_exit: reason KVM_EXIT_IO (2)
+             vmm-24609   [014] d..1. 87078.852090: kvm_entry: vcpu 0, rip 0x72
+             vmm-24609   [014] d..1. 87078.852104: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x73 info1 0x0000000000000782 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.852107: kvm_page_fault: vcpu 0 rip 0x73 address 0x0000000010000000 error_code 0x782
+             vmm-24609   [014] ..... 87078.852116: kvm_emulate_insn: 0:73:c7 05 00 00 00 10 01 00 00 00 (prot32)
+             vmm-24609   [014] ..... 87078.852118: kvm_mmio: mmio write len 4 gpa 0x10000000 val 0x1
+             vmm-24609   [014] ..... 87078.852135: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] ..... 87078.852248: kvm_set_irq: gsi 4 level 1 source 0
+             vmm-24609   [014] ...1. 87078.852260: kvm_apic_accept_irq: apicid 0 vec 64 (Fixed|edge)
+             vmm-24609   [014] ...1. 87078.852269: kvm_ioapic_set_irq: pin 4 dst 0 vec 64 (Fixed|physical|edge)
+             vmm-24609   [014] ..... 87078.852287: kvm_set_irq: gsi 4 level 0 source 0
+             vmm-24609   [014] ...1. 87078.852293: kvm_ioapic_set_irq: pin 4 dst 0 vec 64 (Fixed|physical|edge)
+             vmm-24609   [014] d..1. 87078.852334: kvm_entry: vcpu 0, rip 0x7d
+             vmm-24609   [014] d..1. 87078.852349: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x197 info1 0x0000000000000783 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.852351: kvm_page_fault: vcpu 0 rip 0x197 address 0x0000000000004000 error_code 0x783
+             vmm-24609   [014] d..1. 87078.852369: kvm_entry: vcpu 0, rip 0x197
+             vmm-24609   [014] d..1. 87078.852379: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x19d info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.852385: kvm_emulate_insn: 0:19d:a1 04 00 00 10 (prot32)
+             vmm-24609   [014] ..... 87078.852388: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000004 val 0x0
+             vmm-24609   [014] ..... 87078.852401: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] ..... 87078.852430: kvm_mmio: mmio read len 4 gpa 0x10000004 val 0x2
+             vmm-24609   [014] d..1. 87078.852440: kvm_entry: vcpu 0, rip 0x1a2
+             vmm-24609   [014] d..1. 87078.852454: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x1a7 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.852460: kvm_emulate_insn: 0:1a7:a3 14 00 00 10 (prot32)
+             vmm-24609   [014] ..... 87078.852462: kvm_mmio: mmio write len 4 gpa 0x10000014 val 0x1
+             vmm-24609   [014] ..... 87078.852477: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] d..1. 87078.852530: kvm_entry: vcpu 0, rip 0x1ac
+             vmm-24609   [014] d..1. 87078.852546: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x8f info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.852552: kvm_emulate_insn: 0:8f:c7 05 00 00 00 10 01 00 00 00 (prot32)
+             vmm-24609   [014] ..... 87078.852555: kvm_mmio: mmio write len 4 gpa 0x10000000 val 0x1
+             vmm-24609   [014] ..... 87078.852570: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] ..... 87078.852633: kvm_set_irq: gsi 4 level 1 source 0
+             vmm-24609   [014] ...1. 87078.852642: kvm_apic_accept_irq: apicid 0 vec 64 (Fixed|edge)
+             vmm-24609   [014] ...1. 87078.852649: kvm_ioapic_set_irq: pin 4 dst 0 vec 64 (Fixed|physical|edge)
+             vmm-24609   [014] ..... 87078.852666: kvm_set_irq: gsi 4 level 0 source 0
+             vmm-24609   [014] ...1. 87078.852671: kvm_ioapic_set_irq: pin 4 dst 0 vec 64 (Fixed|physical|edge)
+             vmm-24609   [014] d..1. 87078.852708: kvm_entry: vcpu 0, rip 0x99
+             vmm-24609   [014] d..1. 87078.852722: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x9b info1 0x0000000000e90040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.852724: kvm_pio: pio_write at 0xe9 size 1 count 1 val 0x12 
+             vmm-24609   [014] ..... 87078.852739: kvm_userspace_exit: reason KVM_EXIT_IO (2)
+             vmm-24609   [014] d..1. 87078.852773: kvm_entry: vcpu 0, rip 0x9d
+             vmm-24609   [014] d..1. 87078.852787: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x19d info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.852794: kvm_emulate_insn: 0:19d:a1 04 00 00 10 (prot32)
+             vmm-24609   [014] ..... 87078.852796: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000004 val 0x0
+             vmm-24609   [014] ..... 87078.852811: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] ..... 87078.852839: kvm_mmio: mmio read len 4 gpa 0x10000004 val 0x2
+             vmm-24609   [014] d..1. 87078.852848: kvm_entry: vcpu 0, rip 0x1a2
+             vmm-24609   [014] d..1. 87078.852862: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x1a7 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.852868: kvm_emulate_insn: 0:1a7:a3 14 00 00 10 (prot32)
+             vmm-24609   [014] ..... 87078.852870: kvm_mmio: mmio write len 4 gpa 0x10000014 val 0x1
+             vmm-24609   [014] ..... 87078.852885: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] d..1. 87078.852937: kvm_entry: vcpu 0, rip 0x1ac
+             vmm-24609   [014] d..1. 87078.852952: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0xb2 info1 0x0000000000e90040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.852954: kvm_pio: pio_write at 0xe9 size 1 count 1 val 0x13 
+             vmm-24609   [014] ..... 87078.852969: kvm_userspace_exit: reason KVM_EXIT_IO (2)
+             vmm-24609   [014] d..1. 87078.853003: kvm_entry: vcpu 0, rip 0xb4
+             vmm-24609   [014] d..1. 87078.853017: kvm_exit: vcpu 0 reason EXTERNAL_INTERRUPT rip 0xb4 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x800000ec error_code 0x00000000
+             vmm-24609   [014] d..1. 87078.853081: kvm_entry: vcpu 0, rip 0xb4
+             vmm-24609   [014] d..1. 87078.853093: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xb4 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.853099: kvm_emulate_insn: 0:b4:c7 05 00 00 00 10 04 00 00 00 (prot32)
+             vmm-24609   [014] ..... 87078.853102: kvm_mmio: mmio write len 4 gpa 0x10000000 val 0x4
+             vmm-24609   [014] ..... 87078.853116: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] ..... 87078.853185: kvm_msi_set_irq: dst 0 vec 65 (Fixed|physical|edge)
+             vmm-24609   [014] ..... 87078.853192: kvm_apic_accept_irq: apicid 0 vec 65 (Fixed|edge)
+             vmm-24609   [014] d..1. 87078.853230: kvm_entry: vcpu 0, rip 0xbe
+             vmm-24609   [014] d..1. 87078.853244: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x19d info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.853251: kvm_emulate_insn: 0:19d:a1 04 00 00 10 (prot32)
+             vmm-24609   [014] ..... 87078.853253: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000004 val 0x0
+             vmm-24609   [014] ..... 87078.853268: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] ..... 87078.853295: kvm_mmio: mmio read len 4 gpa 0x10000004 val 0x2
+             vmm-24609   [014] d..1. 87078.853304: kvm_entry: vcpu 0, rip 0x1a2
+             vmm-24609   [014] d..1. 87078.853318: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x1a7 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.853324: kvm_emulate_insn: 0:1a7:a3 14 00 00 10 (prot32)
+             vmm-24609   [014] ..... 87078.853326: kvm_mmio: mmio write len 4 gpa 0x10000014 val 0x1
+             vmm-24609   [014] ..... 87078.853341: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] d..1. 87078.853392: kvm_entry: vcpu 0, rip 0x1ac
+             vmm-24609   [014] d..1. 87078.853408: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xcf info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.853414: kvm_emulate_insn: 0:cf:c7 05 08 00 00 10 00 60 00 00 (prot32)
+             vmm-24609   [014] ..... 87078.853416: kvm_mmio: mmio write len 4 gpa 0x10000008 val 0x6000
+             vmm-24609   [014] ..... 87078.853431: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] d..1. 87078.853482: kvm_entry: vcpu 0, rip 0xd9
+             vmm-24609   [014] d..1. 87078.853496: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xd9 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.853503: kvm_emulate_insn: 0:d9:c7 05 00 00 00 10 02 00 00 00 (prot32)
+             vmm-24609   [014] ..... 87078.853505: kvm_mmio: mmio write len 4 gpa 0x10000000 val 0x2
+             vmm-24609   [014] ..... 87078.853520: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] ..... 87078.853616: kvm_set_irq: gsi 4 level 1 source 0
+             vmm-24609   [014] ...1. 87078.853625: kvm_apic_accept_irq: apicid 0 vec 64 (Fixed|edge)
+             vmm-24609   [014] ...1. 87078.853631: kvm_ioapic_set_irq: pin 4 dst 0 vec 64 (Fixed|physical|edge)
+             vmm-24609   [014] ..... 87078.853648: kvm_set_irq: gsi 4 level 0 source 0
+             vmm-24609   [014] ...1. 87078.853653: kvm_ioapic_set_irq: pin 4 dst 0 vec 64 (Fixed|physical|edge)
+             vmm-24609   [014] d..1. 87078.853690: kvm_entry: vcpu 0, rip 0xe3
+             vmm-24609   [014] d..1. 87078.853705: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x19d info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.853711: kvm_emulate_insn: 0:19d:a1 04 00 00 10 (prot32)
+             vmm-24609   [014] ..... 87078.853714: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000004 val 0x0
+             vmm-24609   [014] ..... 87078.853728: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] ..... 87078.853754: kvm_mmio: mmio read len 4 gpa 0x10000004 val 0x2
+             vmm-24609   [014] d..1. 87078.853764: kvm_entry: vcpu 0, rip 0x1a2
+             vmm-24609   [014] d..1. 87078.853777: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x1a7 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.853783: kvm_emulate_insn: 0:1a7:a3 14 00 00 10 (prot32)
+             vmm-24609   [014] ..... 87078.853785: kvm_mmio: mmio write len 4 gpa 0x10000014 val 0x1
+             vmm-24609   [014] ..... 87078.853800: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] d..1. 87078.853852: kvm_entry: vcpu 0, rip 0x1ac
+             vmm-24609   [014] d..1. 87078.853867: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xf4 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.853873: kvm_emulate_insn: 0:f4:c7 05 08 00 00 10 00 70 00 00 (prot32)
+             vmm-24609   [014] ..... 87078.853876: kvm_mmio: mmio write len 4 gpa 0x10000008 val 0x7000
+             vmm-24609   [014] ..... 87078.853891: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] d..1. 87078.853942: kvm_entry: vcpu 0, rip 0xfe
+             vmm-24609   [014] d..1. 87078.853956: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xfe info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.853962: kvm_emulate_insn: 0:fe:c7 05 00 00 00 10 03 00 00 00 (prot32)
+             vmm-24609   [014] ..... 87078.853965: kvm_mmio: mmio write len 4 gpa 0x10000000 val 0x3
+             vmm-24609   [014] ..... 87078.853979: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] ..... 87078.854085: kvm_set_irq: gsi 4 level 1 source 0
+             vmm-24609   [014] ...1. 87078.854093: kvm_apic_accept_irq: apicid 0 vec 64 (Fixed|edge)
+             vmm-24609   [014] ...1. 87078.854099: kvm_ioapic_set_irq: pin 4 dst 0 vec 64 (Fixed|physical|edge)
+             vmm-24609   [014] ..... 87078.854116: kvm_set_irq: gsi 4 level 0 source 0
+             vmm-24609   [014] ...1. 87078.854121: kvm_ioapic_set_irq: pin 4 dst 0 vec 64 (Fixed|physical|edge)
+             vmm-24609   [014] d..1. 87078.854157: kvm_entry: vcpu 0, rip 0x108
+             vmm-24609   [014] d..1. 87078.854172: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x19d info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.854178: kvm_emulate_insn: 0:19d:a1 04 00 00 10 (prot32)
+             vmm-24609   [014] ..... 87078.854180: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000004 val 0x0
+             vmm-24609   [014] ..... 87078.854195: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] ..... 87078.854221: kvm_mmio: mmio read len 4 gpa 0x10000004 val 0x2
+             vmm-24609   [014] d..1. 87078.854231: kvm_entry: vcpu 0, rip 0x1a2
+             vmm-24609   [014] d..1. 87078.854244: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x1a7 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.854250: kvm_emulate_insn: 0:1a7:a3 14 00 00 10 (prot32)
+             vmm-24609   [014] ..... 87078.854252: kvm_mmio: mmio write len 4 gpa 0x10000014 val 0x1
+             vmm-24609   [014] ..... 87078.854267: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-24609   [014] d..1. 87078.854318: kvm_entry: vcpu 0, rip 0x1ac
+             vmm-24609   [014] d..1. 87078.854334: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x129 info1 0x0000000000000781 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.854336: kvm_page_fault: vcpu 0 rip 0x129 address 0x0000000000006000 error_code 0x781
+             vmm-24609   [014] d..1. 87078.854354: kvm_entry: vcpu 0, rip 0x129
+             vmm-24609   [014] d..1. 87078.854364: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x129 info1 0x0000000000000781 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.854365: kvm_page_fault: vcpu 0 rip 0x129 address 0x0000000000007000 error_code 0x781
+             vmm-24609   [014] d..1. 87078.854378: kvm_entry: vcpu 0, rip 0x129
+             vmm-24609   [014] d..1. 87078.854388: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x12f info1 0x0000000000820040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-24609   [014] ..... 87078.854389: kvm_pio: pio_write at 0x82 size 1 count 1 val 0x0 
+             vmm-24609   [014] ..... 87078.854403: kvm_userspace_exit: reason KVM_EXIT_IO (2)

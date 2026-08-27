@@ -65,6 +65,14 @@ struct trace_event_raw_iommu_attach_device_to_domain {
     __u32 device_loc;
 };
 
+struct trace_event_raw_iommu_io_page_fault {
+    __u8 common[8];
+    __u32 device_loc;
+    __u32 driver_loc;
+    __u64 iova;
+    __s32 flags;
+};
+
 struct trace_event_raw_kvm_msi_set_irq {
     __u8 common[8];
     __u64 address;
@@ -126,6 +134,25 @@ struct active_msi_compose {
     __u32 irq;
 };
 
+struct active_domain_attach {
+    __u64 domain_address;
+    __u64 iommu_address;
+    __u32 iommu_id;
+};
+
+struct active_qi_submit {
+    __u32 count;
+    __u32 options;
+    __u32 iommu_id;
+    __u64 iommu_address;
+    __u64 descriptor_0;
+    __u64 descriptor_1;
+};
+
+struct active_pi_sync {
+    __u32 vcpu_id;
+};
+
 struct guest_path_state {
     __u32 capture_tx;
     __u32 capture_clean;
@@ -138,7 +165,16 @@ struct guest_dma_call {
 };
 
 struct guest_irq_state {
+    __u64 episode_id;
+    __u32 phase;
+    __u32 irq;
     char action[VTD_ACTION_NAME_LEN];
+};
+
+struct active_pi_wakeup {
+    __u32 active;
+    __u32 wakeup_count;
+    __u32 last_vcpu_id;
 };
 
 const volatile char target_interface[VTD_COMM_LEN];
@@ -203,6 +239,34 @@ struct {
     __uint(type, BPF_MAP_TYPE_HASH);
     __uint(max_entries, 64);
     __type(key, __u64);
+    __type(value, struct active_domain_attach);
+} active_domain_attaches SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 64);
+    __type(key, __u64);
+    __type(value, struct active_qi_submit);
+} active_qi_submits SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 64);
+    __type(key, __u64);
+    __type(value, struct active_pi_sync);
+} active_pi_syncs SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 256);
+    __type(key, __u32);
+    __type(value, __u32);
+} posted_vector_counts SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 64);
+    __type(key, __u64);
     __type(value, struct guest_path_state);
 } guest_paths SEC(".maps");
 
@@ -219,6 +283,48 @@ struct {
     __type(key, __u64);
     __type(value, struct guest_irq_state);
 } guest_active_irqs SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 256);
+    __type(key, __u32);
+    __type(value, struct guest_irq_state);
+} guest_active_cpu_irqs SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_HASH);
+    __uint(max_entries, 256);
+    __type(key, __u64);
+    __type(value, struct guest_irq_state);
+} guest_softirq_origins SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u64);
+} guest_episode_counter SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u32);
+} guest_phase SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, __u32);
+} guest_open_count SEC(".maps");
+
+struct {
+    __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+    __uint(max_entries, 1);
+    __type(key, __u32);
+    __type(value, struct active_pi_wakeup);
+} active_pi_wakeups SEC(".maps");
 
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
@@ -266,6 +372,8 @@ static __always_inline void count_drop(void)
         __sync_fetch_and_add(counter, 1);
 }
 
+static __always_inline __u32 current_guest_phase(void);
+
 static __always_inline struct vtd_event *reserve_event(unsigned int kind)
 {
     struct vtd_event *event;
@@ -282,8 +390,10 @@ static __always_inline struct vtd_event *reserve_event(unsigned int kind)
     pid_tgid = bpf_get_current_pid_tgid();
     event->time_ns = bpf_ktime_get_ns();
     event->event_info.kind = kind;
+    event->state.guest_phase = current_guest_phase();
     event->context.pid = pid_tgid >> 32;
     event->context.tid = (__u32)pid_tgid;
+    event->context.cpu = bpf_get_smp_processor_id();
     bpf_get_current_comm(event->context.comm, sizeof(event->context.comm));
     return event;
 }
@@ -323,8 +433,10 @@ static __always_inline struct vtd_event *reserve_unfiltered_event(unsigned int k
     pid_tgid = bpf_get_current_pid_tgid();
     event->time_ns = bpf_ktime_get_ns();
     event->event_info.kind = kind;
+    event->state.guest_phase = current_guest_phase();
     event->context.pid = pid_tgid >> 32;
     event->context.tid = (__u32)pid_tgid;
+    event->context.cpu = bpf_get_smp_processor_id();
     bpf_get_current_comm(event->context.comm, sizeof(event->context.comm));
     return event;
 }
@@ -332,6 +444,13 @@ static __always_inline struct vtd_event *reserve_unfiltered_event(unsigned int k
 static __always_inline struct vtd_event *reserve_runtime_event(unsigned int kind)
 {
     if (!allow_runtime_event(kind))
+        return 0;
+    return reserve_unfiltered_event(kind);
+}
+
+static __always_inline struct vtd_event *reserve_gated_event(unsigned int kind)
+{
+    if (!runtime_is_enabled())
         return 0;
     return reserve_unfiltered_event(kind);
 }
@@ -365,6 +484,50 @@ static __always_inline int guest_irq_name_matches(const char *name)
             return 0;
     }
     return 1;
+}
+
+static __always_inline __u32 current_guest_phase(void)
+{
+    __u32 key = 0;
+    __u32 *phase = bpf_map_lookup_elem(&guest_phase, &key);
+
+    return phase ? *phase : VTD_GUEST_PHASE_NONE;
+}
+
+static __always_inline void set_guest_phase(__u32 phase)
+{
+    __u32 key = 0;
+
+    bpf_map_update_elem(&guest_phase, &key, &phase, BPF_ANY);
+}
+
+static __always_inline __u64 next_guest_episode(void)
+{
+    __u32 key = 0;
+    __u64 *counter = bpf_map_lookup_elem(&guest_episode_counter, &key);
+
+    return counter ? __sync_fetch_and_add(counter, 1) + 1 : bpf_ktime_get_ns();
+}
+
+static __always_inline void copy_guest_episode(struct vtd_event *event, const struct guest_irq_state *state)
+{
+    event->state.episode_id = state->episode_id;
+    event->state.guest_phase = state->phase;
+    event->state.irq = state->irq;
+    __builtin_memcpy(event->state.action, state->action, sizeof(event->state.action));
+}
+
+static __always_inline int emit_guest_phase_event(__u32 kind, __u32 phase)
+{
+    struct vtd_event *event;
+
+    set_guest_phase(phase);
+    event = reserve_unfiltered_event(kind);
+    if (event) {
+        event->state.guest_phase = phase;
+        bpf_ringbuf_submit(event, 0);
+    }
+    return 0;
 }
 
 static __always_inline void copy_operation(struct vtd_event *event, const struct active_operation *operation)
@@ -559,6 +722,156 @@ int attach_device(struct trace_event_raw_iommu_attach_device_to_domain *context)
     return 0;
 }
 
+SEC("tracepoint/iommu/io_page_fault")
+int iommu_fault(struct trace_event_raw_iommu_io_page_fault *context)
+{
+    struct vtd_event *event = reserve_unfiltered_event(VTD_EVENT_IOMMU_FAULT);
+    __u32 device_offset;
+    __u32 driver_offset;
+
+    if (!event)
+        return 0;
+    device_offset = context->device_loc & 0xffff;
+    driver_offset = context->driver_loc & 0xffff;
+    bpf_probe_read_str(event->state.device, sizeof(event->state.device), (void *)context + device_offset);
+    bpf_probe_read_str(event->state.driver, sizeof(event->state.driver), (void *)context + driver_offset);
+    event->state.iova = context->iova;
+    event->event_info.flags = context->flags;
+    bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
+SEC("kprobe/domain_attach_iommu")
+int BPF_KPROBE(host_domain_attach_enter, struct dmar_domain *domain, struct intel_iommu *iommu)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_domain_attach active = {};
+    struct vtd_event *event;
+
+    if (!current_process_is_qemu())
+        return 0;
+    active.domain_address = (__u64)domain;
+    active.iommu_address = (__u64)iommu;
+    active.iommu_id = BPF_CORE_READ(iommu, seq_id);
+    bpf_map_update_elem(&active_domain_attaches, &key, &active, BPF_ANY);
+    event = reserve_event(VTD_EVENT_DOMAIN_ATTACH_ENTER);
+    if (!event)
+        return 0;
+    event->state.domain_address = active.domain_address;
+    event->state.iommu_address = active.iommu_address;
+    event->state.iommu_id = active.iommu_id;
+    bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
+SEC("kretprobe/domain_attach_iommu")
+int BPF_KRETPROBE(host_domain_attach_exit, long result)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_domain_attach *active = bpf_map_lookup_elem(&active_domain_attaches, &key);
+    struct vtd_event *event;
+
+    if (!active)
+        return 0;
+    event = reserve_event(VTD_EVENT_DOMAIN_ATTACH_EXIT);
+    if (event) {
+        event->event_info.result = result;
+        event->state.domain_address = active->domain_address;
+        event->state.iommu_address = active->iommu_address;
+        event->state.iommu_id = active->iommu_id;
+        bpf_ringbuf_submit(event, 0);
+    }
+    bpf_map_delete_elem(&active_domain_attaches, &key);
+    return 0;
+}
+
+SEC("kprobe/iommu_flush_iotlb_psi")
+int BPF_KPROBE(host_iotlb_invalidate, struct intel_iommu *iommu, struct dmar_domain *domain, unsigned long pfn, unsigned int pages, int ih, int map)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_operation *operation = bpf_map_lookup_elem(&active_operations, &key);
+    struct vtd_event *event;
+
+    if (!operation || (operation->operation != VTD_OP_VFIO_MAP && operation->operation != VTD_OP_VFIO_UNMAP))
+        return 0;
+    event = reserve_event(VTD_EVENT_IOTLB_INVALIDATE);
+    if (!event)
+        return 0;
+    copy_operation(event, operation);
+    event->event_info.correlated = 1;
+    event->state.iova = (__u64)pfn << 12;
+    event->state.size = (__u64)pages << 12;
+    event->state.domain_address = (__u64)domain;
+    event->state.iommu_address = (__u64)iommu;
+    event->state.iommu_id = BPF_CORE_READ(iommu, seq_id);
+    event->state.invalidation_hint = ih;
+    event->state.invalidation_map = map;
+    bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
+SEC("kprobe/qi_submit_sync")
+int BPF_KPROBE(host_qi_submit, struct intel_iommu *iommu, struct qi_desc *descriptors, unsigned int count, unsigned long options)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_operation *operation = bpf_map_lookup_elem(&active_operations, &key);
+    struct active_qi_submit active = {};
+    struct qi_desc descriptor = {};
+    struct vtd_event *event;
+
+    if (!operation || (operation->operation != VTD_OP_VFIO_MAP && operation->operation != VTD_OP_VFIO_UNMAP))
+        return 0;
+    active.count = count;
+    active.options = options;
+    active.iommu_address = (__u64)iommu;
+    active.iommu_id = BPF_CORE_READ(iommu, seq_id);
+    if (count && !bpf_probe_read_kernel(&descriptor, sizeof(descriptor), descriptors)) {
+        active.descriptor_0 = descriptor.qw0;
+        active.descriptor_1 = descriptor.qw1;
+    }
+    bpf_map_update_elem(&active_qi_submits, &key, &active, BPF_ANY);
+    event = reserve_event(VTD_EVENT_QI_SUBMIT);
+    if (!event)
+        return 0;
+    copy_operation(event, operation);
+    event->event_info.correlated = 1;
+    event->state.iommu_address = (__u64)iommu;
+    event->state.iommu_id = BPF_CORE_READ(iommu, seq_id);
+    event->state.qi_count = active.count;
+    event->state.qi_options = active.options;
+    event->state.qi_descriptor_0 = active.descriptor_0;
+    event->state.qi_descriptor_1 = active.descriptor_1;
+    bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
+SEC("kretprobe/qi_submit_sync")
+int BPF_KRETPROBE(host_qi_complete, long result)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_qi_submit *active = bpf_map_lookup_elem(&active_qi_submits, &key);
+    struct active_operation *operation = bpf_map_lookup_elem(&active_operations, &key);
+    struct vtd_event *event;
+
+    if (!active || !operation)
+        return 0;
+    event = reserve_event(VTD_EVENT_QI_COMPLETE);
+    if (event) {
+        copy_operation(event, operation);
+        event->event_info.correlated = 1;
+        event->event_info.result = result;
+        event->state.iommu_address = active->iommu_address;
+        event->state.iommu_id = active->iommu_id;
+        event->state.qi_count = active->count;
+        event->state.qi_options = active->options;
+        event->state.qi_descriptor_0 = active->descriptor_0;
+        event->state.qi_descriptor_1 = active->descriptor_1;
+        bpf_ringbuf_submit(event, 0);
+    }
+    bpf_map_delete_elem(&active_qi_submits, &key);
+    return 0;
+}
+
 SEC("kprobe/vfio_iommu_type1_map_dma")
 int BPF_KPROBE(vfio_map_enter, void *iommu, unsigned long argument)
 {
@@ -686,7 +999,7 @@ static __always_inline int begin_vfio_irq(unsigned int kind, int irq)
     if (!runtime_is_enabled())
         return 0;
     bpf_map_update_elem(&active_irq_chains, &key, &kind, BPF_ANY);
-    event = reserve_runtime_event(kind);
+    event = reserve_gated_event(kind);
     if (!event)
         return 0;
     event->state.irq = irq;
@@ -703,7 +1016,7 @@ static __always_inline int finish_vfio_irq(unsigned int kind, long result)
 
     if (!active || *active != kind - 1)
         return 0;
-    event = reserve_runtime_event(kind);
+    event = reserve_gated_event(kind);
     if (event) {
         event->event_info.result = result;
         event->event_info.correlated = 1;
@@ -748,7 +1061,7 @@ int BPF_KPROBE(host_irqfd_wakeup)
 
     if (!active)
         return 0;
-    event = reserve_runtime_event(VTD_EVENT_IRQFD_WAKEUP);
+    event = reserve_gated_event(VTD_EVENT_IRQFD_WAKEUP);
     if (!event)
         return 0;
     event->event_info.correlated = 1;
@@ -765,7 +1078,7 @@ int host_kvm_msi_route(struct trace_event_raw_kvm_msi_set_irq *context)
 
     if (!active)
         return 0;
-    event = reserve_runtime_event(VTD_EVENT_KVM_MSI_ROUTE);
+    event = reserve_gated_event(VTD_EVENT_KVM_MSI_ROUTE);
     if (!event)
         return 0;
     event->event_info.correlated = 1;
@@ -785,7 +1098,7 @@ int host_kvm_apic_accept(struct trace_event_raw_kvm_apic_accept_irq *context)
 
     if (!active)
         return 0;
-    event = reserve_runtime_event(VTD_EVENT_KVM_APIC_ACCEPT);
+    event = reserve_gated_event(VTD_EVENT_KVM_APIC_ACCEPT);
     if (!event)
         return 0;
     event->event_info.correlated = 1;
@@ -916,8 +1229,17 @@ int BPF_KRETPROBE(host_ir_msi_exit)
 SEC("tracepoint/kvm/kvm_pi_irte_update")
 int host_kvm_pi_irte_update(struct trace_event_raw_kvm_pi_irte_update *context)
 {
-    struct vtd_event *event = reserve_event(VTD_EVENT_KVM_PI_IRTE_UPDATE);
+    __u32 vector = context->gvec;
+    __u32 *route_count = bpf_map_lookup_elem(&posted_vector_counts, &vector);
+    struct vtd_event *event;
 
+    if (route_count) {
+        if (context->set)
+            __sync_fetch_and_add(route_count, 1);
+        else if (*route_count)
+            __sync_fetch_and_add(route_count, -1);
+    }
+    event = reserve_event(VTD_EVENT_KVM_PI_IRTE_UPDATE);
     if (!event)
         return 0;
     event->state.irq = context->host_irq;
@@ -930,6 +1252,106 @@ int host_kvm_pi_irte_update(struct trace_event_raw_kvm_pi_irte_update *context)
     return 0;
 }
 
+SEC("kprobe/vmx_sync_pir_to_irr")
+int BPF_KPROBE(host_pi_sync_enter, struct kvm_vcpu *vcpu)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_pi_sync active = {};
+
+    if (!runtime_is_enabled())
+        return 0;
+    active.vcpu_id = BPF_CORE_READ(vcpu, vcpu_id);
+    bpf_map_update_elem(&active_pi_syncs, &key, &active, BPF_ANY);
+    return 0;
+}
+
+SEC("kretprobe/vmx_sync_pir_to_irr")
+int BPF_KRETPROBE(host_pi_sync_exit, long result)
+{
+    __u64 key = bpf_get_current_pid_tgid();
+    struct active_pi_sync *active = bpf_map_lookup_elem(&active_pi_syncs, &key);
+    __s32 synchronized_vector = result;
+    __u32 vector = synchronized_vector;
+    __u32 *route_count;
+    struct vtd_event *event;
+
+    if (!active)
+        return 0;
+    route_count = synchronized_vector >= 0 && synchronized_vector < 256 ? bpf_map_lookup_elem(&posted_vector_counts, &vector) : 0;
+    if (route_count && *route_count) {
+        event = reserve_gated_event(VTD_EVENT_PI_SYNC_EXIT);
+        if (event) {
+            event->event_info.result = synchronized_vector;
+            event->state.vcpu_id = active->vcpu_id;
+            event->state.vector = synchronized_vector;
+            bpf_ringbuf_submit(event, 0);
+        }
+    }
+    bpf_map_delete_elem(&active_pi_syncs, &key);
+    return 0;
+}
+
+SEC("kprobe/pi_wakeup_handler")
+int BPF_KPROBE(host_pi_wakeup)
+{
+    __u32 key = 0;
+    struct active_pi_wakeup *active;
+
+    if (!runtime_is_enabled())
+        return 0;
+    active = bpf_map_lookup_elem(&active_pi_wakeups, &key);
+    if (active) {
+        active->active = 1;
+        active->wakeup_count = 0;
+        active->last_vcpu_id = 0;
+    }
+    return 0;
+}
+
+SEC("kprobe/kvm_vcpu_wake_up")
+int BPF_KPROBE(host_pi_vcpu_wake_up, struct kvm_vcpu *vcpu)
+{
+    __u32 key = 0;
+    struct active_pi_wakeup *active = bpf_map_lookup_elem(&active_pi_wakeups, &key);
+
+    if (active && active->active) {
+        active->last_vcpu_id = BPF_CORE_READ(vcpu, vcpu_id);
+        active->wakeup_count++;
+    }
+    return 0;
+}
+
+SEC("kretprobe/pi_wakeup_handler")
+int BPF_KRETPROBE(host_pi_wakeup_exit)
+{
+    __u32 key = 0;
+    struct active_pi_wakeup *active = bpf_map_lookup_elem(&active_pi_wakeups, &key);
+    struct vtd_event *event;
+
+    if (!active || !active->active)
+        return 0;
+    event = reserve_gated_event(VTD_EVENT_PI_WAKEUP);
+    if (event) {
+        event->state.wakeup_count = active->wakeup_count;
+        event->state.vcpu_id = active->last_vcpu_id;
+        bpf_ringbuf_submit(event, 0);
+    }
+    active->active = 0;
+    active->wakeup_count = 0;
+    active->last_vcpu_id = 0;
+    return 0;
+}
+
+SEC("kprobe/sysvec_kvm_posted_intr_wakeup_ipi")
+int BPF_KPROBE(host_pi_wakeup_vector)
+{
+    struct vtd_event *event = reserve_gated_event(VTD_EVENT_PI_WAKEUP_VECTOR);
+
+    if (event)
+        bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
 SEC("kprobe/ixgbe_run_loopback_test")
 int BPF_KPROBE(guest_run_entry)
 {
@@ -938,6 +1360,7 @@ int BPF_KPROBE(guest_run_entry)
     struct vtd_event *event;
 
     bpf_map_update_elem(&guest_loopback_active, &key, &enabled, BPF_ANY);
+    set_guest_phase(VTD_GUEST_PHASE_LOOPBACK_RUN);
     if (!claim_guest_once(0))
         return 0;
     event = reserve_unfiltered_event(VTD_EVENT_GUEST_RUN_ENTRY);
@@ -961,6 +1384,7 @@ int BPF_KRETPROBE(guest_run_exit, long result)
         return 0;
     event->event_info.result = result;
     bpf_ringbuf_submit(event, 0);
+    set_guest_phase(VTD_GUEST_PHASE_LOOPBACK_SETUP);
     return 0;
 }
 
@@ -1136,13 +1560,75 @@ static __always_inline int guest_netdev_matches(struct net_device *netdev)
     return guest_irq_name_matches(name);
 }
 
+SEC("kprobe/ixgbe_diag_test")
+int BPF_KPROBE(guest_diag_entry)
+{
+    return emit_guest_phase_event(VTD_EVENT_GUEST_DIAG_ENTRY, VTD_GUEST_PHASE_OFFLINE_DIAG);
+}
+
+SEC("kretprobe/ixgbe_diag_test")
+int BPF_KRETPROBE(guest_diag_exit)
+{
+    struct vtd_event *event = reserve_unfiltered_event(VTD_EVENT_GUEST_DIAG_EXIT);
+
+    if (event)
+        bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
+SEC("kprobe/ixgbe_intr_test")
+int BPF_KPROBE(guest_intr_test_entry)
+{
+    return emit_guest_phase_event(VTD_EVENT_GUEST_INTR_TEST_ENTRY, VTD_GUEST_PHASE_INTR_TEST);
+}
+
+SEC("kretprobe/ixgbe_intr_test")
+int BPF_KRETPROBE(guest_intr_test_exit, long result)
+{
+    struct vtd_event *event = reserve_unfiltered_event(VTD_EVENT_GUEST_INTR_TEST_EXIT);
+
+    if (event) {
+        event->event_info.result = result;
+        bpf_ringbuf_submit(event, 0);
+    }
+    set_guest_phase(VTD_GUEST_PHASE_OFFLINE_DIAG);
+    return 0;
+}
+
+SEC("kprobe/ixgbe_loopback_test")
+int BPF_KPROBE(guest_loopback_entry)
+{
+    return emit_guest_phase_event(VTD_EVENT_GUEST_LOOPBACK_ENTRY, VTD_GUEST_PHASE_LOOPBACK_SETUP);
+}
+
+SEC("kretprobe/ixgbe_loopback_test")
+int BPF_KRETPROBE(guest_loopback_exit, long result)
+{
+    struct vtd_event *event = reserve_unfiltered_event(VTD_EVENT_GUEST_LOOPBACK_EXIT);
+
+    if (event) {
+        event->event_info.result = result;
+        bpf_ringbuf_submit(event, 0);
+    }
+    set_guest_phase(VTD_GUEST_PHASE_OFFLINE_DIAG);
+    return 0;
+}
+
 SEC("kprobe/ixgbe_open")
 int BPF_KPROBE(guest_netdev_open, struct net_device *netdev)
 {
+    __u32 key = 0;
+    __u32 *open_count;
+    __u32 phase;
     struct vtd_event *event;
 
     if (!guest_netdev_matches(netdev))
         return 0;
+    open_count = bpf_map_lookup_elem(&guest_open_count, &key);
+    phase = open_count && *open_count ? VTD_GUEST_PHASE_INTERFACE_RESTORE : VTD_GUEST_PHASE_INTERFACE_START;
+    if (open_count)
+        __sync_fetch_and_add(open_count, 1);
+    set_guest_phase(phase);
     event = reserve_unfiltered_event(VTD_EVENT_GUEST_NETDEV_OPEN);
     if (event)
         bpf_ringbuf_submit(event, 0);
@@ -1156,6 +1642,7 @@ int BPF_KPROBE(guest_netdev_close, struct net_device *netdev)
 
     if (!guest_netdev_matches(netdev))
         return 0;
+    set_guest_phase(VTD_GUEST_PHASE_OFFLINE_DIAG);
     event = reserve_unfiltered_event(VTD_EVENT_GUEST_NETDEV_CLOSE);
     if (event)
         bpf_ringbuf_submit(event, 0);
@@ -1165,31 +1652,37 @@ int BPF_KPROBE(guest_netdev_close, struct net_device *netdev)
 SEC("tracepoint/irq/irq_handler_entry")
 int guest_irq_entry(struct trace_event_raw_irq_handler_entry *context)
 {
+    __u32 cpu = bpf_get_smp_processor_id();
+    __u64 key = ((__u64)cpu << 32) | (__u32)context->irq;
     struct guest_irq_state state = {};
     struct vtd_event *event;
-    __u64 key;
     __u32 offset;
 
     offset = context->__data_loc_name & 0xffff;
     bpf_probe_read_str(state.action, sizeof(state.action), (void *)context + offset);
     if (!guest_irq_name_matches(state.action))
         return 0;
-    key = ((__u64)bpf_get_smp_processor_id() << 32) | (__u32)context->irq;
-    event = reserve_unfiltered_event(VTD_EVENT_GUEST_IRQ_ENTRY);
-    if (!event)
-        return 0;
-    event->state.irq = context->irq;
-    __builtin_memcpy(event->state.action, state.action, sizeof(state.action));
-    bpf_ringbuf_submit(event, 0);
+    state.episode_id = next_guest_episode();
+    state.phase = current_guest_phase();
+    state.irq = context->irq;
     bpf_map_update_elem(&guest_active_irqs, &key, &state, BPF_ANY);
+    if (cpu < 256)
+        bpf_map_update_elem(&guest_active_cpu_irqs, &cpu, &state, BPF_ANY);
+    event = reserve_unfiltered_event(VTD_EVENT_GUEST_IRQ_ENTRY);
+    if (event) {
+        copy_guest_episode(event, &state);
+        bpf_ringbuf_submit(event, 0);
+    }
     return 0;
 }
 
 SEC("tracepoint/irq/irq_handler_exit")
 int guest_irq_exit(struct trace_event_raw_irq_handler_exit *context)
 {
-    __u64 key = ((__u64)bpf_get_smp_processor_id() << 32) | (__u32)context->irq;
+    __u32 cpu = bpf_get_smp_processor_id();
+    __u64 key = ((__u64)cpu << 32) | (__u32)context->irq;
     struct guest_irq_state *state = bpf_map_lookup_elem(&guest_active_irqs, &key);
+    struct guest_irq_state cleared = {};
     struct vtd_event *event;
 
     if (!state)
@@ -1197,10 +1690,100 @@ int guest_irq_exit(struct trace_event_raw_irq_handler_exit *context)
     event = reserve_unfiltered_event(VTD_EVENT_GUEST_IRQ_EXIT);
     if (event) {
         event->event_info.result = context->ret;
-        event->state.irq = context->irq;
-        __builtin_memcpy(event->state.action, state->action, sizeof(event->state.action));
+        copy_guest_episode(event, state);
         bpf_ringbuf_submit(event, 0);
     }
     bpf_map_delete_elem(&guest_active_irqs, &key);
+    if (cpu < 256)
+        bpf_map_update_elem(&guest_active_cpu_irqs, &cpu, &cleared, BPF_ANY);
+    return 0;
+}
+
+SEC("tracepoint/irq/softirq_raise")
+int guest_softirq_raise(struct trace_event_raw_softirq *context)
+{
+    __u32 cpu = bpf_get_smp_processor_id();
+    __u64 key = ((__u64)cpu << 32) | context->vec;
+    struct guest_irq_state *origin;
+    struct vtd_event *event;
+
+    if (cpu >= 256)
+        return 0;
+    origin = bpf_map_lookup_elem(&guest_active_cpu_irqs, &cpu);
+    if (!origin || !origin->episode_id)
+        return 0;
+    bpf_map_update_elem(&guest_softirq_origins, &key, origin, BPF_ANY);
+    event = reserve_unfiltered_event(VTD_EVENT_GUEST_SOFTIRQ_RAISE);
+    if (event) {
+        copy_guest_episode(event, origin);
+        event->state.softirq_vector = context->vec;
+        bpf_ringbuf_submit(event, 0);
+    }
+    return 0;
+}
+
+SEC("tracepoint/irq/softirq_entry")
+int guest_softirq_entry(struct trace_event_raw_softirq *context)
+{
+    __u32 cpu = bpf_get_smp_processor_id();
+    __u64 key = ((__u64)cpu << 32) | context->vec;
+    struct guest_irq_state *origin = bpf_map_lookup_elem(&guest_softirq_origins, &key);
+    struct vtd_event *event;
+
+    if (!origin)
+        return 0;
+    event = reserve_unfiltered_event(VTD_EVENT_GUEST_SOFTIRQ_ENTRY);
+    if (event) {
+        copy_guest_episode(event, origin);
+        event->state.softirq_vector = context->vec;
+        bpf_ringbuf_submit(event, 0);
+    }
+    return 0;
+}
+
+SEC("tracepoint/napi/napi_poll")
+int guest_napi_poll(struct trace_event_raw_napi_poll *context)
+{
+    __u32 cpu = bpf_get_smp_processor_id();
+    __u64 key = ((__u64)cpu << 32) | 3;
+    __u32 offset = context->__data_loc_dev_name & 0xffff;
+    struct guest_irq_state *origin;
+    struct vtd_event *event;
+    char device[VTD_DEVICE_NAME_LEN] = {};
+
+    bpf_probe_read_str(device, sizeof(device), (void *)context + offset);
+    if (!guest_irq_name_matches(device))
+        return 0;
+    origin = bpf_map_lookup_elem(&guest_softirq_origins, &key);
+    event = reserve_unfiltered_event(VTD_EVENT_GUEST_NAPI_POLL);
+    if (!event)
+        return 0;
+    if (origin)
+        copy_guest_episode(event, origin);
+    event->state.softirq_vector = 3;
+    event->state.napi_work = context->work;
+    event->state.napi_budget = context->budget;
+    __builtin_memcpy(event->state.device, device, sizeof(event->state.device));
+    bpf_ringbuf_submit(event, 0);
+    return 0;
+}
+
+SEC("tracepoint/irq/softirq_exit")
+int guest_softirq_exit(struct trace_event_raw_softirq *context)
+{
+    __u32 cpu = bpf_get_smp_processor_id();
+    __u64 key = ((__u64)cpu << 32) | context->vec;
+    struct guest_irq_state *origin = bpf_map_lookup_elem(&guest_softirq_origins, &key);
+    struct vtd_event *event;
+
+    if (!origin)
+        return 0;
+    event = reserve_unfiltered_event(VTD_EVENT_GUEST_SOFTIRQ_EXIT);
+    if (event) {
+        copy_guest_episode(event, origin);
+        event->state.softirq_vector = context->vec;
+        bpf_ringbuf_submit(event, 0);
+    }
+    bpf_map_delete_elem(&guest_softirq_origins, &key);
     return 0;
 }

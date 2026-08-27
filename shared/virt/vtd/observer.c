@@ -14,8 +14,8 @@
 #include "vtd.skel.h"
 #include "vtd_event.h"
 
-#define VTD_SCHEMA_VERSION 6
-#define MAX_LINKS 56
+#define VTD_SCHEMA_VERSION 8
+#define MAX_LINKS 96
 
 enum capture_mode {
     CAPTURE_HOST,
@@ -42,6 +42,18 @@ struct capture_features {
     bool ir_msi_entry;
     bool ir_msi_exit;
     bool kvm_pi_irte_update;
+    bool iommu_fault;
+    bool domain_attach_enter;
+    bool domain_attach_exit;
+    bool iotlb_invalidate;
+    bool qi_submit;
+    bool qi_complete;
+    bool pi_sync_enter;
+    bool pi_sync_exit;
+    bool pi_wakeup;
+    bool pi_wakeup_exit;
+    bool pi_vcpu_wake_up;
+    bool pi_wakeup_vector;
     bool guest_run_entry;
     bool guest_run_exit;
     bool guest_xmit_entry;
@@ -57,6 +69,16 @@ struct capture_features {
     bool guest_irq_exit;
     bool guest_netdev_open;
     bool guest_netdev_close;
+    bool guest_diag_entry;
+    bool guest_diag_exit;
+    bool guest_intr_test_entry;
+    bool guest_intr_test_exit;
+    bool guest_loopback_entry;
+    bool guest_loopback_exit;
+    bool guest_softirq_raise;
+    bool guest_softirq_entry;
+    bool guest_napi_poll;
+    bool guest_softirq_exit;
 };
 
 static volatile sig_atomic_t stop_requested;
@@ -86,6 +108,15 @@ static uint64_t monotonic_time_ns(void)
     return (uint64_t)now.tv_sec * 1000000000ULL + (uint64_t)now.tv_nsec;
 }
 
+static uint64_t realtime_time_ns(void)
+{
+    struct timespec now = {};
+
+    if (clock_gettime(CLOCK_REALTIME, &now))
+        return 0;
+    return (uint64_t)now.tv_sec * 1000000000ULL + (uint64_t)now.tv_nsec;
+}
+
 static const char *operation_name(unsigned int operation)
 {
     if (operation == VTD_OP_VFIO_MAP)
@@ -106,6 +137,39 @@ static const char *sample_status_name(unsigned int status)
     if (status == VTD_SAMPLE_INVALID_ARGUMENT)
         return "invalid_argument";
     return "complete";
+}
+
+static const char *guest_phase_name(unsigned int phase)
+{
+    switch (phase) {
+    case VTD_GUEST_PHASE_INTERFACE_START:
+        return "interface_start";
+    case VTD_GUEST_PHASE_OFFLINE_DIAG:
+        return "offline_diag";
+    case VTD_GUEST_PHASE_INTR_TEST:
+        return "intr_test";
+    case VTD_GUEST_PHASE_LOOPBACK_SETUP:
+        return "loopback_setup";
+    case VTD_GUEST_PHASE_LOOPBACK_RUN:
+        return "loopback_run";
+    case VTD_GUEST_PHASE_INTERFACE_RESTORE:
+        return "interface_restore";
+    default:
+        return "none";
+    }
+}
+
+static const char *softirq_name(unsigned int vector)
+{
+    static const char *const names[] = {"HI", "TIMER", "NET_TX", "NET_RX", "BLOCK", "IRQ_POLL", "TASKLET", "SCHED", "HRTIMER", "RCU"};
+
+    return vector < sizeof(names) / sizeof(names[0]) ? names[vector] : "UNKNOWN";
+}
+
+static bool is_guest_execution_event(unsigned int kind)
+{
+    return (kind >= VTD_EVENT_GUEST_RUN_ENTRY && kind <= VTD_EVENT_GUEST_NETDEV_CLOSE) ||
+        (kind >= VTD_EVENT_GUEST_DIAG_ENTRY && kind <= VTD_EVENT_GUEST_SOFTIRQ_EXIT);
 }
 
 static const char *event_name(const struct vtd_event *event)
@@ -195,6 +259,44 @@ static const char *event_name(const struct vtd_event *event)
         return "guest_ixgbe_open";
     case VTD_EVENT_GUEST_NETDEV_CLOSE:
         return "guest_ixgbe_close";
+    case VTD_EVENT_GUEST_DIAG_ENTRY:
+        return "guest_ixgbe_diag_entry";
+    case VTD_EVENT_GUEST_DIAG_EXIT:
+        return "guest_ixgbe_diag_exit";
+    case VTD_EVENT_GUEST_INTR_TEST_ENTRY:
+        return "guest_ixgbe_intr_test_entry";
+    case VTD_EVENT_GUEST_INTR_TEST_EXIT:
+        return "guest_ixgbe_intr_test_exit";
+    case VTD_EVENT_GUEST_LOOPBACK_ENTRY:
+        return "guest_ixgbe_loopback_test_entry";
+    case VTD_EVENT_GUEST_LOOPBACK_EXIT:
+        return "guest_ixgbe_loopback_test_exit";
+    case VTD_EVENT_GUEST_SOFTIRQ_RAISE:
+        return "guest_softirq_raise";
+    case VTD_EVENT_GUEST_SOFTIRQ_ENTRY:
+        return "guest_softirq_entry";
+    case VTD_EVENT_GUEST_NAPI_POLL:
+        return "guest_napi_poll";
+    case VTD_EVENT_GUEST_SOFTIRQ_EXIT:
+        return "guest_softirq_exit";
+    case VTD_EVENT_IOMMU_FAULT:
+        return "iommu_page_fault";
+    case VTD_EVENT_DOMAIN_ATTACH_ENTER:
+        return "iommu_domain_attach_enter";
+    case VTD_EVENT_DOMAIN_ATTACH_EXIT:
+        return "iommu_domain_attach_exit";
+    case VTD_EVENT_IOTLB_INVALIDATE:
+        return "iommu_iotlb_invalidate";
+    case VTD_EVENT_QI_SUBMIT:
+        return "iommu_qi_submit";
+    case VTD_EVENT_QI_COMPLETE:
+        return "iommu_qi_complete";
+    case VTD_EVENT_PI_SYNC_EXIT:
+        return "kvm_pi_sync_pir_to_irr_exit";
+    case VTD_EVENT_PI_WAKEUP:
+        return "kvm_pi_wakeup";
+    case VTD_EVENT_PI_WAKEUP_VECTOR:
+        return "kvm_pi_wakeup_vector";
     default:
         return "unknown";
     }
@@ -275,6 +377,44 @@ static const char *event_hook(const struct vtd_event *event)
         return "kprobe:ixgbe_open";
     case VTD_EVENT_GUEST_NETDEV_CLOSE:
         return "kprobe:ixgbe_close";
+    case VTD_EVENT_GUEST_DIAG_ENTRY:
+        return "kprobe:ixgbe_diag_test";
+    case VTD_EVENT_GUEST_DIAG_EXIT:
+        return "kretprobe:ixgbe_diag_test";
+    case VTD_EVENT_GUEST_INTR_TEST_ENTRY:
+        return "kprobe:ixgbe_intr_test";
+    case VTD_EVENT_GUEST_INTR_TEST_EXIT:
+        return "kretprobe:ixgbe_intr_test";
+    case VTD_EVENT_GUEST_LOOPBACK_ENTRY:
+        return "kprobe:ixgbe_loopback_test";
+    case VTD_EVENT_GUEST_LOOPBACK_EXIT:
+        return "kretprobe:ixgbe_loopback_test";
+    case VTD_EVENT_GUEST_SOFTIRQ_RAISE:
+        return "irq:softirq_raise";
+    case VTD_EVENT_GUEST_SOFTIRQ_ENTRY:
+        return "irq:softirq_entry";
+    case VTD_EVENT_GUEST_NAPI_POLL:
+        return "napi:napi_poll";
+    case VTD_EVENT_GUEST_SOFTIRQ_EXIT:
+        return "irq:softirq_exit";
+    case VTD_EVENT_IOMMU_FAULT:
+        return "iommu:io_page_fault";
+    case VTD_EVENT_DOMAIN_ATTACH_ENTER:
+        return "kprobe:domain_attach_iommu";
+    case VTD_EVENT_DOMAIN_ATTACH_EXIT:
+        return "kretprobe:domain_attach_iommu";
+    case VTD_EVENT_IOTLB_INVALIDATE:
+        return "kprobe:iommu_flush_iotlb_psi";
+    case VTD_EVENT_QI_SUBMIT:
+        return "kprobe:qi_submit_sync";
+    case VTD_EVENT_QI_COMPLETE:
+        return "kretprobe:qi_submit_sync";
+    case VTD_EVENT_PI_SYNC_EXIT:
+        return "kretprobe:vmx_sync_pir_to_irr";
+    case VTD_EVENT_PI_WAKEUP:
+        return "kretprobe:pi_wakeup_handler";
+    case VTD_EVENT_PI_WAKEUP_VECTOR:
+        return "kprobe:sysvec_kvm_posted_intr_wakeup_ipi";
     default:
         return event->event_info.kind == VTD_EVENT_IOCTL_EXIT ? "syscalls:sys_exit_ioctl" : "syscalls:sys_enter_ioctl";
     }
@@ -295,9 +435,10 @@ static void begin_record(struct json_writer *writer, const char *kind, const cha
 static int emit_meta(const struct capture_features *features)
 {
     struct json_writer writer;
+    uint64_t monotonic_ns = monotonic_time_ns();
 
     json_writer_init(&writer, stdout);
-    begin_record(&writer, "capture_meta", "observer", monotonic_time_ns());
+    begin_record(&writer, "capture_meta", "observer", monotonic_ns);
     json_object_begin_field(&writer, "event_info");
     json_string(&writer, "observer", current_mode == CAPTURE_HOST ? "host-ebpf" : "guest-ebpf");
     json_string(&writer, "filter", current_mode == CAPTURE_HOST ? "qemu-control + gated-vfio-irq-chain" : guest_interface);
@@ -305,9 +446,14 @@ static int emit_meta(const struct capture_features *features)
     json_object_begin_field(&writer, "context");
     json_null(&writer, "pid");
     json_null(&writer, "tid");
+    json_null(&writer, "cpu");
     json_null(&writer, "comm");
     json_object_end(&writer);
     json_object_begin_field(&writer, "state");
+    json_object_begin_field(&writer, "clock_anchor");
+    json_u64(&writer, "monotonic_ns", monotonic_ns);
+    json_u64(&writer, "realtime_ns", realtime_time_ns());
+    json_object_end(&writer);
     json_object_begin_field(&writer, "hooks");
     json_bool(&writer, "syscall_ioctl", current_mode == CAPTURE_HOST);
     json_bool(&writer, "iommu_map", current_mode == CAPTURE_HOST);
@@ -332,6 +478,18 @@ static int emit_meta(const struct capture_features *features)
     json_bool(&writer, "ir_msi_entry", features->ir_msi_entry);
     json_bool(&writer, "ir_msi_exit", features->ir_msi_exit);
     json_bool(&writer, "kvm_pi_irte_update", features->kvm_pi_irte_update);
+    json_bool(&writer, "iommu_fault", features->iommu_fault);
+    json_bool(&writer, "domain_attach_enter", features->domain_attach_enter);
+    json_bool(&writer, "domain_attach_exit", features->domain_attach_exit);
+    json_bool(&writer, "iotlb_invalidate", features->iotlb_invalidate);
+    json_bool(&writer, "qi_submit", features->qi_submit);
+    json_bool(&writer, "qi_complete", features->qi_complete);
+    json_bool(&writer, "pi_sync_enter", features->pi_sync_enter);
+    json_bool(&writer, "pi_sync_exit", features->pi_sync_exit);
+    json_bool(&writer, "pi_wakeup", features->pi_wakeup);
+    json_bool(&writer, "pi_wakeup_exit", features->pi_wakeup_exit);
+    json_bool(&writer, "pi_vcpu_wake_up", features->pi_vcpu_wake_up);
+    json_bool(&writer, "pi_wakeup_vector", features->pi_wakeup_vector);
     json_bool(&writer, "guest_run_entry", features->guest_run_entry);
     json_bool(&writer, "guest_run_exit", features->guest_run_exit);
     json_bool(&writer, "guest_xmit_entry", features->guest_xmit_entry);
@@ -347,12 +505,53 @@ static int emit_meta(const struct capture_features *features)
     json_bool(&writer, "guest_irq_exit", features->guest_irq_exit);
     json_bool(&writer, "guest_netdev_open", features->guest_netdev_open);
     json_bool(&writer, "guest_netdev_close", features->guest_netdev_close);
+    json_bool(&writer, "guest_diag_entry", features->guest_diag_entry);
+    json_bool(&writer, "guest_diag_exit", features->guest_diag_exit);
+    json_bool(&writer, "guest_intr_test_entry", features->guest_intr_test_entry);
+    json_bool(&writer, "guest_intr_test_exit", features->guest_intr_test_exit);
+    json_bool(&writer, "guest_loopback_entry", features->guest_loopback_entry);
+    json_bool(&writer, "guest_loopback_exit", features->guest_loopback_exit);
+    json_bool(&writer, "guest_softirq_raise", features->guest_softirq_raise);
+    json_bool(&writer, "guest_softirq_entry", features->guest_softirq_entry);
+    json_bool(&writer, "guest_napi_poll", features->guest_napi_poll);
+    json_bool(&writer, "guest_softirq_exit", features->guest_softirq_exit);
     json_object_end(&writer);
     json_object_end(&writer);
     json_object_end(&writer);
     json_newline(&writer);
     fflush(stdout);
     return json_writer_ok(&writer) ? 0 : -EIO;
+}
+
+static int emit_gate_marker(unsigned int enabled)
+{
+    struct json_writer writer;
+    uint64_t monotonic_ns = monotonic_time_ns();
+
+    json_writer_init(&writer, stdout);
+    begin_record(&writer, enabled ? "workload_begin" : "workload_end", "observer", monotonic_ns);
+    json_object_begin_field(&writer, "event_info");
+    json_string(&writer, "boundary", enabled ? "begin" : "end");
+    json_object_end(&writer);
+    json_object_begin_field(&writer, "context");
+    json_null(&writer, "pid");
+    json_null(&writer, "tid");
+    json_null(&writer, "cpu");
+    json_null(&writer, "comm");
+    json_object_end(&writer);
+    json_object_begin_field(&writer, "state");
+    json_object_begin_field(&writer, "clock_anchor");
+    json_u64(&writer, "monotonic_ns", monotonic_ns);
+    json_u64(&writer, "realtime_ns", realtime_time_ns());
+    json_object_end(&writer);
+    json_object_end(&writer);
+    json_object_end(&writer);
+    json_newline(&writer);
+    fflush(stdout);
+    if (!json_writer_ok(&writer))
+        return -EIO;
+    event_count++;
+    return 0;
 }
 
 static int emit_record(void *ctx, void *data, size_t size)
@@ -385,6 +584,7 @@ static int emit_record(void *ctx, void *data, size_t size)
     json_object_begin_field(&writer, "context");
     json_u32(&writer, "pid", event->context.pid);
     json_u32(&writer, "tid", event->context.tid);
+    json_u32(&writer, "cpu", event->context.cpu);
     json_string_n(&writer, "comm", event->context.comm, sizeof(event->context.comm));
     json_object_end(&writer);
 
@@ -413,6 +613,7 @@ static int emit_record(void *ctx, void *data, size_t size)
     }
     if ((event->event_info.kind >= VTD_EVENT_VFIO_MSI_ENTRY && event->event_info.kind <= VTD_EVENT_KVM_APIC_ACCEPT) ||
         (event->event_info.kind >= VTD_EVENT_IRTE_ALLOC && event->event_info.kind <= VTD_EVENT_KVM_PI_IRTE_UPDATE) ||
+        (event->event_info.kind >= VTD_EVENT_PI_SYNC_EXIT && event->event_info.kind <= VTD_EVENT_PI_WAKEUP_VECTOR) ||
         event->event_info.operation == VTD_OP_VFIO_IRQ_SET || event->event_info.kind == VTD_EVENT_GUEST_IRQ_ENTRY || event->event_info.kind == VTD_EVENT_GUEST_IRQ_EXIT) {
         json_object_begin_field(&writer, "interrupt");
         json_u32(&writer, "irq", event->state.irq);
@@ -429,6 +630,31 @@ static int emit_record(void *ctx, void *data, size_t size)
         json_u32(&writer, "vcpu_id", event->state.vcpu_id);
         json_bool(&writer, "posted", event->state.posted);
         json_hex(&writer, "pi_desc_address", event->state.pi_desc_address);
+        if (event->event_info.kind == VTD_EVENT_PI_WAKEUP)
+            json_u32(&writer, "wakeup_count", event->state.wakeup_count);
+        json_object_end(&writer);
+    }
+    if (event->event_info.kind == VTD_EVENT_IOMMU_FAULT) {
+        json_object_begin_field(&writer, "fault");
+        json_string_n(&writer, "device", event->state.device, sizeof(event->state.device));
+        json_string_n(&writer, "driver", event->state.driver, sizeof(event->state.driver));
+        json_hex(&writer, "iova", event->state.iova);
+        json_u32(&writer, "flags", event->event_info.flags);
+        json_object_end(&writer);
+    }
+    if (event->event_info.kind >= VTD_EVENT_DOMAIN_ATTACH_ENTER && event->event_info.kind <= VTD_EVENT_QI_COMPLETE) {
+        json_object_begin_field(&writer, "iommu");
+        json_hex(&writer, "domain", event->state.domain_address);
+        json_hex(&writer, "unit", event->state.iommu_address);
+        json_u32(&writer, "unit_id", event->state.iommu_id);
+        json_hex(&writer, "iova", event->state.iova);
+        json_hex(&writer, "size", event->state.size);
+        json_bool(&writer, "invalidation_hint", event->state.invalidation_hint);
+        json_bool(&writer, "mapping_invalidation", event->state.invalidation_map);
+        json_u32(&writer, "qi_count", event->state.qi_count);
+        json_u32(&writer, "qi_options", event->state.qi_options);
+        json_hex(&writer, "qi_descriptor_0", event->state.qi_descriptor_0);
+        json_hex(&writer, "qi_descriptor_1", event->state.qi_descriptor_1);
         json_object_end(&writer);
     }
     if (event->event_info.kind == VTD_EVENT_KVM_MMIO) {
@@ -437,6 +663,26 @@ static int emit_record(void *ctx, void *data, size_t size)
         json_hex(&writer, "value", event->state.mmio_value);
         json_u32(&writer, "length", event->state.mmio_length);
         json_u32(&writer, "type", event->state.mmio_type);
+        json_object_end(&writer);
+    }
+    if (is_guest_execution_event(event->event_info.kind)) {
+        json_object_begin_field(&writer, "execution");
+        json_u64(&writer, "episode_id", event->state.episode_id);
+        json_string(&writer, "phase", guest_phase_name(event->state.guest_phase));
+        if (event->event_info.kind == VTD_EVENT_GUEST_IRQ_ENTRY || event->event_info.kind == VTD_EVENT_GUEST_IRQ_EXIT ||
+            (event->event_info.kind >= VTD_EVENT_GUEST_SOFTIRQ_RAISE && event->event_info.kind <= VTD_EVENT_GUEST_SOFTIRQ_EXIT)) {
+            json_u32(&writer, "irq", event->state.irq);
+            json_string_n(&writer, "action", event->state.action, sizeof(event->state.action));
+        }
+        if (event->event_info.kind >= VTD_EVENT_GUEST_SOFTIRQ_RAISE && event->event_info.kind <= VTD_EVENT_GUEST_SOFTIRQ_EXIT) {
+            json_u32(&writer, "softirq_vector", event->state.softirq_vector);
+            json_string(&writer, "softirq", softirq_name(event->state.softirq_vector));
+        }
+        if (event->event_info.kind == VTD_EVENT_GUEST_NAPI_POLL) {
+            json_u32(&writer, "napi_work", event->state.napi_work);
+            json_u32(&writer, "napi_budget", event->state.napi_budget);
+            json_string_n(&writer, "device", event->state.device, sizeof(event->state.device));
+        }
         json_object_end(&writer);
     }
     json_object_end(&writer);
@@ -461,6 +707,7 @@ static int emit_summary(uint64_t dropped)
     json_object_begin_field(&writer, "context");
     json_null(&writer, "pid");
     json_null(&writer, "tid");
+    json_null(&writer, "cpu");
     json_null(&writer, "comm");
     json_object_end(&writer);
     json_object_begin_field(&writer, "state");
@@ -555,11 +802,29 @@ static int attach_host_programs(struct vtd_bpf *skeleton, struct bpf_link **link
     links[(*link_count)++] = attach_optional(skeleton->progs.host_ir_msi_entry, false, "intel_ir_compose_msi_msg", &features->ir_msi_entry);
     links[(*link_count)++] = attach_optional(skeleton->progs.host_ir_msi_exit, true, "intel_ir_compose_msi_msg", &features->ir_msi_exit);
     links[(*link_count)++] = attach_optional_program(skeleton->progs.host_kvm_pi_irte_update, &features->kvm_pi_irte_update);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.iommu_fault, &features->iommu_fault);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_domain_attach_enter, false, "domain_attach_iommu", &features->domain_attach_enter);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_domain_attach_exit, true, "domain_attach_iommu", &features->domain_attach_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_iotlb_invalidate, false, "iommu_flush_iotlb_psi", &features->iotlb_invalidate);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_qi_submit, false, "qi_submit_sync", &features->qi_submit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_qi_complete, true, "qi_submit_sync", &features->qi_complete);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_pi_sync_enter, false, "vmx_sync_pir_to_irr", &features->pi_sync_enter);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_pi_sync_exit, true, "vmx_sync_pir_to_irr", &features->pi_sync_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_pi_wakeup, false, "pi_wakeup_handler", &features->pi_wakeup);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_pi_vcpu_wake_up, false, "kvm_vcpu_wake_up", &features->pi_vcpu_wake_up);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_pi_wakeup_exit, true, "pi_wakeup_handler", &features->pi_wakeup_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.host_pi_wakeup_vector, false, "sysvec_kvm_posted_intr_wakeup_ipi", &features->pi_wakeup_vector);
     return 0;
 }
 
 static int attach_guest_programs(struct vtd_bpf *skeleton, struct bpf_link **links, unsigned int *link_count, struct capture_features *features)
 {
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_diag_entry, false, "ixgbe_diag_test", &features->guest_diag_entry);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_diag_exit, true, "ixgbe_diag_test", &features->guest_diag_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_intr_test_entry, false, "ixgbe_intr_test", &features->guest_intr_test_entry);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_intr_test_exit, true, "ixgbe_intr_test", &features->guest_intr_test_exit);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_loopback_entry, false, "ixgbe_loopback_test", &features->guest_loopback_entry);
+    links[(*link_count)++] = attach_optional(skeleton->progs.guest_loopback_exit, true, "ixgbe_loopback_test", &features->guest_loopback_exit);
     links[(*link_count)++] = attach_optional(skeleton->progs.guest_run_entry, false, "ixgbe_run_loopback_test", &features->guest_run_entry);
     links[(*link_count)++] = attach_optional(skeleton->progs.guest_run_exit, true, "ixgbe_run_loopback_test", &features->guest_run_exit);
     links[(*link_count)++] = attach_optional(skeleton->progs.guest_xmit_entry, false, "ixgbe_xmit_frame_ring", &features->guest_xmit_entry);
@@ -573,9 +838,13 @@ static int attach_guest_programs(struct vtd_bpf *skeleton, struct bpf_link **lin
     links[(*link_count)++] = attach_optional(skeleton->progs.guest_dma_sync_device, false, "dma_sync_single_for_device", &features->guest_dma_sync_device);
     links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_irq_entry, &features->guest_irq_entry);
     links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_irq_exit, &features->guest_irq_exit);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_softirq_raise, &features->guest_softirq_raise);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_softirq_entry, &features->guest_softirq_entry);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_napi_poll, &features->guest_napi_poll);
+    links[(*link_count)++] = attach_optional_program(skeleton->progs.guest_softirq_exit, &features->guest_softirq_exit);
     links[(*link_count)++] = attach_optional(skeleton->progs.guest_netdev_open, false, "ixgbe_open", &features->guest_netdev_open);
     links[(*link_count)++] = attach_optional(skeleton->progs.guest_netdev_close, false, "ixgbe_close", &features->guest_netdev_close);
-    if (!features->guest_run_entry || !features->guest_run_exit || !features->guest_xmit_entry || !features->guest_xmit_exit || !features->guest_dma_map_entry || !features->guest_dma_map_exit || !features->guest_clean_entry || !features->guest_clean_exit || !features->guest_irq_entry || !features->guest_irq_exit)
+    if (!features->guest_run_entry || !features->guest_run_exit || !features->guest_xmit_entry || !features->guest_xmit_exit || !features->guest_dma_map_entry || !features->guest_dma_map_exit || !features->guest_clean_entry || !features->guest_clean_exit || !features->guest_irq_entry || !features->guest_irq_exit || !features->guest_diag_entry || !features->guest_diag_exit || !features->guest_intr_test_entry || !features->guest_intr_test_exit || !features->guest_loopback_entry || !features->guest_loopback_exit || !features->guest_softirq_raise || !features->guest_softirq_entry || !features->guest_napi_poll || !features->guest_softirq_exit)
         return -ENOENT;
     return 0;
 }
@@ -637,10 +906,12 @@ int main(int argc, char **argv)
         poll_result = ring_buffer__poll(ring_buffer, 250);
         if (poll_result < 0 && poll_result != -EINTR)
             break;
-        if (current_mode == CAPTURE_HOST && gate_request >= 0) {
+        if (gate_request >= 0) {
             uint32_t enabled = gate_request;
 
-            if (bpf_map_update_elem(bpf_map__fd(skeleton->maps.runtime_gate), &map_key, &enabled, BPF_ANY))
+            if (current_mode == CAPTURE_HOST && bpf_map_update_elem(bpf_map__fd(skeleton->maps.runtime_gate), &map_key, &enabled, BPF_ANY))
+                break;
+            if (emit_gate_marker(enabled))
                 break;
             fprintf(stderr, "LX_GATE enabled=%u\n", enabled);
             fflush(stderr);

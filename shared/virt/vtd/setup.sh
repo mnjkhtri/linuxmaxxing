@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
 TARGET_FILE="${VIRT_TARGET_FILE:-$SCRIPT_DIR/../cloudlab}"
-REMOTE_ROOT="kernel-oops-virt-vtd"
+REMOTE_ROOT="linuxmaxxing-virt-vtd"
 IMAGE_URL="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
 LOCAL_CAPTURE_DIR="$REPO_ROOT/shared/_captures"
 

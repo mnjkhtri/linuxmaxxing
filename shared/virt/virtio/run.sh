@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
 CAPTURE_ROOT="$REPO_ROOT/shared/_captures"
 TARGET_FILE="$SCRIPT_DIR/../cloudlab"
-REMOTE_ROOT="kernel-oops-virt-virtio"
+REMOTE_ROOT="linuxmaxxing-virt-virtio"
 REMOTE_DIR="$REMOTE_ROOT/shared/virt/virtio"
 TARGET="$(sed -n '1{/^[[:space:]]*#/d; s/^[[:space:]]*//; s/[[:space:]]*$//; p; q}' "$TARGET_FILE")"
 ssh_opts=(-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=30 -o ServerAliveCountMax=6 -o StrictHostKeyChecking=no)
@@ -68,7 +68,7 @@ for root in /sys/kernel/tracing /sys/kernel/debug/tracing; do
 done
 [ -n "$trace_root" ] || { echo "error: KVM tracepoints not found" >&2; exit 1; }
 
-instance_name="kernel-oops-virt-virtio-$$"
+instance_name="linuxmaxxing-virt-virtio-$$"
 mkdir "$trace_root/instances/$instance_name"
 trace_instance="$trace_root/instances/$instance_name"
 grep -qw mono "$trace_instance/trace_clock" || { echo "error: mono trace clock unavailable" >&2; exit 1; }

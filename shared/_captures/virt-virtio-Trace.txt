@@ -1,0 +1,218 @@
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 206/206   #P:40
+#
+#                                _-----=> irqs-off/BH-disabled
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+             vmm-26879   [002] d..1. 99969.579748: kvm_entry: vcpu 0, rip 0x0
+             vmm-26879   [002] d..1. 99969.579763: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x0 info1 0x0000000000000784 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.579790: kvm_entry: vcpu 0, rip 0x0
+             vmm-26879   [002] d..1. 99969.579796: kvm_exit: vcpu 0 reason CR_ACCESS rip 0xd info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.579803: kvm_entry: vcpu 0, rip 0x10
+             vmm-26879   [002] d..1. 99969.579808: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x27 info1 0x0000000000000781 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.579831: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000000 val 0x0
+             vmm-26879   [002] ..... 99969.579837: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.579932: kvm_mmio: mmio read len 4 gpa 0x10000000 val 0x74726976
+             vmm-26879   [002] d..1. 99969.579938: kvm_entry: vcpu 0, rip 0x2c
+             vmm-26879   [002] d..1. 99969.579946: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x37 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.579954: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000004 val 0x0
+             vmm-26879   [002] ..... 99969.579959: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.580020: kvm_mmio: mmio read len 4 gpa 0x10000004 val 0x2
+             vmm-26879   [002] d..1. 99969.580024: kvm_entry: vcpu 0, rip 0x3c
+             vmm-26879   [002] d..1. 99969.580032: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x45 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580040: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000008 val 0x0
+             vmm-26879   [002] ..... 99969.580045: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.580088: kvm_mmio: mmio read len 4 gpa 0x10000008 val 0x4
+             vmm-26879   [002] d..1. 99969.580091: kvm_entry: vcpu 0, rip 0x4a
+             vmm-26879   [002] d..1. 99969.580099: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x53 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580107: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x1000000c val 0x0
+             vmm-26879   [002] ..... 99969.580112: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.580154: kvm_mmio: mmio read len 4 gpa 0x1000000c val 0x4f4f5053
+             vmm-26879   [002] d..1. 99969.580158: kvm_entry: vcpu 0, rip 0x58
+             vmm-26879   [002] d..1. 99969.580166: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x60 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580175: kvm_mmio: mmio write len 4 gpa 0x10000070 val 0x0
+             vmm-26879   [002] ..... 99969.580182: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.580225: kvm_entry: vcpu 0, rip 0x6a
+             vmm-26879   [002] d..1. 99969.580233: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x6a info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580241: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000070 val 0x0
+             vmm-26879   [002] ..... 99969.580246: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.580289: kvm_mmio: mmio read len 4 gpa 0x10000070 val 0x0
+             vmm-26879   [002] d..1. 99969.580292: kvm_entry: vcpu 0, rip 0x6f
+             vmm-26879   [002] d..1. 99969.580300: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x77 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580308: kvm_mmio: mmio write len 4 gpa 0x10000070 val 0x1
+             vmm-26879   [002] ..... 99969.580313: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.580356: kvm_entry: vcpu 0, rip 0x81
+             vmm-26879   [002] d..1. 99969.580364: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x81 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580372: kvm_mmio: mmio write len 4 gpa 0x10000070 val 0x3
+             vmm-26879   [002] ..... 99969.580378: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.580420: kvm_entry: vcpu 0, rip 0x8b
+             vmm-26879   [002] d..1. 99969.580428: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x8b info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580436: kvm_mmio: mmio write len 4 gpa 0x10000014 val 0x0
+             vmm-26879   [002] ..... 99969.580442: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.580485: kvm_entry: vcpu 0, rip 0x95
+             vmm-26879   [002] d..1. 99969.580493: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x95 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580501: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000010 val 0x0
+             vmm-26879   [002] ..... 99969.580506: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.580548: kvm_mmio: mmio read len 4 gpa 0x10000010 val 0x0
+             vmm-26879   [002] d..1. 99969.580552: kvm_entry: vcpu 0, rip 0x9a
+             vmm-26879   [002] d..1. 99969.580560: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xa2 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580567: kvm_mmio: mmio write len 4 gpa 0x10000014 val 0x1
+             vmm-26879   [002] ..... 99969.580573: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.580615: kvm_entry: vcpu 0, rip 0xac
+             vmm-26879   [002] d..1. 99969.580623: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xac info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580631: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000010 val 0x0
+             vmm-26879   [002] ..... 99969.580636: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.580679: kvm_mmio: mmio read len 4 gpa 0x10000010 val 0x1
+             vmm-26879   [002] d..1. 99969.580682: kvm_entry: vcpu 0, rip 0xb1
+             vmm-26879   [002] d..1. 99969.580690: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xba info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580697: kvm_mmio: mmio write len 4 gpa 0x10000024 val 0x0
+             vmm-26879   [002] ..... 99969.580703: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.580746: kvm_entry: vcpu 0, rip 0xc4
+             vmm-26879   [002] d..1. 99969.580754: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xc4 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580762: kvm_mmio: mmio write len 4 gpa 0x10000020 val 0x0
+             vmm-26879   [002] ..... 99969.580768: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.580810: kvm_entry: vcpu 0, rip 0xce
+             vmm-26879   [002] d..1. 99969.580818: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xce info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580826: kvm_mmio: mmio write len 4 gpa 0x10000024 val 0x1
+             vmm-26879   [002] ..... 99969.580832: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.580874: kvm_entry: vcpu 0, rip 0xd8
+             vmm-26879   [002] d..1. 99969.580883: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xd8 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580890: kvm_mmio: mmio write len 4 gpa 0x10000020 val 0x1
+             vmm-26879   [002] ..... 99969.580896: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.580939: kvm_entry: vcpu 0, rip 0xe2
+             vmm-26879   [002] d..1. 99969.580947: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xe2 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.580954: kvm_mmio: mmio write len 4 gpa 0x10000070 val 0xb
+             vmm-26879   [002] ..... 99969.580961: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.581030: kvm_entry: vcpu 0, rip 0xec
+             vmm-26879   [002] d..1. 99969.581038: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xec info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581046: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000070 val 0x0
+             vmm-26879   [002] ..... 99969.581051: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.581094: kvm_mmio: mmio read len 4 gpa 0x10000070 val 0xb
+             vmm-26879   [002] d..1. 99969.581098: kvm_entry: vcpu 0, rip 0xf1
+             vmm-26879   [002] d..1. 99969.581106: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0xfa info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581113: kvm_mmio: mmio write len 4 gpa 0x10000030 val 0x0
+             vmm-26879   [002] ..... 99969.581119: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.581161: kvm_entry: vcpu 0, rip 0x104
+             vmm-26879   [002] d..1. 99969.581169: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x104 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581177: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000044 val 0x0
+             vmm-26879   [002] ..... 99969.581182: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.581225: kvm_mmio: mmio read len 4 gpa 0x10000044 val 0x0
+             vmm-26879   [002] d..1. 99969.581229: kvm_entry: vcpu 0, rip 0x109
+             vmm-26879   [002] d..1. 99969.581237: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x111 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581244: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000034 val 0x0
+             vmm-26879   [002] ..... 99969.581249: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.581292: kvm_mmio: mmio read len 4 gpa 0x10000034 val 0x8
+             vmm-26879   [002] d..1. 99969.581295: kvm_entry: vcpu 0, rip 0x116
+             vmm-26879   [002] d..1. 99969.581303: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x12c info1 0x0000000000000782 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.581324: kvm_entry: vcpu 0, rip 0x12c
+             vmm-26879   [002] d..1. 99969.581331: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x138 info1 0x0000000000000782 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.581341: kvm_entry: vcpu 0, rip 0x138
+             vmm-26879   [002] d..1. 99969.581347: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x144 info1 0x0000000000000782 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.581356: kvm_entry: vcpu 0, rip 0x144
+             vmm-26879   [002] d..1. 99969.581361: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x146 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581368: kvm_mmio: mmio write len 4 gpa 0x10000038 val 0x8
+             vmm-26879   [002] ..... 99969.581373: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.581416: kvm_entry: vcpu 0, rip 0x150
+             vmm-26879   [002] d..1. 99969.581424: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x150 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581432: kvm_mmio: mmio write len 4 gpa 0x10000080 val 0x4000
+             vmm-26879   [002] ..... 99969.581438: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.581480: kvm_entry: vcpu 0, rip 0x15a
+             vmm-26879   [002] d..1. 99969.581489: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x15a info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581496: kvm_mmio: mmio write len 4 gpa 0x10000084 val 0x0
+             vmm-26879   [002] ..... 99969.581502: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.581545: kvm_entry: vcpu 0, rip 0x164
+             vmm-26879   [002] d..1. 99969.581553: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x164 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581561: kvm_mmio: mmio write len 4 gpa 0x10000090 val 0x5000
+             vmm-26879   [002] ..... 99969.581567: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.581609: kvm_entry: vcpu 0, rip 0x16e
+             vmm-26879   [002] d..1. 99969.581617: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x16e info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581625: kvm_mmio: mmio write len 4 gpa 0x10000094 val 0x0
+             vmm-26879   [002] ..... 99969.581631: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.581674: kvm_entry: vcpu 0, rip 0x178
+             vmm-26879   [002] d..1. 99969.581682: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x178 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581690: kvm_mmio: mmio write len 4 gpa 0x100000a0 val 0x6000
+             vmm-26879   [002] ..... 99969.581696: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.581739: kvm_entry: vcpu 0, rip 0x182
+             vmm-26879   [002] d..1. 99969.581747: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x182 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581755: kvm_mmio: mmio write len 4 gpa 0x100000a4 val 0x0
+             vmm-26879   [002] ..... 99969.581761: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.581805: kvm_entry: vcpu 0, rip 0x18c
+             vmm-26879   [002] d..1. 99969.581813: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x18c info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581821: kvm_mmio: mmio write len 4 gpa 0x10000044 val 0x1
+             vmm-26879   [002] ..... 99969.581827: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.581871: kvm_entry: vcpu 0, rip 0x196
+             vmm-26879   [002] d..1. 99969.581879: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x196 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581887: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000044 val 0x0
+             vmm-26879   [002] ..... 99969.581892: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.581936: kvm_mmio: mmio read len 4 gpa 0x10000044 val 0x1
+             vmm-26879   [002] d..1. 99969.581940: kvm_entry: vcpu 0, rip 0x19b
+             vmm-26879   [002] d..1. 99969.581947: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x1a4 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.581955: kvm_mmio: mmio write len 4 gpa 0x10000070 val 0xf
+             vmm-26879   [002] ..... 99969.581960: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.582038: kvm_entry: vcpu 0, rip 0x1ae
+             vmm-26879   [002] d..1. 99969.582046: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x1ae info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.582054: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000070 val 0x0
+             vmm-26879   [002] ..... 99969.582059: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.582103: kvm_mmio: mmio read len 4 gpa 0x10000070 val 0xf
+             vmm-26879   [002] d..1. 99969.582106: kvm_entry: vcpu 0, rip 0x1b3
+             vmm-26879   [002] d..1. 99969.582114: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x216 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.582122: kvm_mmio: mmio write len 4 gpa 0x10000050 val 0x0
+             vmm-26879   [002] ..... 99969.582127: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.582263: kvm_entry: vcpu 0, rip 0x220
+             vmm-26879   [002] d..1. 99969.582272: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x357 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.582280: kvm_mmio: mmio write len 4 gpa 0x10000050 val 0x0
+             vmm-26879   [002] ..... 99969.582286: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.582677: kvm_entry: vcpu 0, rip 0x361
+             vmm-26879   [002] d..1. 99969.582686: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x3f2 info1 0x0000000000000782 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582706: kvm_entry: vcpu 0, rip 0x3f2
+             vmm-26879   [002] d..1. 99969.582711: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x426 info1 0x0000000000200040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582720: kvm_entry: vcpu 0, rip 0x428
+             vmm-26879   [002] d..1. 99969.582724: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x428 info1 0x0000000000a00040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582728: kvm_entry: vcpu 0, rip 0x42a
+             vmm-26879   [002] d..1. 99969.582733: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x42c info1 0x0000000000210040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582736: kvm_entry: vcpu 0, rip 0x42e
+             vmm-26879   [002] d..1. 99969.582740: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x430 info1 0x0000000000a10040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582744: kvm_entry: vcpu 0, rip 0x432
+             vmm-26879   [002] d..1. 99969.582748: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x434 info1 0x0000000000210040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582752: kvm_entry: vcpu 0, rip 0x436
+             vmm-26879   [002] d..1. 99969.582756: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x438 info1 0x0000000000a10040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582760: kvm_entry: vcpu 0, rip 0x43a
+             vmm-26879   [002] d..1. 99969.582764: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x43c info1 0x0000000000210040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582768: kvm_entry: vcpu 0, rip 0x43e
+             vmm-26879   [002] d..1. 99969.582772: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x43e info1 0x0000000000a10040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582775: kvm_entry: vcpu 0, rip 0x440
+             vmm-26879   [002] d..1. 99969.582779: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x442 info1 0x0000000000210040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582787: kvm_entry: vcpu 0, rip 0x444
+             vmm-26879   [002] d..1. 99969.582791: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x446 info1 0x0000000000a10040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.582796: kvm_entry: vcpu 0, rip 0x448
+             vmm-26879   [002] d..1. 99969.582801: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x4a4 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.582809: kvm_mmio: mmio write len 4 gpa 0x10000050 val 0x0
+             vmm-26879   [002] d..1. 99969.582816: kvm_entry: vcpu 0, rip 0x4ae
+             vmm-26879   [002] d..1. 99969.582823: kvm_exit: vcpu 0 reason HLT rip 0x4b9 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+    kworker/16:0-115     [016] ..... 99969.583034: kvm_set_irq: gsi 5 level 1 source 0
+    kworker/16:0-115     [016] ..... 99969.583043: kvm_set_irq: gsi 5 level 0 source 0
+             vmm-26879   [002] ..... 99969.583065: kvm_inj_virq: IRQ 0x25
+             vmm-26879   [002] ..... 99969.583068: kvm_inj_virq: IRQ 0x25 [reinjected]
+             vmm-26879   [002] d..1. 99969.583069: kvm_entry: vcpu 0, rip 0x4ba
+             vmm-26879   [002] d..1. 99969.583077: kvm_exit: vcpu 0 reason EPT_VIOLATION rip 0x4ba info1 0x0000000000000782 info2 0x0000000080000025 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.583091: kvm_inj_virq: IRQ 0x25 [reinjected]
+             vmm-26879   [002] d..1. 99969.583092: kvm_entry: vcpu 0, rip 0x4ba
+             vmm-26879   [002] d..1. 99969.583097: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x50d info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.583104: kvm_mmio: mmio unsatisfied-read len 4 gpa 0x10000060 val 0x0
+             vmm-26879   [002] ..... 99969.583109: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] ..... 99969.583158: kvm_mmio: mmio read len 4 gpa 0x10000060 val 0x1
+             vmm-26879   [002] d..1. 99969.583163: kvm_entry: vcpu 0, rip 0x512
+             vmm-26879   [002] d..1. 99969.583171: kvm_exit: vcpu 0 reason EPT_MISCONFIG rip 0x519 info1 0x0000000000000000 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.583178: kvm_mmio: mmio write len 4 gpa 0x10000064 val 0x1
+             vmm-26879   [002] ..... 99969.583184: kvm_userspace_exit: reason KVM_EXIT_MMIO (6)
+             vmm-26879   [002] d..1. 99969.583228: kvm_entry: vcpu 0, rip 0x523
+             vmm-26879   [002] d..1. 99969.583236: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x53b info1 0x0000000000200040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] d..1. 99969.583245: kvm_entry: vcpu 0, rip 0x53d
+             vmm-26879   [002] d..1. 99969.583250: kvm_exit: vcpu 0 reason IO_INSTRUCTION rip 0x4e6 info1 0x0000000000820040 info2 0x0000000000000000 intr_info 0x00000000 error_code 0x00000000
+             vmm-26879   [002] ..... 99969.583256: kvm_userspace_exit: reason KVM_EXIT_IO (2)

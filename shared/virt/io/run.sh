@@ -4,7 +4,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
 CAPTURE_ROOT="$REPO_ROOT/shared/_captures"
 TARGET_FILE="$SCRIPT_DIR/../cloudlab"
-REMOTE_DIR="kernel-oops-virt-io"
+REMOTE_DIR="linuxmaxxing-virt-io"
 IO_DIR="$REMOTE_DIR/shared/virt/io"
 TARGET="$(sed -n '1{/^[[:space:]]*#/d; s/^[[:space:]]*//; s/[[:space:]]*$//; p; q}' "$TARGET_FILE")"
 [ -n "$TARGET" ] || { echo "error: empty CloudLab target" >&2; exit 1; }
@@ -57,7 +57,7 @@ for d in /sys/kernel/tracing /sys/kernel/debug/tracing; do
 	if [ -d "$d/events/kvm/kvm_entry" ]; then trace_dir="$d"; break; fi
 done
 [ -n "$trace_dir" ] || { echo "error: KVM tracepoints not found" >&2; exit 1; }
-instance_name="kernel-oops-virt-io-$$"
+instance_name="linuxmaxxing-virt-io-$$"
 mkdir "$trace_dir/instances/$instance_name"
 trace_instance="$trace_dir/instances/$instance_name"
 grep -qw mono "$trace_instance/trace_clock" || exit 1

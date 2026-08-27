@@ -1,0 +1,199 @@
+[  532.296205] KAPI_EVT domain=module phase=lifecycle action=run_begin schema=1
+[  532.296275] KAPI_EVT domain=kapi phase=layout action=begin
+[  532.296308] KAPI_EVT domain=kapi phase=layout action=constants page_size=4096 page_shift=12 page_mask=0xfffffffffffff000 bits_per_long=64 ram_bytes=1006485504 paging_levels=4
+[  532.296485] KAPI_EVT domain=kapi phase=layout action=region id=user_vas start=0x0000000000000000 end=0x00007ffffffff000 bytes=140737488351232 kind=process_specific source=TASK_SIZE_MAX
+[  532.296516] KAPI_EVT domain=kapi phase=layout action=region id=user_guard start=0x00007ffffffff000 end=0x0000800000000000 bytes=4096 kind=guard source=TASK_SIZE_MAX+PAGE_SIZE
+[  532.296529] KAPI_EVT domain=kapi phase=layout action=region id=noncanonical start=0x0000800000000000 end=0xffff800000000000 bytes=18446462598732840960 kind=invalid source=TASK_SIZE_MAX
+[  532.296541] KAPI_EVT domain=kapi phase=layout action=region id=kernel_guard_hole start=0xffff800000000000 end=0xffff880000000000 bytes=8796093022208 kind=guard source=GUARD_HOLE_BASE_ADDR+GUARD_HOLE_END_ADDR
+[  532.296552] KAPI_EVT domain=kapi phase=layout action=region id=ldt_remap start=0xffff880000000000 end=0xffff888000000000 bytes=549755813888 kind=conditional source=LDT_BASE_ADDR+LDT_END_ADDR
+[  532.296595] KAPI_EVT domain=kapi phase=layout action=region id=reserved_gap_0 start=0xffff888000000000 end=0xffff88e280000000 bytes=423054278656 kind=reserved source=adjacent_layout_boundaries
+[  532.296613] KAPI_EVT domain=kapi phase=layout action=region id=direct_map_observed_ram start=0xffff88e280000000 end=0xffff88e2bbfdc000 bytes=1006485504 kind=physical_direct_map source=PAGE_OFFSET+totalram_pages
+[  532.296626] KAPI_EVT domain=kapi phase=layout action=region id=reserved_gap_1 start=0xffff88e2bbfdc000 end=0xffff9843c0000000 bytes=16909353500672 kind=reserved source=adjacent_layout_boundaries
+[  532.296637] KAPI_EVT domain=kapi phase=layout action=region id=vmalloc start=0xffff9843c0000000 end=0xffffb843bfffffff bytes=35184372088831 kind=vmalloc_ioremap source=VMALLOC_START+VMALLOC_END
+[  532.296734] KAPI_EVT domain=kapi phase=layout action=region id=reserved_gap_2 start=0xffffb843bfffffff end=0xffffe41800000000 bytes=48190606802945 kind=reserved source=adjacent_layout_boundaries
+[  532.296750] KAPI_EVT domain=kapi phase=layout action=region id=vmemmap_observed_descriptors start=0xffffe41800000000 end=0xffffe41800eff700 bytes=15726336 kind=struct_page_array source=VMEMMAP_START+totalram_pages+sizeof_struct_page
+[  532.296762] KAPI_EVT domain=kapi phase=layout action=region id=reserved_gap_3 start=0xffffe41800eff700 end=0xfffffe0000000000 bytes=28484207380736 kind=reserved source=adjacent_layout_boundaries
+[  532.296773] KAPI_EVT domain=kapi phase=layout action=region id=cpu_entry_area start=0xfffffe0000000000 end=0xfffffe8000000000 bytes=549755813888 kind=per_cpu_entry source=CPU_ENTRY_AREA_BASE+CPU_ENTRY_AREA_MAP_SIZE
+[  532.296795] KAPI_EVT domain=kapi phase=layout action=region id=reserved_gap_4 start=0xfffffe8000000000 end=0xffffff0000000000 bytes=549755813888 kind=reserved source=adjacent_layout_boundaries
+[  532.296806] KAPI_EVT domain=kapi phase=layout action=region id=espfix start=0xffffff0000000000 end=0xffffff8000000000 bytes=549755813888 kind=espfix_stacks source=ESPFIX_BASE_ADDR+P4D_SIZE
+[  532.296817] KAPI_EVT domain=kapi phase=layout action=region id=reserved_gap_5 start=0xffffff8000000000 end=0xffffffef00000000 bytes=476741369856 kind=reserved source=adjacent_layout_boundaries
+[  532.296827] KAPI_EVT domain=kapi phase=layout action=region id=efi_runtime start=0xffffffef00000000 end=0xffffffff00000000 bytes=68719476736 kind=efi_runtime source=EFI_VA_END+EFI_VA_START
+[  532.296838] KAPI_EVT domain=kapi phase=layout action=region id=reserved_gap_6 start=0xffffffff00000000 end=0xffffffff80000000 bytes=2147483648 kind=reserved source=adjacent_layout_boundaries
+[  532.296848] KAPI_EVT domain=kapi phase=layout action=region id=kernel_image start=0xffffffff80000000 end=0xffffffffc0000000 bytes=1073741824 kind=kernel_image source=__START_KERNEL_map+KERNEL_IMAGE_SIZE
+[  532.296861] KAPI_EVT domain=kapi phase=layout action=region id=modules start=0xffffffffc0000000 end=0xffffffffff000000 bytes=1056964608 kind=module_space source=MODULES_VADDR+MODULES_END
+[  532.296887] KAPI_EVT domain=kapi phase=layout action=region id=reserved_gap_7 start=0xffffffffff000000 end=0xffffffffff57b000 bytes=5746688 kind=reserved source=adjacent_layout_boundaries
+[  532.296908] KAPI_EVT domain=kapi phase=layout action=region id=fixmap start=0xffffffffff57b000 end=0xffffffffff7ff000 bytes=2637824 kind=fixed_mappings source=FIXADDR_START+FIXADDR_TOP
+[  532.296950] KAPI_EVT domain=kapi phase=layout action=region id=reserved_top start=0xffffffffff7ff000 end=0xffffffffffffffff bytes=8392703 kind=reserved source=FIXADDR_TOP+ULONG_MAX
+[  532.296986] KAPI_EVT domain=kapi phase=layout action=end
+[  532.296999] KAPI_EVT domain=kapi phase=tasks action=begin
+[  532.297021] KAPI_EVT domain=kapi phase=tasks action=task tgid=0 pid=0 ppid=0 cpu=0 task=ffffffff8660ca00 stack=ffffffff86600000 mm=0000000000000000 type=idle comm="swapper/0"
+[  532.297184] KAPI_EVT domain=kapi phase=tasks action=task tgid=1 pid=1 ppid=0 cpu=0 task=ffff88e2812faf40 stack=ffff9843c0010000 mm=ffff88e28106c600 type=user-ST comm="systemd"
+[  532.297257] KAPI_EVT domain=kapi phase=tasks action=task tgid=2 pid=2 ppid=0 cpu=0 task=ffff88e2812f9f80 stack=ffff9843c0018000 mm=0000000000000000 type=kthread comm="kthreadd"
+[  532.297276] KAPI_EVT domain=kapi phase=tasks action=task tgid=3 pid=3 ppid=2 cpu=0 task=ffff88e2812f8fc0 stack=ffff9843c0020000 mm=0000000000000000 type=kthread comm="pool_workqueue_"
+[  532.297291] KAPI_EVT domain=kapi phase=tasks action=task tgid=4 pid=4 ppid=2 cpu=0 task=ffff88e2812f8000 stack=ffff9843c0028000 mm=0000000000000000 type=kthread comm="kworker/R-rcu_g"
+[  532.297305] KAPI_EVT domain=kapi phase=tasks action=task tgid=5 pid=5 ppid=2 cpu=0 task=ffff88e2812f6e40 stack=ffff9843c0030000 mm=0000000000000000 type=kthread comm="kworker/R-sync_"
+[  532.297319] KAPI_EVT domain=kapi phase=tasks action=task tgid=6 pid=6 ppid=2 cpu=0 task=ffff88e2812f5e80 stack=ffff9843c0038000 mm=0000000000000000 type=kthread comm="kworker/R-kvfre"
+[  532.297332] KAPI_EVT domain=kapi phase=tasks action=task tgid=7 pid=7 ppid=2 cpu=0 task=ffff88e2812f4ec0 stack=ffff9843c0040000 mm=0000000000000000 type=kthread comm="kworker/R-slub_"
+[  532.297346] KAPI_EVT domain=kapi phase=tasks action=task tgid=8 pid=8 ppid=2 cpu=0 task=ffff88e2812f3f00 stack=ffff9843c0048000 mm=0000000000000000 type=kthread comm="kworker/R-netns"
+[  532.297359] KAPI_EVT domain=kapi phase=tasks action=task tgid=9 pid=9 ppid=2 cpu=0 task=ffff88e2812f2f40 stack=ffff9843c0050000 mm=0000000000000000 type=kthread comm="kworker/0:0"
+[  532.297372] KAPI_EVT domain=kapi phase=tasks action=task tgid=10 pid=10 ppid=2 cpu=0 task=ffff88e2812f1f80 stack=ffff9843c0058000 mm=0000000000000000 type=kthread comm="kworker/0:0H"
+[  532.297392] KAPI_EVT domain=kapi phase=tasks action=task tgid=12 pid=12 ppid=2 cpu=0 task=ffff88e2812f0000 stack=ffff9843c0068000 mm=0000000000000000 type=kthread comm="kworker/u8:0"
+[  532.297407] KAPI_EVT domain=kapi phase=tasks action=task tgid=13 pid=13 ppid=2 cpu=0 task=ffff88e281386e40 stack=ffff9843c0070000 mm=0000000000000000 type=kthread comm="kworker/R-mm_pe"
+[  532.297420] KAPI_EVT domain=kapi phase=tasks action=task tgid=14 pid=14 ppid=2 cpu=0 task=ffff88e281385e80 stack=ffff9843c0078000 mm=0000000000000000 type=kthread comm="ksoftirqd/0"
+[  532.297434] KAPI_EVT domain=kapi phase=tasks action=task tgid=15 pid=15 ppid=2 cpu=1 task=ffff88e281384ec0 stack=ffff9843c0080000 mm=0000000000000000 type=kthread comm="rcu_preempt"
+[  532.297447] KAPI_EVT domain=kapi phase=tasks action=task tgid=16 pid=16 ppid=2 cpu=0 task=ffff88e281383f00 stack=ffff9843c0088000 mm=0000000000000000 type=kthread comm="rcu_exp_par_gp_"
+[  532.297460] KAPI_EVT domain=kapi phase=tasks action=task tgid=17 pid=17 ppid=2 cpu=1 task=ffff88e281382f40 stack=ffff9843c0090000 mm=0000000000000000 type=kthread comm="rcu_exp_gp_kthr"
+[  532.297474] KAPI_EVT domain=kapi phase=tasks action=task tgid=18 pid=18 ppid=2 cpu=0 task=ffff88e281381f80 stack=ffff9843c0098000 mm=0000000000000000 type=kthread comm="migration/0"
+[  532.297487] KAPI_EVT domain=kapi phase=tasks action=task tgid=19 pid=19 ppid=2 cpu=0 task=ffff88e281380fc0 stack=ffff9843c00a0000 mm=0000000000000000 type=kthread comm="kprobe-optimize"
+[  532.297501] KAPI_EVT domain=kapi phase=tasks action=task tgid=20 pid=20 ppid=2 cpu=0 task=ffff88e2812fee40 stack=ffff9843c00b0000 mm=0000000000000000 type=kthread comm="cpuhp/0"
+[  532.297514] KAPI_EVT domain=kapi phase=tasks action=task tgid=21 pid=21 ppid=2 cpu=1 task=ffff88e2812fde80 stack=ffff9843c00b8000 mm=0000000000000000 type=kthread comm="cpuhp/1"
+[  532.297527] KAPI_EVT domain=kapi phase=tasks action=task tgid=22 pid=22 ppid=2 cpu=1 task=ffff88e2812fcec0 stack=ffff9843c00c0000 mm=0000000000000000 type=kthread comm="migration/1"
+[  532.297541] KAPI_EVT domain=kapi phase=tasks action=task tgid=23 pid=23 ppid=2 cpu=1 task=ffff88e2812fbf00 stack=ffff9843c00c8000 mm=0000000000000000 type=kthread comm="ksoftirqd/1"
+[  532.297554] KAPI_EVT domain=kapi phase=tasks action=task tgid=25 pid=25 ppid=2 cpu=1 task=ffff88e281399f80 stack=ffff9843c00d8000 mm=0000000000000000 type=kthread comm="kworker/1:0H"
+[  532.297568] KAPI_EVT domain=kapi phase=tasks action=task tgid=26 pid=26 ppid=2 cpu=0 task=ffff88e28186ee40 stack=ffff9843c00e4000 mm=0000000000000000 type=kthread comm="kdevtmpfs"
+[  532.297581] KAPI_EVT domain=kapi phase=tasks action=task tgid=27 pid=27 ppid=2 cpu=1 task=ffff88e281398fc0 stack=ffff9843c00ec000 mm=0000000000000000 type=kthread comm="kworker/R-inet_"
+[  532.297594] KAPI_EVT domain=kapi phase=tasks action=task tgid=28 pid=28 ppid=2 cpu=0 task=ffff88e28186de80 stack=ffff9843c00f4000 mm=0000000000000000 type=kthread comm="rcu_tasks_kthre"
+[  532.297607] KAPI_EVT domain=kapi phase=tasks action=task tgid=29 pid=29 ppid=2 cpu=1 task=ffff88e28186cec0 stack=ffff9843c00fc000 mm=0000000000000000 type=kthread comm="rcu_tasks_rude_"
+[  532.297620] KAPI_EVT domain=kapi phase=tasks action=task tgid=30 pid=30 ppid=2 cpu=1 task=ffff88e281398000 stack=ffff9843c0104000 mm=0000000000000000 type=kthread comm="kauditd"
+[  532.297694] KAPI_EVT domain=kapi phase=tasks action=task tgid=31 pid=31 ppid=2 cpu=1 task=ffff88e281396e40 stack=ffff9843c010c000 mm=0000000000000000 type=kthread comm="kworker/u8:1"
+[  532.297711] KAPI_EVT domain=kapi phase=tasks action=task tgid=32 pid=32 ppid=2 cpu=0 task=ffff88e281395e80 stack=ffff9843c0114000 mm=0000000000000000 type=kthread comm="oom_reaper"
+[  532.297724] KAPI_EVT domain=kapi phase=tasks action=task tgid=33 pid=33 ppid=2 cpu=0 task=ffff88e281394ec0 stack=ffff9843c011c000 mm=0000000000000000 type=kthread comm="kworker/R-write"
+[  532.297738] KAPI_EVT domain=kapi phase=tasks action=task tgid=34 pid=34 ppid=2 cpu=0 task=ffff88e281393f00 stack=ffff9843c0124000 mm=0000000000000000 type=kthread comm="kworker/u8:2"
+[  532.297758] KAPI_EVT domain=kapi phase=tasks action=task tgid=35 pid=35 ppid=2 cpu=1 task=ffff88e281392f40 stack=ffff9843c012c000 mm=0000000000000000 type=kthread comm="kcompactd0"
+[  532.297771] KAPI_EVT domain=kapi phase=tasks action=task tgid=36 pid=36 ppid=2 cpu=1 task=ffff88e28186bf00 stack=ffff9843c0134000 mm=0000000000000000 type=kthread comm="khugepaged"
+[  532.297784] KAPI_EVT domain=kapi phase=tasks action=task tgid=37 pid=37 ppid=2 cpu=1 task=ffff88e28186af40 stack=ffff9843c013c000 mm=0000000000000000 type=kthread comm="kworker/R-kbloc"
+[  532.297797] KAPI_EVT domain=kapi phase=tasks action=task tgid=38 pid=38 ppid=2 cpu=1 task=ffff88e281869f80 stack=ffff9843c0144000 mm=0000000000000000 type=kthread comm="irq/9-acpi"
+[  532.297810] KAPI_EVT domain=kapi phase=tasks action=task tgid=39 pid=39 ppid=2 cpu=1 task=ffff88e281868fc0 stack=ffff9843c014c000 mm=0000000000000000 type=kthread comm="kworker/1:1"
+[  532.297824] KAPI_EVT domain=kapi phase=tasks action=task tgid=40 pid=40 ppid=2 cpu=0 task=ffff88e281391f80 stack=ffff9843c0154000 mm=0000000000000000 type=kthread comm="kworker/R-ata_s"
+[  532.297837] KAPI_EVT domain=kapi phase=tasks action=task tgid=41 pid=41 ppid=2 cpu=0 task=ffff88e281390fc0 stack=ffff9843c015c000 mm=0000000000000000 type=kthread comm="kworker/R-md_bi"
+[  532.297850] KAPI_EVT domain=kapi phase=tasks action=task tgid=42 pid=42 ppid=2 cpu=0 task=ffff88e281390000 stack=ffff9843c0164000 mm=0000000000000000 type=kthread comm="kworker/R-quota"
+[  532.297863] KAPI_EVT domain=kapi phase=tasks action=task tgid=43 pid=43 ppid=2 cpu=0 task=ffff88e281fdaf40 stack=ffff9843c016c000 mm=0000000000000000 type=kthread comm="kworker/R-rpcio"
+[  532.297877] KAPI_EVT domain=kapi phase=tasks action=task tgid=44 pid=44 ppid=2 cpu=1 task=ffff88e281fd9f80 stack=ffff9843c0174000 mm=0000000000000000 type=kthread comm="kworker/R-xprti"
+[  532.297890] KAPI_EVT domain=kapi phase=tasks action=task tgid=45 pid=45 ppid=2 cpu=0 task=ffff88e281fd8fc0 stack=ffff9843c017c000 mm=0000000000000000 type=kthread comm="kworker/R-cfg80"
+[  532.297908] KAPI_EVT domain=kapi phase=tasks action=task tgid=46 pid=46 ppid=2 cpu=0 task=ffff88e281fd8000 stack=ffff9843c0184000 mm=0000000000000000 type=kthread comm="kworker/u8:3"
+[  532.297922] KAPI_EVT domain=kapi phase=tasks action=task tgid=47 pid=47 ppid=2 cpu=0 task=ffff88e281f7ee40 stack=ffff9843c018c000 mm=0000000000000000 type=kthread comm="kswapd0"
+[  532.297935] KAPI_EVT domain=kapi phase=tasks action=task tgid=48 pid=48 ppid=2 cpu=0 task=ffff88e281f7de80 stack=ffff9843c01a0000 mm=0000000000000000 type=kthread comm="kworker/R-nfsio"
+[  532.297948] KAPI_EVT domain=kapi phase=tasks action=task tgid=49 pid=49 ppid=2 cpu=0 task=ffff88e281f7cec0 stack=ffff9843c01a8000 mm=0000000000000000 type=kthread comm="kworker/R-acpi_"
+[  532.297961] KAPI_EVT domain=kapi phase=tasks action=task tgid=50 pid=50 ppid=2 cpu=0 task=ffff88e281868000 stack=ffff9843c01b0000 mm=0000000000000000 type=kthread comm="kworker/u8:4"
+[  532.297975] KAPI_EVT domain=kapi phase=tasks action=task tgid=51 pid=51 ppid=2 cpu=0 task=ffff88e28139ee40 stack=ffff9843c03dc000 mm=0000000000000000 type=kthread comm="scsi_eh_0"
+[  532.297989] KAPI_EVT domain=kapi phase=tasks action=task tgid=52 pid=52 ppid=2 cpu=0 task=ffff88e281f7bf00 stack=ffff9843c03e4000 mm=0000000000000000 type=kthread comm="kworker/R-scsi_"
+[  532.298002] KAPI_EVT domain=kapi phase=tasks action=task tgid=53 pid=53 ppid=2 cpu=1 task=ffff88e281f7af40 stack=ffff9843c03ec000 mm=0000000000000000 type=kthread comm="scsi_eh_1"
+[  532.298015] KAPI_EVT domain=kapi phase=tasks action=task tgid=54 pid=54 ppid=2 cpu=1 task=ffff88e281f79f80 stack=ffff9843c03f4000 mm=0000000000000000 type=kthread comm="kworker/R-scsi_"
+[  532.298029] KAPI_EVT domain=kapi phase=tasks action=task tgid=56 pid=56 ppid=2 cpu=1 task=ffff88e28139de80 stack=ffff9843c0404000 mm=0000000000000000 type=kthread comm="kworker/1:1H"
+[  532.298042] KAPI_EVT domain=kapi phase=tasks action=task tgid=57 pid=57 ppid=2 cpu=0 task=ffff88e281f78000 stack=ffff9843c040c000 mm=0000000000000000 type=kthread comm="kworker/0:1H"
+[  532.298060] KAPI_EVT domain=kapi phase=tasks action=task tgid=58 pid=58 ppid=2 cpu=1 task=ffff88e28139cec0 stack=ffff9843c0414000 mm=0000000000000000 type=kthread comm="kworker/1:2"
+[  532.298074] KAPI_EVT domain=kapi phase=tasks action=task tgid=59 pid=59 ppid=2 cpu=0 task=ffff88e28139bf00 stack=ffff9843c0444000 mm=0000000000000000 type=kthread comm="kworker/R-mld"
+[  532.298088] KAPI_EVT domain=kapi phase=tasks action=task tgid=60 pid=60 ppid=2 cpu=0 task=ffff88e2827eee40 stack=ffff9843c044c000 mm=0000000000000000 type=kthread comm="kworker/0:2"
+[  532.298101] KAPI_EVT domain=kapi phase=tasks action=task tgid=61 pid=61 ppid=2 cpu=1 task=ffff88e282852f40 stack=ffff9843c0454000 mm=0000000000000000 type=kthread comm="kworker/R-ipv6_"
+[  532.298115] KAPI_EVT domain=kapi phase=tasks action=task tgid=65 pid=65 ppid=2 cpu=1 task=ffff88e282850000 stack=ffff9843c045c000 mm=0000000000000000 type=kthread comm="jbd2/vda1-8"
+[  532.298129] KAPI_EVT domain=kapi phase=tasks action=task tgid=66 pid=66 ppid=2 cpu=0 task=ffff88e2827ede80 stack=ffff9843c0464000 mm=0000000000000000 type=kthread comm="kworker/R-ext4-"
+[  532.298142] KAPI_EVT domain=kapi phase=tasks action=task tgid=103 pid=103 ppid=1 cpu=1 task=ffff88e282a65e80 stack=ffff9843c0488000 mm=ffff88e28281db00 type=user-ST comm="systemd-journal"
+[  532.298156] KAPI_EVT domain=kapi phase=tasks action=task tgid=151 pid=151 ppid=1 cpu=1 task=ffff88e282a60fc0 stack=ffff9843c06c4000 mm=ffff88e281068000 type=user-ST comm="systemd-udevd"
+[  532.298170] KAPI_EVT domain=kapi phase=tasks action=task tgid=171 pid=171 ppid=1 cpu=0 task=ffff88e2827e8000 stack=ffff9843c05bc000 mm=ffff88e28602cd00 type=user-ST comm="systemd-network"
+[  532.298184] KAPI_EVT domain=kapi phase=tasks action=task tgid=243 pid=243 ppid=1 cpu=1 task=ffff88e282848fc0 stack=ffff9843c08bc000 mm=ffff88e28281cd00 type=user-ST comm="systemd-resolve"
+[  532.298197] KAPI_EVT domain=kapi phase=tasks action=task tgid=244 pid=244 ppid=1 cpu=1 task=ffff88e282856e40 stack=ffff9843c08e0000 mm=ffff88e282818000 type=user-ST comm="systemd-timesyn"
+[  532.298210] KAPI_EVT domain=kapi phase=tasks action=task tgid=253 pid=253 ppid=1 cpu=0 task=ffff88e282850fc0 stack=ffff9843c0964000 mm=ffff88e282818700 type=user-ST comm="systemd-sulogin"
+[  532.298224] KAPI_EVT domain=kapi phase=tasks action=task tgid=254 pid=254 ppid=253 cpu=1 task=ffff88e282849f80 stack=ffff9843c0780000 mm=ffff88e28281e200 type=user-ST comm="bash"
+[  532.298238] KAPI_EVT domain=kapi phase=tasks action=task tgid=264 pid=264 ppid=2 cpu=0 task=ffff88e281f78fc0 stack=ffff9843c0950000 mm=0000000000000000 type=kthread comm="kworker/0:1"
+[  532.298251] KAPI_EVT domain=kapi phase=tasks action=task tgid=265 pid=265 ppid=2 cpu=1 task=ffff88e2812f0fc0 stack=ffff9843c0060000 mm=0000000000000000 type=kthread comm="kworker/1:0"
+[  532.298265] KAPI_EVT domain=kapi phase=tasks action=task tgid=268 pid=268 ppid=151 cpu=1 task=ffff88e28139af40 stack=ffff9843c0988000 mm=ffff88e28106f000 type=user-ST comm="(udev-worker)"
+[  532.298278] KAPI_EVT domain=kapi phase=tasks action=task tgid=269 pid=269 ppid=254 cpu=0 task=ffff88e2827ecec0 stack=ffff9843c0990000 mm=ffff88e28602bf00 type=user-ST comm="sudo"
+[  532.298292] KAPI_EVT domain=kapi phase=tasks action=task tgid=270 pid=270 ppid=269 cpu=1 task=ffff88e282853f00 stack=ffff9843c0978000 mm=ffff88e281069c00 type=user-ST comm="sudo"
+[  532.298306] KAPI_EVT domain=kapi phase=tasks action=task tgid=271 pid=271 ppid=270 cpu=1 task=ffff88e2862a9f80 stack=ffff9843c09a0000 mm=ffff88e28106e900 type=user-ST comm="run.sh"
+[  532.298319] KAPI_EVT domain=kapi phase=tasks action=task tgid=278 pid=278 ppid=271 cpu=0 task=ffff88e2827ebf00 stack=ffff9843c09c0000 mm=ffff88e28106b800 type=user-ST comm="insmod"
+[  532.298352] KAPI_EVT domain=kapi phase=tasks action=end
+[  532.298364] KAPI_EVT domain=kapi phase=page_allocator action=begin
+[  532.298433] KAPI_EVT domain=kapi phase=page_allocator action=alloc api=__get_free_page id=one_page addr=ffff88e28971e000
+[  532.298528] KAPI_EVT domain=kapi phase=memory action=sample id=one_page bytes=16 data=11111111111111111111111111111111
+[  532.298598] KAPI_EVT domain=kapi phase=mapping action=page id=one_page index=0 kva=ffff88e28971e000 pa=0x000000000971e000 pfn=38686
+[  532.298779] KAPI_EVT domain=kapi phase=mapping action=summary id=one_page kva=ffff88e28971e000 bytes=4096 pages=1 physical_contiguous=yes
+[  532.298819] KAPI_EVT domain=kapi phase=page_allocator action=alloc api=get_zeroed_page id=zero_page addr=ffff88e2860d6000
+[  532.298836] KAPI_EVT domain=kapi phase=memory action=sample id=zero_page bytes=16 data=00000000000000000000000000000000
+[  532.298848] KAPI_EVT domain=kapi phase=mapping action=page id=zero_page index=0 kva=ffff88e2860d6000 pa=0x00000000060d6000 pfn=24790
+[  532.298859] KAPI_EVT domain=kapi phase=mapping action=summary id=zero_page kva=ffff88e2860d6000 bytes=4096 pages=1 physical_contiguous=yes
+[  532.298910] KAPI_EVT domain=kapi phase=page_allocator action=alloc api=__get_free_pages id=order_pages addr=ffff88e289740000 order=3
+[  532.298931] KAPI_EVT domain=kapi phase=memory action=sample id=order_pages bytes=16 data=22222222222222222222222222222222
+[  532.298941] KAPI_EVT domain=kapi phase=mapping action=page id=order_pages index=0 kva=ffff88e289740000 pa=0x0000000009740000 pfn=38720
+[  532.298959] KAPI_EVT domain=kapi phase=mapping action=page id=order_pages index=1 kva=ffff88e289741000 pa=0x0000000009741000 pfn=38721
+[  532.298982] KAPI_EVT domain=kapi phase=mapping action=page id=order_pages index=2 kva=ffff88e289742000 pa=0x0000000009742000 pfn=38722
+[  532.298993] KAPI_EVT domain=kapi phase=mapping action=page id=order_pages index=3 kva=ffff88e289743000 pa=0x0000000009743000 pfn=38723
+[  532.299010] KAPI_EVT domain=kapi phase=mapping action=page id=order_pages index=4 kva=ffff88e289744000 pa=0x0000000009744000 pfn=38724
+[  532.299019] KAPI_EVT domain=kapi phase=mapping action=page id=order_pages index=5 kva=ffff88e289745000 pa=0x0000000009745000 pfn=38725
+[  532.299029] KAPI_EVT domain=kapi phase=mapping action=page id=order_pages index=6 kva=ffff88e289746000 pa=0x0000000009746000 pfn=38726
+[  532.299038] KAPI_EVT domain=kapi phase=mapping action=page id=order_pages index=7 kva=ffff88e289747000 pa=0x0000000009747000 pfn=38727
+[  532.299048] KAPI_EVT domain=kapi phase=mapping action=summary id=order_pages kva=ffff88e289740000 bytes=32768 pages=8 physical_contiguous=yes
+[  532.299116] KAPI_EVT domain=kapi phase=page_allocator action=alloc api=alloc_pages id=page_desc struct_page=ffffe41800284e00 addr=ffff88e28a138000 order=3
+[  532.299138] KAPI_EVT domain=kapi phase=memory action=sample id=page_desc bytes=16 data=33333333333333333333333333333333
+[  532.299149] KAPI_EVT domain=kapi phase=mapping action=page id=page_desc index=0 kva=ffff88e28a138000 pa=0x000000000a138000 pfn=41272
+[  532.299159] KAPI_EVT domain=kapi phase=mapping action=page id=page_desc index=1 kva=ffff88e28a139000 pa=0x000000000a139000 pfn=41273
+[  532.299169] KAPI_EVT domain=kapi phase=mapping action=page id=page_desc index=2 kva=ffff88e28a13a000 pa=0x000000000a13a000 pfn=41274
+[  532.299178] KAPI_EVT domain=kapi phase=mapping action=page id=page_desc index=3 kva=ffff88e28a13b000 pa=0x000000000a13b000 pfn=41275
+[  532.299191] KAPI_EVT domain=kapi phase=mapping action=page id=page_desc index=4 kva=ffff88e28a13c000 pa=0x000000000a13c000 pfn=41276
+[  532.299212] KAPI_EVT domain=kapi phase=mapping action=page id=page_desc index=5 kva=ffff88e28a13d000 pa=0x000000000a13d000 pfn=41277
+[  532.299231] KAPI_EVT domain=kapi phase=mapping action=page id=page_desc index=6 kva=ffff88e28a13e000 pa=0x000000000a13e000 pfn=41278
+[  532.299241] KAPI_EVT domain=kapi phase=mapping action=page id=page_desc index=7 kva=ffff88e28a13f000 pa=0x000000000a13f000 pfn=41279
+[  532.299251] KAPI_EVT domain=kapi phase=mapping action=summary id=page_desc kva=ffff88e28a138000 bytes=32768 pages=8 physical_contiguous=yes
+[  532.299351] KAPI_EVT domain=kapi phase=page_allocator action=alloc api=alloc_pages_exact id=exact_pages addr=ffff88e282bd8000 requested=4196
+[  532.299372] KAPI_EVT domain=kapi phase=memory action=sample id=exact_pages bytes=16 data=44444444444444444444444444444444
+[  532.299391] KAPI_EVT domain=kapi phase=mapping action=page id=exact_pages index=0 kva=ffff88e282bd8000 pa=0x0000000002bd8000 pfn=11224
+[  532.299401] KAPI_EVT domain=kapi phase=mapping action=page id=exact_pages index=1 kva=ffff88e282bd9000 pa=0x0000000002bd9000 pfn=11225
+[  532.299411] KAPI_EVT domain=kapi phase=mapping action=summary id=exact_pages kva=ffff88e282bd8000 bytes=4196 pages=2 physical_contiguous=yes
+[  532.299427] KAPI_EVT domain=kapi phase=page_allocator action=end
+[  532.299439] KAPI_EVT domain=kapi phase=slab action=begin
+[  532.299504] KAPI_EVT domain=kapi phase=slab action=alloc api=kmalloc id=slab_buf addr=ffff88e283cc5100 requested=100 actual=128 waste=28
+[  532.299524] KAPI_EVT domain=kapi phase=memory action=sample id=slab_buf bytes=16 data=4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b
+[  532.299535] KAPI_EVT domain=kapi phase=mapping action=page id=slab_buf index=0 kva=ffff88e283cc5100 pa=0x0000000003cc5100 pfn=15557
+[  532.299545] KAPI_EVT domain=kapi phase=mapping action=summary id=slab_buf kva=ffff88e283cc5100 bytes=128 pages=1 physical_contiguous=yes
+[  532.299611] KAPI_EVT domain=kapi phase=slab action=alloc api=kzalloc id=slab_context addr=ffff88e28a01e780 requested=144 actual=192 waste=48
+[  532.299633] KAPI_EVT domain=kapi phase=memory action=sample id=slab_context bytes=16 data=6d6d2d73747564792d636f6e74657874
+[  532.299644] KAPI_EVT domain=kapi phase=mapping action=page id=slab_context index=0 kva=ffff88e28a01e780 pa=0x000000000a01e780 pfn=40990
+[  532.299728] KAPI_EVT domain=kapi phase=mapping action=summary id=slab_context kva=ffff88e28a01e780 bytes=192 pages=1 physical_contiguous=yes
+[  532.299750] KAPI_EVT domain=kapi phase=slab action=end
+[  532.299762] KAPI_EVT domain=kapi phase=custom_cache action=begin
+[  532.299986] KAPI_EVT domain=kapi phase=custom_cache action=create api=kmem_cache_create id=custom_cache object_size=112
+[  532.300098] KAPI_EVT domain=kapi phase=custom_cache action=alloc api=kmem_cache_alloc id=custom_object_0 addr=ffff88e289fa0d80 flags=0xcafe
+[  532.300123] KAPI_EVT domain=kapi phase=custom_cache action=alloc api=kmem_cache_alloc id=custom_object_1 addr=ffff88e289fa0d00 flags=0xcafe
+[  532.300135] KAPI_EVT domain=kapi phase=custom_cache action=alloc api=kmem_cache_alloc id=custom_object_2 addr=ffff88e289fa0c80 flags=0xcafe
+[  532.300144] KAPI_EVT domain=kapi phase=custom_cache action=alloc api=kmem_cache_alloc id=custom_object_3 addr=ffff88e289fa0c00 flags=0xcafe
+[  532.300152] KAPI_EVT domain=kapi phase=custom_cache action=alloc api=kmem_cache_alloc id=custom_object_4 addr=ffff88e289fa0b80 flags=0xcafe
+[  532.300161] KAPI_EVT domain=kapi phase=custom_cache action=alloc api=kmem_cache_alloc id=custom_object_5 addr=ffff88e289fa0b00 flags=0xcafe
+[  532.300169] KAPI_EVT domain=kapi phase=custom_cache action=alloc api=kmem_cache_alloc id=custom_object_6 addr=ffff88e289fa0a80 flags=0xcafe
+[  532.300177] KAPI_EVT domain=kapi phase=custom_cache action=alloc api=kmem_cache_alloc id=custom_object_7 addr=ffff88e289fa0a00 flags=0xcafe
+[  532.300201] KAPI_EVT domain=kapi phase=memory action=sample id=custom_object_0 bytes=16 data=6163746976652d6f626a656374000000
+[  532.300212] KAPI_EVT domain=kapi phase=mapping action=page id=custom_object_0 index=0 kva=ffff88e289fa0d80 pa=0x0000000009fa0d80 pfn=40864
+[  532.300223] KAPI_EVT domain=kapi phase=mapping action=summary id=custom_object_0 kva=ffff88e289fa0d80 bytes=112 pages=1 physical_contiguous=yes
+[  532.300240] KAPI_EVT domain=kapi phase=custom_cache action=end
+[  532.300257] KAPI_EVT domain=kapi phase=vmalloc action=begin
+[  532.300354] KAPI_EVT domain=kapi phase=vmalloc action=alloc api=vmalloc id=vbuf addr=ffff9843c0159000
+[  532.300399] KAPI_EVT domain=kapi phase=memory action=sample id=vbuf bytes=16 data=5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a
+[  532.300442] KAPI_EVT domain=kapi phase=mapping action=page id=vbuf index=0 kva=ffff9843c0159000 struct_page=ffffe418000af680 pa=0x0000000002bda000 pfn=11226
+[  532.300475] KAPI_EVT domain=kapi phase=mapping action=page id=vbuf index=1 kva=ffff9843c015a000 struct_page=ffffe418000af6c0 pa=0x0000000002bdb000 pfn=11227
+[  532.300524] KAPI_EVT domain=kapi phase=mapping action=summary id=vbuf kva=ffff9843c0159000 bytes=4196 pages=2 physical_contiguous=yes
+[  532.300573] KAPI_EVT domain=kapi phase=vmalloc action=alloc api=vzalloc id=vzbuf addr=ffff9843c0479000
+[  532.300592] KAPI_EVT domain=kapi phase=memory action=sample id=vzbuf bytes=16 data=00000000000000000000000000000000
+[  532.300604] KAPI_EVT domain=kapi phase=mapping action=page id=vzbuf index=0 kva=ffff9843c0479000 struct_page=ffffe418000af700 pa=0x0000000002bdc000 pfn=11228
+[  532.300616] KAPI_EVT domain=kapi phase=mapping action=page id=vzbuf index=1 kva=ffff9843c047a000 struct_page=ffffe418000af740 pa=0x0000000002bdd000 pfn=11229
+[  532.300627] KAPI_EVT domain=kapi phase=mapping action=summary id=vzbuf kva=ffff9843c0479000 bytes=4196 pages=2 physical_contiguous=yes
+[  532.300642] KAPI_EVT domain=kapi phase=vmalloc action=end
+[  532.300720] KAPI_EVT domain=module phase=lifecycle action=ready
+[  532.435394] KAPI_EVT domain=kapi phase=cleanup action=begin
+[  532.435447] KAPI_EVT domain=kapi phase=cleanup action=free api=vfree id=vzbuf addr=ffff9843c0479000
+[  532.435507] KAPI_EVT domain=kapi phase=cleanup action=free api=vfree id=vbuf addr=ffff9843c0159000
+[  532.435557] KAPI_EVT domain=kapi phase=cleanup action=free api=kmem_cache_free id=custom_object_0 addr=ffff88e289fa0d80
+[  532.435593] KAPI_EVT domain=kapi phase=cleanup action=free api=kmem_cache_free id=custom_object_1 addr=ffff88e289fa0d00
+[  532.435603] KAPI_EVT domain=kapi phase=cleanup action=free api=kmem_cache_free id=custom_object_2 addr=ffff88e289fa0c80
+[  532.435611] KAPI_EVT domain=kapi phase=cleanup action=free api=kmem_cache_free id=custom_object_3 addr=ffff88e289fa0c00
+[  532.435619] KAPI_EVT domain=kapi phase=cleanup action=free api=kmem_cache_free id=custom_object_4 addr=ffff88e289fa0b80
+[  532.435627] KAPI_EVT domain=kapi phase=cleanup action=free api=kmem_cache_free id=custom_object_5 addr=ffff88e289fa0b00
+[  532.435634] KAPI_EVT domain=kapi phase=cleanup action=free api=kmem_cache_free id=custom_object_6 addr=ffff88e289fa0a80
+[  532.435642] KAPI_EVT domain=kapi phase=cleanup action=free api=kmem_cache_free id=custom_object_7 addr=ffff88e289fa0a00
+[  532.435790] KAPI_EVT domain=kapi phase=cleanup action=destroy api=kmem_cache_destroy id=custom_cache
+[  532.439219] KAPI_EVT domain=kapi phase=cleanup action=free api=kfree_sensitive id=slab_context addr=ffff88e28a01e780
+[  532.439274] KAPI_EVT domain=kapi phase=cleanup action=free api=kfree id=slab_buf addr=ffff88e283cc5100
+[  532.439311] KAPI_EVT domain=kapi phase=cleanup action=free api=free_pages_exact id=exact_pages addr=ffff88e282bd8000
+[  532.439406] KAPI_EVT domain=kapi phase=cleanup action=free api=__free_pages id=page_desc addr=ffff88e28a138000 order=3
+[  532.439443] KAPI_EVT domain=kapi phase=cleanup action=free api=free_pages id=order_pages addr=ffff88e289740000 order=3
+[  532.439474] KAPI_EVT domain=kapi phase=cleanup action=free api=free_page id=zero_page addr=ffff88e2860d6000
+[  532.439502] KAPI_EVT domain=kapi phase=cleanup action=free api=free_page id=one_page addr=ffff88e28971e000
+[  532.439561] KAPI_EVT domain=kapi phase=cleanup action=end
+[  532.439575] KAPI_EVT domain=module phase=lifecycle action=run_end

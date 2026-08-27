@@ -1,0 +1,44 @@
+[metadata]
+workload_pid=517
+qedu_irq=10
+trace_clock=mono
+kernel=7.2.0-rc3-g1229e2e57a5c
+module=/mnt/host/io/./qedu.ko
+
+[sysfs]
+tx=520
+rx=515
+timeout_ms=1000
+
+[debugfs]
+qedu debug status
+=================
+pci_device: 0000:00:05.0
+vendor_device: 1234:11e8
+bar0_start: 0x00000000fea00000
+bar0_length: 0x0000000000100000
+bar0_mapping: ffffa80080e00000
+irq: 10
+misc_minor: 258
+
+I/O
+---
+tx_bytes_to_user: 520
+rx_bytes_from_user: 515
+result_size: 512
+timeout_ms: 1000
+
+DMA
+---
+cpu_address: ffff8bf64f197000
+device_address: 0x000000000f197000
+buffer_size: 4096
+completed_events: 0x3
+
+[trace_stats]
+cpu0_overrun=0
+cpu0_dropped=0
+cpu0_entries=153
+cpu1_overrun=0
+cpu1_dropped=0
+cpu1_entries=202

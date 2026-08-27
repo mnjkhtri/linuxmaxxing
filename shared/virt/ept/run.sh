@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "$0")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/../../.." && pwd)"
 CAPTURE_ROOT="$REPO_ROOT/shared/_captures"
 TARGET_FILE="$SCRIPT_DIR/../cloudlab"
-REMOTE_DIR="kernel-oops-virt-ept"
+REMOTE_DIR="linuxmaxxing-virt-ept"
 EPT_DIR="$REMOTE_DIR/shared/virt/ept"
 TARGET="$(sed -n '1{/^[[:space:]]*#/d; s/^[[:space:]]*//; s/[[:space:]]*$//; p; q}' "$TARGET_FILE")"
 [ -n "$TARGET" ] || { echo "error: empty CloudLab target" >&2; exit 1; }
@@ -140,7 +140,7 @@ for _ in $(seq 1 40); do
 done
 grep -q '^LX_READY experiment=virt-ept ' captures/virt-ept-observer.log || { cat captures/virt-ept-observer.log >&2; exit 1; }
 
-instance_name="kernel-oops-virt-ept-$$"
+instance_name="linuxmaxxing-virt-ept-$$"
 mkdir "$trace_dir/instances/$instance_name"
 trace_instance="$trace_dir/instances/$instance_name"
 grep -qw mono "$trace_instance/trace_clock"

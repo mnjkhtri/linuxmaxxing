@@ -1,0 +1,179 @@
+=====================================================================================================================================
+
+
+ssh -o ServerAliveInterval=60 -o ServerAliveCountMax=10 mnjkhtri@c220g5-110516.wisc.cloudlab.us
+set -e
+
+sudo mkdir -p /mydata/work
+sudo chown $(whoami):$(whoami) /mydata/work
+ln -s /mydata/work /work || true
+
+DEPS=(
+  build-essential libncurses-dev bison flex bc dwarves pkg-config git
+  libssl-dev libelf-dev
+  clang-12 llvm-12 libclang-12-dev
+  qemu-utils libglib2.0-dev libpixman-1-dev ninja-build
+  libcap-ng-dev libattr1-dev libslirp-dev
+  python3 python3-pip bridge-utils net-tools
+  cloud-image-utils mtools
+  linux-tools-common linux-tools-generic cpufrequtils
+  libguestfs-tools
+)
+sudo apt update
+sudo apt install -y "${DEPS[@]}"
+
+cd /work
+git clone https://github.com/acsl-technion/hyperturtle.git
+cd hyperturtle
+sed -i 's|git@github.com:|https://github.com/|g' .gitmodules
+git submodule sync --recursive
+git submodule update --init --recursive
+
+cd /work
+git clone https://github.com/libbpf/libbpf.git
+cd libbpf
+git checkout v0.8.0
+cd src
+make -j$(nproc)
+sudo make install prefix=/usr
+echo "/usr/lib64" | sudo tee /etc/ld.so.conf.d/lib64.conf
+sudo ldconfig
+export PKG_CONFIG_PATH=/usr/lib64/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}
+
+cd /work/hyperturtle/hyperturtle-linux
+make hyperturtle_defconfig
+scripts/config --file .config --enable CONFIG_ATA
+scripts/config --file .config --enable CONFIG_SATA_AHCI
+scripts/config --file .config --enable CONFIG_SCSI_SAS_ATTRS
+scripts/config --file .config --enable CONFIG_SCSI_MPT3SAS
+scripts/config --file .config --enable CONFIG_MEGARAID_SAS
+scripts/config --file .config --enable CONFIG_IXGBE
+scripts/config --file .config --enable CONFIG_I40E
+scripts/config --file .config --enable CONFIG_DEBUG_INFO_BTF
+scripts/config --file .config --enable CONFIG_DEBUG_INFO
+scripts/config --file .config --enable CONFIG_BPF_SYSCALL
+make olddefconfig
+make -j$(nproc)
+sudo make install
+sudo make modules_install
+sudo sed -i 's/GRUB_DEFAULT=.*/GRUB_DEFAULT="Advanced options for Ubuntu>Ubuntu, with Linux 5.16.0+"/' /etc/default/grub
+sudo sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/GRUB_CMDLINE_LINUX_DEFAULT="idle=poll nopti /' /etc/default/grub
+sudo update-grub
+
+# <apply your QEMU patch script here>
+
+cd /work/hyperturtle/hyperturtle-qemu
+export PKG_CONFIG_PATH=/usr/lib64/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}
+mkdir -p build
+cd build
+../configure --target-list=x86_64-softmmu
+make -j$(nproc)
+
+sudo sed -i '/GRUB_CMDLINE_LINUX_DEFAULT/ s/"$/ nosmt"/' /etc/default/grub
+sudo update-grub
+
+=====================================================================================================================================
+
+
+1. OS and Hardware Verification
+
+# Verify Ubuntu 20.04.6 LTS is running
+lsb_release -a
+
+# Verify Simultaneous Multithreading (SMT) is disabled (Should output 'off')
+cat /sys/devices/system/cpu/smt/control
+
+# Check current CPU frequency (Should be pinned around ~2.1GHz)
+cpupower frequency-info | grep "current CPU frequency"
+
+
+2. Kernel and Boot Parameters
+
+# Verify you are booted into the custom HyperTurtle kernel (Not a generic Ubuntu kernel)
+uname -r
+
+# Verify custom BPF configs were applied to this kernel
+grep CONFIG_BPF /boot/config-$(uname -r)
+
+# Check that 'idle=poll' and 'nopti' are present in the boot parameters
+cat /proc/cmdline | grep -o -E 'idle=poll|nopti'
+
+
+3. Virtualization and Network Modules
+
+# Check KVM Pause Loop Exiting (PLE) gap (Should output '0')
+cat /sys/module/kvm_intel/parameters/ple_gap
+
+# Check vhost_net Zero Copy Tx (Should output '1')
+cat /sys/module/vhost_net/parameters/experimental_zcopytx
+
+
+4. libbpf Installation
+
+# Check the dynamic linker cache to ensure libbpf is accessible
+ldconfig -p | grep libbpf
+
+# Verify the libbpf development headers are installed
+ls -l /usr/include/bpf/bpf.h || ls -l /usr/local/include/bpf/bpf.h
+
+
+5. Custom QEMU Build
+
+# Verify the custom QEMU binary compiled successfully for the right target
+/work/hyperturtle/hyperturtle-qemu/build/qemu-system-x86_64 --version
+
+# Verify QEMU is dynamically linked against your custom libbpf (CRITICAL)
+ldd /work/hyperturtle/hyperturtle-qemu/build/qemu-system-x86_64 | grep libbpf
+
+
+=====================================================================================================================================
+
+
+#!/bin/bash
+set -e
+
+# 1. Define Paths
+SYS_BPF_HEADER="/usr/include/bpf/bpf_helper_defs.h"
+HT_BPF_DIR="/work/hyperturtle/hyperturtle-linux/tools/lib/bpf"
+HT_BPF_HEADER="$HT_BPF_DIR/bpf_helper_defs.h"
+HELPER_DEF="static long (*bpf_probe_read_hyperupcall)(void *dst, __u32 size, const void *unsafe_ptr) = (void *) 180;"
+QEMU_FILE="/work/hyperturtle/hyperturtle-qemu/accel/kvm/kvm-all.c"
+
+echo "--- Patching BPF Headers ---"
+# Patch System Header
+if ! grep -q "bpf_probe_read_hyperupcall" "$SYS_BPF_HEADER"; then
+    echo -e "\n$HELPER_DEF" | sudo tee -a "$SYS_BPF_HEADER"
+    echo "[OK] System BPF header patched."
+else
+    echo "[SKIP] System BPF header already patched."
+fi
+
+# Ensure HyperTurtle BPF directory exists and patch header
+mkdir -p "$HT_BPF_DIR"
+if [ ! -f "$HT_BPF_HEADER" ] || ! grep -q "bpf_probe_read_hyperupcall" "$HT_BPF_HEADER"; then
+    echo -e "\n$HELPER_DEF" | sudo tee -a "$HT_BPF_HEADER"
+    echo "[OK] HyperTurtle BPF header patched."
+else
+    echo "[SKIP] HyperTurtle BPF header already patched."
+fi
+
+echo "--- Patching QEMU Source ---"
+# Python one-liner handles the NULL check safely
+python3 -c "
+import os
+path = '$QEMU_FILE'
+if os.path.exists(path):
+    with open(path, 'r') as f: content = f.read()
+    target = 'if (nc->info->type != NET_CLIENT_DRIVER_TAP)'
+    replacement = 'if (nc == NULL) return 0;\n    ' + target
+    if target in content and 'nc == NULL' not in content:
+        with open(path, 'w') as f: f.write(content.replace(target, replacement))
+        print('[OK] QEMU source patched.')
+    else:
+        print('[SKIP] QEMU already patched or target line missing.')
+else:
+    print('[ERROR] QEMU file not found!')
+"
+
+
+=====================================================================================================================================

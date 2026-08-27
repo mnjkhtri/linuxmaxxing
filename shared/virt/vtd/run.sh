@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REMOTE_ROOT="kernel-oops-virt-vtd"
+REMOTE_ROOT="linuxmaxxing-virt-vtd"
 
 # The local entry point stages the current sources, starts the remote workload, and fetches its capture.
 dispatch_to_cloudlab()
@@ -64,15 +64,28 @@ dispatch_to_cloudlab()
             any(.[]; .kind == "irte_activate") and
             any(.[]; .kind == "interrupt_remap_msi_message") and
             any(.[]; .kind == "kvm_pi_irte_update" and .state.interrupt.posted == true) and
+            .[0].state.hooks.pi_wakeup == true and
+            .[0].state.hooks.pi_wakeup_exit == true and
+            .[0].state.hooks.pi_vcpu_wake_up == true and
+            any(.[]; .kind == "kvm_pi_wakeup" and (.state.interrupt.wakeup_count | type) == "number") and
+        any(.[]; .kind == "iommu_domain_attach_exit" and .event_info.result == 0) and
+        any(.[]; .kind == "iommu_iotlb_invalidate") and
+        any(.[]; .kind == "iommu_qi_complete" and .event_info.result == 0) and
+        any(.[]; .kind == "workload_begin") and
+        any(.[]; .kind == "workload_end") and
         .[-1].state.ringbuf_dropped == 0 and
             .[-1].state.short_records == 0
     ' "$repo_root/shared/_captures/virt-vtd.eBPF.ndjson" >/dev/null || {
-        echo "capture validation failed: Phase-B evidence is incomplete" >&2
+        echo "capture validation failed: Phase-A evidence is incomplete" >&2
         exit 1
     }
     jq -e -s '
             .[0].kind == "capture_meta" and
             .[-1].kind == "capture_summary" and
+            any(.[]; .kind == "guest_ixgbe_diag_entry") and
+            any(.[]; .kind == "guest_ixgbe_intr_test_entry") and
+            any(.[]; .kind == "guest_ixgbe_intr_test_exit") and
+            any(.[]; .kind == "guest_ixgbe_loopback_test_entry") and
             any(.[]; .kind == "guest_ixgbe_run_loopback_entry") and
             any(.[]; .kind == "guest_ixgbe_open") and
             any(.[]; .kind == "guest_ixgbe_close") and
@@ -81,8 +94,16 @@ dispatch_to_cloudlab()
             any(.[]; .kind == "guest_ixgbe_xmit_exit" and .event_info.result == 0) and
             any(.[]; .kind == "guest_ixgbe_clean_exit" and .state.dma.completed_descriptors >= 64) and
             any(.[]; .kind == "guest_ixgbe_run_loopback_exit" and .event_info.result == 0) and
+            any(.[]; .kind == "guest_ixgbe_loopback_test_exit" and .event_info.result == 0) and
+            all(.[] | select(.kind == "guest_irq_handler_entry"); .state.execution.episode_id > 0 and (.context.cpu | type) == "number") and
+            any(.[]; .kind == "guest_softirq_raise" and .state.execution.episode_id > 0) and
+            any(.[]; .kind == "guest_softirq_entry" and .state.execution.episode_id > 0) and
+            any(.[]; .kind == "guest_napi_poll" and .state.execution.device != "" and (.state.execution.napi_work | type) == "number") and
+            any(.[]; .kind == "guest_softirq_exit" and .state.execution.episode_id > 0) and
             ([.[] | select(.kind == "guest_irq_handler_entry")] | length) > 1 and
             ([.[] | select(.kind == "guest_irq_handler_exit")] | length) == ([.[] | select(.kind == "guest_irq_handler_entry")] | length) and
+            any(.[]; .kind == "workload_begin") and
+            any(.[]; .kind == "workload_end") and
             .[-1].state.ringbuf_dropped == 0 and
             .[-1].state.short_records == 0
     ' "$repo_root/shared/_captures/virt-vtd.guest.ndjson" >/dev/null || {
@@ -188,7 +209,7 @@ monotonic_time_ns()
     printf '%s%s\n' "$seconds" "${fraction:0:9}"
 }
 
-# Phase-A records preserve ownership and guest-enumeration facts that do not originate from eBPF.
+# Assignment-prelude records preserve ownership and guest-enumeration facts that do not originate from eBPF.
 record_assignment()
 {
     local kind="$1"
@@ -239,7 +260,7 @@ record_assignment()
             msix_present="$guest_msix"
             ;;
         *)
-            echo "error: unknown Phase-A observation: $kind" >&2
+            echo "error: unknown assignment-prelude observation: $kind" >&2
             return 1
             ;;
     esac
@@ -270,7 +291,7 @@ record_assignment()
             seq: $seq,
             time_ns: $time_ns,
             clock: "monotonic",
-            event_info: {phase: "A", observation: $kind},
+            event_info: {phase: "prelude", observation: $kind},
             context: {pid: null, tid: null, cpu: null, comm: null},
             state: {
                 assignment: {
@@ -300,7 +321,7 @@ assert_management_path()
     [[ "$(pci_driver "$MANAGEMENT_BDF")" == "$MANAGEMENT_DRIVER" ]] || return 1
 }
 
-# Phase B starts observing before any ownership or IOMMU state changes.
+# The observer starts during the assignment prelude so the complete assignment lifecycle is captured.
 start_observer()
 {
     local observer_ready=0
@@ -469,6 +490,11 @@ finish_observation()
         any(.[]; .kind == "irte_activate") and
         any(.[]; .kind == "interrupt_remap_msi_message") and
         any(.[]; .kind == "kvm_pi_irte_update" and .state.interrupt.posted == true) and
+        any(.[]; .kind == "iommu_domain_attach_exit" and .event_info.result == 0) and
+        any(.[]; .kind == "iommu_iotlb_invalidate") and
+        any(.[]; .kind == "iommu_qi_complete" and .event_info.result == 0) and
+        any(.[]; .kind == "workload_begin") and
+        any(.[]; .kind == "workload_end") and
         .[-1].state.ringbuf_dropped == 0 and
         .[-1].state.short_records == 0
     ' "$ebpf_capture" >/dev/null
@@ -575,7 +601,7 @@ GUEST
         return 1
     }
 
-    echo "Phase A guest proof: host $bdf -> guest $guest_bdf, driver=$guest_driver, interface=${guest_interface:-not-created}" >&2
+    echo "Assignment prelude guest proof: host $bdf -> guest $guest_bdf, driver=$guest_driver, interface=${guest_interface:-not-created}" >&2
 }
 
 # One bounded ixgbe offline loopback run supplies guest interface, DMA-API, descriptor, completion, and IRQ evidence.
@@ -634,8 +660,28 @@ if [ -z "$observer_pid" ] || ! grep -q '^LX_READY experiment=virt-vtd observer=g
     sed -n '1,160p' "$status_file" >&2
     exit 1
 fi
+set_guest_gate()
+{
+    enabled="$1"
+    signal=USR2
+    [ "$enabled" = 1 ] && signal=USR1
+    expected="LX_GATE enabled=$enabled"
+    previous=$(grep -c "^$expected$" "$status_file" || true)
+    sudo -n kill -"$signal" "$observer_pid"
+    for _ in $(seq 1 100); do
+        if [ "$(grep -c "^$expected$" "$status_file" || true)" -gt "$previous" ]; then
+            return 0
+        fi
+        sudo -n kill -0 "$observer_pid" 2>/dev/null || break
+        sleep 0.05
+    done
+    echo "guest observer did not acknowledge workload marker $enabled" >&2
+    return 1
+}
+set_guest_gate 1
 sudo -n ip link set dev "$GUEST_INTERFACE" up
 sudo -n ethtool -t "$GUEST_INTERFACE" offline > "$workload" 2>&1 || true
+set_guest_gate 0
 sudo -n kill -INT "$observer_pid"
 wait "$observer_job"
 observer_pid=""
@@ -674,6 +720,8 @@ GUEST
         any(.[]; .kind == "guest_ixgbe_run_loopback_exit" and .event_info.result == 0) and
         ([.[] | select(.kind == "guest_irq_handler_entry")] | length) > 1 and
         ([.[] | select(.kind == "guest_irq_handler_exit")] | length) == ([.[] | select(.kind == "guest_irq_handler_entry")] | length) and
+        any(.[]; .kind == "workload_begin") and
+        any(.[]; .kind == "workload_end") and
         .[-1].state.ringbuf_dropped == 0 and
         .[-1].state.short_records == 0
     ' "$guest_capture" >/dev/null || {

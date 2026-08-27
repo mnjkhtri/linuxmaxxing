@@ -1,0 +1,298 @@
+VT-d setup
+
+[host]
+hostname=node-0.mnjkhtri-313786.dvh-repro-pg0.wisc.cloudlab.us
+os=Ubuntu 24.04.4 LTS
+kernel=6.8.0-138-generic
+cmdline=BOOT_IMAGE=/boot/vmlinuz-6.8.0-138-generic root=UUID=ccb0832d-c80e-430f-b248-d117889f1992 emulabcnet=00:5d:73:ef:d5:de ro console=ttyS0,115200
+qemu_version=QEMU emulator version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)
+kvm_device=/dev/kvm
+dmar_present=true
+iommu_groups_present=true
+
+[management_device]
+bdf=0000:3b:00.0
+interface=eno1
+driver=ixgbe
+iommu_group=5
+default_route_interface=eno1
+protected=true
+
+[candidate_device]
+bdf=0000:3b:00.1
+interface=eno2
+driver=ixgbe
+iommu_group=6
+reset_methods=flr
+vendor=0x8086
+device=0x1563
+vendor_device=8086:1563
+name=Ethernet controller: Intel Corporation Ethernet Controller X550 (rev 01)
+selection=unused_no_address_no_route_no_master_flr_single_device_group
+
+[tracepoints]
+iommu_map=true
+iommu_unmap=true
+iommu_attach_device_to_domain=true
+iommu_io_page_fault=true
+
+[iommu_groups]
+group=0 bdf=0000:5d:00.0
+group=1 bdf=0000:5e:00.0
+group=10 bdf=0000:ae:02.0
+group=100 bdf=0000:85:08.0
+group=100 bdf=0000:85:08.1
+group=100 bdf=0000:85:08.2
+group=100 bdf=0000:85:08.3
+group=100 bdf=0000:85:08.4
+group=100 bdf=0000:85:08.5
+group=100 bdf=0000:85:08.6
+group=100 bdf=0000:85:08.7
+group=101 bdf=0000:85:09.0
+group=101 bdf=0000:85:09.1
+group=102 bdf=0000:85:0e.0
+group=102 bdf=0000:85:0e.1
+group=102 bdf=0000:85:0e.2
+group=102 bdf=0000:85:0e.3
+group=102 bdf=0000:85:0e.4
+group=102 bdf=0000:85:0e.5
+group=102 bdf=0000:85:0e.6
+group=102 bdf=0000:85:0e.7
+group=103 bdf=0000:85:0f.0
+group=103 bdf=0000:85:0f.1
+group=104 bdf=0000:85:1d.0
+group=104 bdf=0000:85:1d.1
+group=104 bdf=0000:85:1d.2
+group=104 bdf=0000:85:1d.3
+group=105 bdf=0000:85:1e.0
+group=105 bdf=0000:85:1e.1
+group=105 bdf=0000:85:1e.2
+group=105 bdf=0000:85:1e.3
+group=105 bdf=0000:85:1e.4
+group=105 bdf=0000:85:1e.5
+group=105 bdf=0000:85:1e.6
+group=106 bdf=0000:ae:05.0
+group=107 bdf=0000:ae:05.2
+group=108 bdf=0000:ae:05.4
+group=109 bdf=0000:ae:08.0
+group=11 bdf=0000:ae:03.0
+group=110 bdf=0000:ae:09.0
+group=111 bdf=0000:ae:0a.0
+group=112 bdf=0000:ae:0a.1
+group=113 bdf=0000:ae:0a.2
+group=114 bdf=0000:ae:0a.3
+group=115 bdf=0000:ae:0a.4
+group=116 bdf=0000:ae:0a.5
+group=117 bdf=0000:ae:0a.6
+group=118 bdf=0000:ae:0a.7
+group=119 bdf=0000:ae:0b.0
+group=12 bdf=0000:80:04.0
+group=120 bdf=0000:ae:0b.1
+group=121 bdf=0000:ae:0b.2
+group=122 bdf=0000:ae:0b.3
+group=123 bdf=0000:ae:0c.0
+group=124 bdf=0000:ae:0c.1
+group=125 bdf=0000:ae:0c.2
+group=126 bdf=0000:ae:0c.3
+group=127 bdf=0000:ae:0c.4
+group=128 bdf=0000:ae:0c.5
+group=129 bdf=0000:ae:0c.6
+group=13 bdf=0000:80:04.1
+group=130 bdf=0000:ae:0c.7
+group=131 bdf=0000:ae:0d.0
+group=132 bdf=0000:ae:0d.1
+group=133 bdf=0000:ae:0d.2
+group=134 bdf=0000:ae:0d.3
+group=135 bdf=0000:d7:05.0
+group=136 bdf=0000:d7:05.2
+group=137 bdf=0000:d7:05.4
+group=138 bdf=0000:d7:0e.0
+group=139 bdf=0000:d7:0e.1
+group=14 bdf=0000:80:04.2
+group=140 bdf=0000:d7:0f.0
+group=141 bdf=0000:d7:0f.1
+group=142 bdf=0000:d7:12.0
+group=143 bdf=0000:d7:12.1
+group=143 bdf=0000:d7:12.2
+group=144 bdf=0000:d7:15.0
+group=145 bdf=0000:d7:16.0
+group=145 bdf=0000:d7:16.4
+group=15 bdf=0000:80:04.3
+group=16 bdf=0000:80:04.4
+group=17 bdf=0000:80:04.5
+group=18 bdf=0000:80:04.6
+group=19 bdf=0000:80:04.7
+group=2 bdf=0000:5e:00.1
+group=20 bdf=0000:00:00.0
+group=21 bdf=0000:00:04.0
+group=22 bdf=0000:00:04.1
+group=23 bdf=0000:00:04.2
+group=24 bdf=0000:00:04.3
+group=25 bdf=0000:00:04.4
+group=26 bdf=0000:00:04.5
+group=27 bdf=0000:00:04.6
+group=28 bdf=0000:00:04.7
+group=29 bdf=0000:00:05.0
+group=3 bdf=0000:3a:00.0
+group=30 bdf=0000:00:05.2
+group=31 bdf=0000:00:05.4
+group=32 bdf=0000:00:08.0
+group=33 bdf=0000:00:08.1
+group=34 bdf=0000:00:08.2
+group=35 bdf=0000:00:11.0
+group=35 bdf=0000:00:11.5
+group=36 bdf=0000:00:14.0
+group=36 bdf=0000:00:14.2
+group=37 bdf=0000:00:16.0
+group=37 bdf=0000:00:16.1
+group=37 bdf=0000:00:16.4
+group=38 bdf=0000:00:1c.0
+group=39 bdf=0000:00:1c.4
+group=4 bdf=0000:3a:02.0
+group=40 bdf=0000:00:1f.0
+group=40 bdf=0000:00:1f.2
+group=40 bdf=0000:00:1f.5
+group=41 bdf=0000:02:00.0
+group=41 bdf=0000:03:00.0
+group=42 bdf=0000:17:05.0
+group=43 bdf=0000:17:05.2
+group=44 bdf=0000:17:05.4
+group=45 bdf=0000:17:08.0
+group=45 bdf=0000:17:08.1
+group=45 bdf=0000:17:08.2
+group=45 bdf=0000:17:08.3
+group=45 bdf=0000:17:08.4
+group=45 bdf=0000:17:08.5
+group=45 bdf=0000:17:08.6
+group=45 bdf=0000:17:08.7
+group=46 bdf=0000:17:09.0
+group=46 bdf=0000:17:09.1
+group=47 bdf=0000:17:0e.0
+group=47 bdf=0000:17:0e.1
+group=47 bdf=0000:17:0e.2
+group=47 bdf=0000:17:0e.3
+group=47 bdf=0000:17:0e.4
+group=47 bdf=0000:17:0e.5
+group=47 bdf=0000:17:0e.6
+group=47 bdf=0000:17:0e.7
+group=48 bdf=0000:17:0f.0
+group=48 bdf=0000:17:0f.1
+group=49 bdf=0000:17:1d.0
+group=49 bdf=0000:17:1d.1
+group=49 bdf=0000:17:1d.2
+group=49 bdf=0000:17:1d.3
+group=5 bdf=0000:3b:00.0
+group=50 bdf=0000:17:1e.0
+group=50 bdf=0000:17:1e.1
+group=50 bdf=0000:17:1e.2
+group=50 bdf=0000:17:1e.3
+group=50 bdf=0000:17:1e.4
+group=50 bdf=0000:17:1e.5
+group=50 bdf=0000:17:1e.6
+group=51 bdf=0000:3a:05.0
+group=52 bdf=0000:3a:05.2
+group=53 bdf=0000:3a:05.4
+group=54 bdf=0000:3a:08.0
+group=55 bdf=0000:3a:09.0
+group=56 bdf=0000:3a:0a.0
+group=57 bdf=0000:3a:0a.1
+group=58 bdf=0000:3a:0a.2
+group=59 bdf=0000:3a:0a.3
+group=6 bdf=0000:3b:00.1
+group=60 bdf=0000:3a:0a.4
+group=61 bdf=0000:3a:0a.5
+group=62 bdf=0000:3a:0a.6
+group=63 bdf=0000:3a:0a.7
+group=64 bdf=0000:3a:0b.0
+group=65 bdf=0000:3a:0b.1
+group=66 bdf=0000:3a:0b.2
+group=67 bdf=0000:3a:0b.3
+group=68 bdf=0000:3a:0c.0
+group=69 bdf=0000:3a:0c.1
+group=7 bdf=0000:3c:00.0
+group=70 bdf=0000:3a:0c.2
+group=71 bdf=0000:3a:0c.3
+group=72 bdf=0000:3a:0c.4
+group=73 bdf=0000:3a:0c.5
+group=74 bdf=0000:3a:0c.6
+group=75 bdf=0000:3a:0c.7
+group=76 bdf=0000:3a:0d.0
+group=77 bdf=0000:3a:0d.1
+group=78 bdf=0000:3a:0d.2
+group=79 bdf=0000:3a:0d.3
+group=8 bdf=0000:d7:00.0
+group=80 bdf=0000:5d:05.0
+group=81 bdf=0000:5d:05.2
+group=82 bdf=0000:5d:05.4
+group=83 bdf=0000:5d:0e.0
+group=84 bdf=0000:5d:0e.1
+group=85 bdf=0000:5d:0f.0
+group=86 bdf=0000:5d:0f.1
+group=87 bdf=0000:5d:12.0
+group=88 bdf=0000:5d:12.1
+group=88 bdf=0000:5d:12.2
+group=89 bdf=0000:5d:15.0
+group=9 bdf=0000:d8:00.0
+group=9 bdf=0000:d8:00.1
+group=9 bdf=0000:d8:00.2
+group=9 bdf=0000:d8:00.3
+group=9 bdf=0000:d8:00.4
+group=9 bdf=0000:d8:00.5
+group=9 bdf=0000:d8:00.6
+group=9 bdf=0000:d8:00.7
+group=90 bdf=0000:5d:16.0
+group=90 bdf=0000:5d:16.4
+group=91 bdf=0000:80:05.0
+group=92 bdf=0000:80:05.2
+group=93 bdf=0000:80:05.4
+group=94 bdf=0000:80:08.0
+group=95 bdf=0000:80:08.1
+group=96 bdf=0000:80:08.2
+group=97 bdf=0000:85:05.0
+group=98 bdf=0000:85:05.2
+group=99 bdf=0000:85:05.4
+
+[pci]
+0000:3b:00.0 Ethernet controller [0200]: Intel Corporation Ethernet Controller X550 [8086:1563] (rev 01)
+	DeviceName: LOM Port 1
+	Subsystem: Cisco Systems Inc Ethernet Controller X550 [1137:01a3]
+	Kernel driver in use: ixgbe
+	Kernel modules: ixgbe
+0000:3b:00.1 Ethernet controller [0200]: Intel Corporation Ethernet Controller X550 [8086:1563] (rev 01)
+	DeviceName: LOM Port 2
+	Subsystem: Cisco Systems Inc Ethernet Controller X550 [1137:01a3]
+	Kernel driver in use: ixgbe
+	Kernel modules: ixgbe
+
+[network]
+lo               UNKNOWN        00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP> 
+enp216s0f0np0    DOWN           bc:97:e1:20:56:e0 <BROADCAST,MULTICAST> 
+enp216s0f1np1    DOWN           bc:97:e1:20:56:e1 <BROADCAST,MULTICAST> 
+enp216s0f2np0    DOWN           bc:97:e1:20:56:e2 <BROADCAST,MULTICAST> 
+enp216s0f3np1    DOWN           bc:97:e1:20:56:e3 <BROADCAST,MULTICAST> 
+enp216s0f4np0    DOWN           bc:97:e1:20:56:e4 <BROADCAST,MULTICAST> 
+enp216s0f5np1    DOWN           bc:97:e1:20:56:e5 <BROADCAST,MULTICAST> 
+enp216s0f6np0    DOWN           bc:97:e1:20:56:e6 <BROADCAST,MULTICAST> 
+enp216s0f7np1    DOWN           bc:97:e1:20:56:e7 <BROADCAST,MULTICAST> 
+enp94s0f0np0     DOWN           3c:fd:fe:b0:f0:38 <BROADCAST,MULTICAST> 
+enp94s0f1np1     DOWN           3c:fd:fe:b0:f0:39 <BROADCAST,MULTICAST> 
+eno1             UP             00:5d:73:ef:d5:de <BROADCAST,MULTICAST,UP,LOWER_UP> 
+eno2             DOWN           00:5d:73:ef:d5:df <BROADCAST,MULTICAST> 
+lo               UNKNOWN        127.0.0.1/8 ::1/128 
+enp216s0f0np0    DOWN           
+enp216s0f1np1    DOWN           
+enp216s0f2np0    DOWN           
+enp216s0f3np1    DOWN           
+enp216s0f4np0    DOWN           
+enp216s0f5np1    DOWN           
+enp216s0f6np0    DOWN           
+enp216s0f7np1    DOWN           
+enp94s0f0np0     DOWN           
+enp94s0f1np1     DOWN           
+eno1             UP             128.105.144.21/22 metric 1024 fe80::25d:73ff:feef:d5de/64 
+eno2             DOWN           
+default via 128.105.144.1 dev eno1 proto dhcp src 128.105.144.21 metric 1024 
+128.104.222.8 via 128.105.144.1 dev eno1 proto dhcp src 128.105.144.21 metric 1024 
+128.104.222.9 via 128.105.144.1 dev eno1 proto dhcp src 128.105.144.21 metric 1024 
+128.105.144.0/22 dev eno1 proto kernel scope link src 128.105.144.21 metric 1024 
+128.105.144.1 dev eno1 proto dhcp scope link src 128.105.144.21 metric 1024 

@@ -13,6 +13,8 @@ qemu/seed.iso
 Module.symvers
 modules.order
 shared/_captures/
+!shared/_captures/
+!shared/_captures/*
 shared/_exps/
 qemu/*.raw
 shared/virt/cloudlab
@@ -29,3 +31,7 @@ shared/scheduler/cfs
 shared/scheduler/workload_fork
 shared/io/workload_qedu
 shared/memory/workload_mm
+
+temp-research/twitter/cookies.json
+temp-research/twitter/data/*.db-shm
+temp-research/twitter/data/*.db-wal

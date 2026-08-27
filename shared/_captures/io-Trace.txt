@@ -1,0 +1,367 @@
+# tracer: nop
+#
+# entries-in-buffer/entries-written: 355/355   #P:2
+#
+#                                _-----=> irqs-off/BH-disabled
+#                               / _----=> need-resched
+#                              | / _---=> hardirq/softirq
+#                              || / _--=> preempt-depth
+#                              ||| / _-=> migrate-disable
+#                              |||| /     delay
+#           TASK-PID     CPU#  |||||  TIMESTAMP  FUNCTION
+#              | |         |   |||||     |         |
+          insmod-495     [001] .....  2164.572616: qedu_probe_stage: device=0000:00:05.0 stage=PROBE_BEGIN api=qedu_probe resource=pci_driver_probe address=0xffff8bf641995000 size=1944 result=0
+          insmod-495     [001] .....  2164.577984: qedu_probe_stage: device=0000:00:05.0 stage=DEVICE_STATE_READY api=devm_kzalloc resource=struct_qedu_dev address=0xffff8bf645a8ba38 size=320 result=0
+          insmod-495     [001] .....  2164.837684: qedu_probe_stage: device=0000:00:05.0 stage=PCI_ENABLED api=pci_enable_device resource=struct_pci_dev address=0xffff8bf641995000 size=0 result=0
+          insmod-495     [001] .....  2164.838326: qedu_probe_stage: device=0000:00:05.0 stage=BAR_REGIONS_CLAIMED api=pci_request_regions resource=pci_bar_regions address=0x00000000fea00000 size=1048576 result=0
+          insmod-495     [001] .....  2164.889804: qedu_probe_stage: device=0000:00:05.0 stage=BAR0_MAPPED api=pci_iomap resource=bar0_mmio_mapping address=0xffffa80080e00000 size=1048576 result=0
+          insmod-495     [001] d..2.  2164.920934: vector_alloc: irq=10 vector=39 reserved=1 ret=0
+          insmod-495     [001] d..2.  2164.921796: vector_config: irq=10 vector=39 cpu=0 apicdest=0x00000000
+          insmod-495     [001] .....  2164.927636: qedu_probe_stage: device=0000:00:05.0 stage=IRQ_REGISTERED api=request_irq resource=shared_intx_action address=0x000000000000000a size=128 result=0
+          insmod-495     [001] .....  2164.948362: qedu_probe_stage: device=0000:00:05.0 stage=DMA_MASK_CONFIGURED api=dma_set_mask_and_coherent resource=coherent_dma_mask address=0x00000000ffffffff size=32 result=0
+          insmod-495     [001] .....  2164.950406: qedu_probe_stage: device=0000:00:05.0 stage=BUS_MASTER_ENABLED api=pci_set_master resource=pci_bus_master_bit address=0x0000000000000000 size=0 result=0
+          insmod-495     [001] .....  2164.952070: dma_alloc: 0000:00:05.0 dir=BIDIRECTIONAL dma_addr=f197000 size=4096 virt_addr=000000004274e73d flags=GFP_KERNEL attrs=
+          insmod-495     [001] .....  2164.952173: qedu_probe_stage: device=0000:00:05.0 stage=DMA_BUFFER_READY api=dma_alloc_coherent resource=coherent_dma_buffer address=0x000000000f197000 size=4096 result=0
+          insmod-495     [001] .....  2164.958756: qedu_probe_stage: device=0000:00:05.0 stage=WORKQUEUE_READY api=alloc_ordered_workqueue resource=qedu_dma_ordered_workqueue address=0xffff8bf645a8b800 size=0 result=0
+          insmod-495     [001] .....  2165.042659: qedu_probe_stage: device=0000:00:05.0 stage=CHARDEV_PUBLISHED api=misc_register resource=/dev/qedu address=0x0000000000000102 size=0 result=0
+          insmod-495     [001] .....  2165.042716: qedu_probe_stage: device=0000:00:05.0 stage=SYSFS_PUBLISHED api=misc_register resource=/sys/class/misc/qedu address=0x0000000000000102 size=0 result=0
+          insmod-495     [001] .....  2165.043430: qedu_probe_stage: device=0000:00:05.0 stage=DEBUGFS_PUBLISHED api=debugfs_create_file resource=/sys/kernel/debug/qedu/status address=0xffff8bf6466750c0 size=292 result=0
+          insmod-495     [001] .....  2165.043506: qedu_probe_stage: device=0000:00:05.0 stage=PROBE_READY api=qedu_probe resource=bound_qedu_device address=0xffff8bf645a8ba38 size=320 result=0
+          <idle>-0       [000] d..2.  2174.023195: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/0:2 next_pid=444 next_prio=120
+     kworker/0:2-444     [000] d..2.  2174.023251: sched_switch: prev_comm=kworker/0:2 prev_pid=444 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+            bash-454     [001] d..3.  2174.037082: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [000] dNh2.  2174.037179: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] d..2.  2174.037200: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.056691: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=R+ ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+            bash-454     [001] d..2.  2174.058130: sched_switch: prev_comm=bash prev_pid=454 prev_prio=120 prev_state=S ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.058864: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.058936: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.059039: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.059122: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+     rcu_preempt-15      [000] d..2.  2174.059248: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.059317: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.059493: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.059541: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.059700: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.059713: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.059839: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.059870: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.059921: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.060027: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.060081: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.060126: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.060247: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.060262: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.060327: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.060405: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.060478: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.060493: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.060616: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.060641: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.060740: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.060858: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.060936: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.060951: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.061115: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.061144: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.061341: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.061549: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.061625: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.061638: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.070532: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.070647: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.070758: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.070774: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.070913: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.070947: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.071327: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.071497: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.071574: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.071599: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.071682: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.071709: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.072250: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.072425: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.072501: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.072516: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.072617: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.072642: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.072805: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.072886: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.072956: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.072971: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.073099: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.073121: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.073202: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.073358: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.073428: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.073443: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.073549: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.073572: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.082228: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.082396: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.082474: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.082489: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.082620: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.082672: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] .....  2174.091161: sys_write(fd: 1, buf: 0x2e0ff900 (7b:22:73:63:68:65:6d:61:5f:76:65:72:73:69:6f:6e:22:3a:31:2c:22:65:78:70:65:72:69:6d:65:6e:74:22:3a:22:69:6f:22:2c:22:6b:69:6e:64:22:3a:22:70:68:61:73:65:22:2c:22:73:6f:75:72:63:65:22:3a:22, ...) "{"schema_version":1,"experiment":"io","kind":"phase","source":""..., count: 0xd3)
+   qedu_workload-517     [001] d..2.  2174.092793: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.092994: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.093115: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.093225: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.093874: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.093955: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] .....  2174.117388: sys_write -> 0xd3
+   qedu_workload-517     [001] .....  2174.118214: sys_write(fd: 1, buf: 0x2e0ff900 (7b:22:73:63:68:65:6d:61:5f:76:65:72:73:69:6f:6e:22:3a:31:2c:22:65:78:70:65:72:69:6d:65:6e:74:22:3a:22:69:6f:22:2c:22:6b:69:6e:64:22:3a:22:70:68:61:73:65:22:2c:22:73:6f:75:72:63:65:22:3a:22, ...) "{"schema_version":1,"experiment":"io","kind":"phase","source":""..., count: 0xde)
+   qedu_workload-517     [001] d..2.  2174.118485: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.118752: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.118817: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.118842: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .....  2174.118942: sys_write -> 0xde
+          <idle>-0       [000] d..2.  2174.119033: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.119214: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] d..21  2174.119555: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.119643: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.119725: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.119746: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [000] d..2.  2174.119899: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.119956: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] .....  2174.120226: sys_openat(dfd: 4294967196, filename: 4760312 "/sys/class/misc/qedu/timeout_ms", flags: O_WRONLY)
+   qedu_workload-517     [001] .....  2174.120420: sys_openat -> 0x3
+   qedu_workload-517     [001] .....  2174.120518: sys_write(fd: 3, buf: 0x4880c7 (31:32:30:30:0a) "1200.", count: 5)
+   qedu_workload-517     [001] .....  2174.120550: sys_write -> 0x5
+   qedu_workload-517     [001] .....  2174.120596: sys_close(fd: 3)
+   qedu_workload-517     [001] .....  2174.120632: sys_close -> 0x0
+   qedu_workload-517     [001] .....  2174.120711: sys_openat(dfd: 4294967196, filename: 4760312 "/sys/class/misc/qedu/timeout_ms", flags: O_RDONLY)
+   qedu_workload-517     [001] .....  2174.120791: sys_openat -> 0x3
+   qedu_workload-517     [001] .....  2174.120847: sys_read(fd: 3, buf: 0x7ffea0bb9a20, count: 0x100)
+   qedu_workload-517     [001] .....  2174.120909: sys_read -> 0x5
+   qedu_workload-517     [001] .....  2174.120950: sys_close(fd: 3)
+   qedu_workload-517     [001] .....  2174.120979: sys_close -> 0x0
+   qedu_workload-517     [001] .....  2174.121381: sys_write(fd: 1, buf: 0x2e0ff900 (7b:22:73:63:68:65:6d:61:5f:76:65:72:73:69:6f:6e:22:3a:31:2c:22:65:78:70:65:72:69:6d:65:6e:74:22:3a:22:69:6f:22:2c:22:6b:69:6e:64:22:3a:22:70:68:61:73:65:22:2c:22:73:6f:75:72:63:65:22:3a:22, ...) "{"schema_version":1,"experiment":"io","kind":"phase","source":""..., count: 0xdc)
+   qedu_workload-517     [001] d..2.  2174.121521: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.121735: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.121841: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.121877: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .....  2174.122015: sys_write -> 0xdc
+          <idle>-0       [000] d..2.  2174.122144: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.122199: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] .....  2174.122216: sys_write(fd: 1, buf: 0x2e0ff900 (7b:22:73:63:68:65:6d:61:5f:76:65:72:73:69:6f:6e:22:3a:31:2c:22:65:78:70:65:72:69:6d:65:6e:74:22:3a:22:69:6f:22:2c:22:6b:69:6e:64:22:3a:22:70:68:61:73:65:22:2c:22:73:6f:75:72:63:65:22:3a:22, ...) "{"schema_version":1,"experiment":"io","kind":"phase","source":""..., count: 0xd7)
+   qedu_workload-517     [001] d..2.  2174.122309: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.122479: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.122570: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.122594: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .....  2174.122678: sys_write -> 0xd7
+   qedu_workload-517     [001] .....  2174.122723: sys_openat(dfd: 4294967196, filename: 4751573 "/sys/kernel/debug/qedu/status", flags: O_RDONLY)
+          <idle>-0       [000] d..2.  2174.122797: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.122842: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] .....  2174.132267: sys_openat -> 0x3
+   qedu_workload-517     [001] .....  2174.132289: sys_read(fd: 3, buf: 0x7ffea0bb9a20, count: 0x100)
+   qedu_workload-517     [001] .....  2174.133045: sys_read -> 0x100
+   qedu_workload-517     [001] .....  2174.133090: sys_close(fd: 3)
+   qedu_workload-517     [001] .....  2174.133533: sys_close -> 0x0
+   qedu_workload-517     [001] .....  2174.133683: sys_write(fd: 1, buf: 0x2e0ff900 (7b:22:73:63:68:65:6d:61:5f:76:65:72:73:69:6f:6e:22:3a:31:2c:22:65:78:70:65:72:69:6d:65:6e:74:22:3a:22:69:6f:22:2c:22:6b:69:6e:64:22:3a:22:70:68:61:73:65:22:2c:22:73:6f:75:72:63:65:22:3a:22, ...) "{"schema_version":1,"experiment":"io","kind":"phase","source":""..., count: 0xd5)
+   qedu_workload-517     [001] d..2.  2174.144349: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.144580: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.144713: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.144749: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .....  2174.144886: sys_write -> 0xd5
+          <idle>-0       [000] d..2.  2174.144987: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.145302: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] .....  2174.145602: sys_write(fd: 1, buf: 0x2e0ff900 (7b:22:73:63:68:65:6d:61:5f:76:65:72:73:69:6f:6e:22:3a:31:2c:22:65:78:70:65:72:69:6d:65:6e:74:22:3a:22:69:6f:22:2c:22:6b:69:6e:64:22:3a:22:70:68:61:73:65:22:2c:22:73:6f:75:72:63:65:22:3a:22, ...) "{"schema_version":1,"experiment":"io","kind":"phase","source":""..., count: 0xd1)
+   qedu_workload-517     [001] d..2.  2174.145914: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.146144: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNH2.  2174.146290: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.146386: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .....  2174.146512: sys_write -> 0xd1
+   qedu_workload-517     [001] .....  2174.146591: sys_openat(dfd: 4294967196, filename: 4751504 "/dev/qedu", flags: O_RDWR)
+          <idle>-0       [000] d..2.  2174.146635: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [000] d..2.  2174.146739: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120
+   qedu_workload-517     [001] .....  2174.155467: qedu_file_op: device=0000:00:05.0 io_id=0 operation=OPEN phase=ENTER file=000000001fb21d02 count=0 offset=0 result=0 engine=NONE
+   qedu_workload-517     [001] .....  2174.156287: qedu_file_op: device=0000:00:05.0 io_id=0 operation=OPEN phase=EXIT file=000000001fb21d02 count=0 offset=0 result=0 engine=NONE
+   qedu_workload-517     [001] .....  2174.162209: sys_openat -> 0x3
+   qedu_workload-517     [001] .....  2174.162307: sys_write(fd: 3, buf: 0x488118 (31:30:0a) "10.", count: 3)
+   qedu_workload-517     [001] .....  2174.162832: qedu_file_op: device=0000:00:05.0 io_id=1 operation=WRITE phase=ENTER file=000000001fb21d02 count=3 offset=0 result=0 engine=NONE
+   qedu_workload-517     [001] .....  2174.167772: qedu_cpu_buffer_io: device=0000:00:05.0 io_id=1 operation=COPY_FROM_USER offset=0 requested=3 completed=3
+   qedu_workload-517     [001] .....  2174.168742: qedu_factorial_submit: device=0000:00:05.0 io_id=1 input=10 status_command=0x00000080
+   qedu_workload-517     [001] .....  2174.169274: qedu_wait: device=0000:00:05.0 io_id=1 engine=FACTORIAL phase=BEGIN timeout_ms=1200 wait_ret=0 completion_bits=0x0
+   qedu_workload-517     [001] d..2.  2174.169710: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=S ==> next_comm=swapper/1 next_pid=0 next_prio=120
+ systemd-journal-102     [000] d.h..  2174.198179: irq_handler_entry: irq=10 name=qedu
+ systemd-journal-102     [000] d.h..  2174.206467: qedu_irq_ack: device=0000:00:05.0 io_id=1 engine=FACTORIAL irq=10 status=0x00000001 ack=0x00000001 dma_stage=IDLE
+ systemd-journal-102     [000] d.h..  2174.209782: qedu_completion_publish: device=0000:00:05.0 io_id=1 engine=FACTORIAL event_bit=0 bits_before=0x0 bits_after=0x1
+ systemd-journal-102     [000] d.h3.  2174.210283: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.210629: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.210993: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .....  2174.211955: qedu_wait: device=0000:00:05.0 io_id=1 engine=FACTORIAL phase=END timeout_ms=1200 wait_ret=1159 completion_bits=0x1
+   qedu_workload-517     [001] d..2.  2174.212246: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=R+ ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.212541: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .....  2174.213367: qedu_factorial_result: device=0000:00:05.0 io_id=1 result=3628800
+   qedu_workload-517     [001] .....  2174.214784: qedu_file_op: device=0000:00:05.0 io_id=1 operation=WRITE phase=EXIT file=000000001fb21d02 count=3 offset=0 result=3 engine=FACTORIAL
+   qedu_workload-517     [001] .....  2174.214970: sys_write -> 0x3
+   qedu_workload-517     [001] .....  2174.215072: sys_read(fd: 3, buf: 0x7ffea0bb9cc0, count: 0x10)
+   qedu_workload-517     [001] .....  2174.215727: qedu_file_op: device=0000:00:05.0 io_id=1 operation=READ phase=ENTER file=000000001fb21d02 count=16 offset=0 result=0 engine=NONE
+   qedu_workload-517     [001] .....  2174.216463: qedu_cpu_buffer_io: device=0000:00:05.0 io_id=1 operation=COPY_TO_USER offset=0 requested=16 completed=8
+   qedu_workload-517     [001] .....  2174.216820: qedu_file_op: device=0000:00:05.0 io_id=1 operation=READ phase=EXIT file=000000001fb21d02 count=16 offset=0 result=8 engine=NONE
+   qedu_workload-517     [001] .....  2174.224722: sys_read -> 0x8
+   qedu_workload-517     [001] .....  2174.224843: sys_close(fd: 3)
+   qedu_workload-517     [001] .....  2174.225725: qedu_file_op: device=0000:00:05.0 io_id=1 operation=RELEASE phase=ENTER file=000000001fb21d02 count=0 offset=0 result=0 engine=NONE
+   qedu_workload-517     [001] .....  2174.226571: qedu_file_op: device=0000:00:05.0 io_id=1 operation=RELEASE phase=EXIT file=000000001fb21d02 count=0 offset=0 result=0 engine=NONE
+   qedu_workload-517     [001] .....  2174.226802: sys_close -> 0x0
+   qedu_workload-517     [001] .....  2174.227785: sys_write(fd: 1, buf: 0x2e0ff900 (7b:22:73:63:68:65:6d:61:5f:76:65:72:73:69:6f:6e:22:3a:31:2c:22:65:78:70:65:72:69:6d:65:6e:74:22:3a:22:69:6f:22:2c:22:6b:69:6e:64:22:3a:22:70:68:61:73:65:22:2c:22:73:6f:75:72:63:65:22:3a:22, ...) "{"schema_version":1,"experiment":"io","kind":"phase","source":""..., count: 0xea)
+   qedu_workload-517     [001] d..2.  2174.228779: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+ systemd-journal-102     [000] d.h..  2174.246923: irq_handler_exit: irq=10 ret=handled
+ systemd-journal-102     [000] d.H4.  2174.249088: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.249339: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.249527: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .l...  2174.249834: sys_write -> 0xea
+   qedu_workload-517     [001] d..2.  2174.249882: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.250047: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .....  2174.250965: sys_write(fd: 1, buf: 0x2e0ff900 (7b:22:73:63:68:65:6d:61:5f:76:65:72:73:69:6f:6e:22:3a:31:2c:22:65:78:70:65:72:69:6d:65:6e:74:22:3a:22:69:6f:22:2c:22:6b:69:6e:64:22:3a:22:70:68:61:73:65:22:2c:22:73:6f:75:72:63:65:22:3a:22, ...) "{"schema_version":1,"experiment":"io","kind":"phase","source":""..., count: 0xd0)
+   qedu_workload-517     [001] d..2.  2174.251407: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=R+ ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+     rcu_preempt-15      [001] d..2.  2174.251569: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.251844: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+ systemd-journal-102     [000] d.H4.  2174.258421: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] dNh2.  2174.258591: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+          <idle>-0       [001] d..2.  2174.258636: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .l...  2174.258826: sys_write -> 0xd0
+   qedu_workload-517     [001] d..2.  2174.258860: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.258943: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .....  2174.259036: sys_openat(dfd: 4294967196, filename: 4751504 "/dev/qedu", flags: O_RDWR)
+   qedu_workload-517     [001] .....  2174.259326: qedu_file_op: device=0000:00:05.0 io_id=0 operation=OPEN phase=ENTER file=000000001fb21d02 count=0 offset=0 result=0 engine=NONE
+   qedu_workload-517     [001] .....  2174.259337: qedu_file_op: device=0000:00:05.0 io_id=0 operation=OPEN phase=EXIT file=000000001fb21d02 count=0 offset=0 result=0 engine=NONE
+   qedu_workload-517     [001] .....  2174.259438: sys_openat -> 0x3
+   qedu_workload-517     [001] .....  2174.259511: sys_write(fd: 3, buf: 0x7ffea0bb9cd0 (78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78:78, ...) "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"..., count: 0x200)
+   qedu_workload-517     [001] .....  2174.259533: qedu_file_op: device=0000:00:05.0 io_id=2 operation=WRITE phase=ENTER file=000000001fb21d02 count=512 offset=0 result=0 engine=NONE
+   qedu_workload-517     [001] .....  2174.259547: qedu_cpu_buffer_io: device=0000:00:05.0 io_id=2 operation=COPY_FROM_USER offset=0 requested=512 completed=512
+   qedu_workload-517     [001] .....  2174.260028: qedu_dma_stage: device=0000:00:05.0 io_id=2 old=IDLE new=TO_DEVICE reason=SUBMIT
+   qedu_workload-517     [001] d..2.  2174.272854: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=R+ ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+     rcu_preempt-15      [001] d..2.  2174.272949: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.287401: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=R+ ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+     rcu_preempt-15      [001] d..2.  2174.287584: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] .l...  2174.306605: qedu_dma_submit: device=0000:00:05.0 io_id=2 leg=0 direction=DMA_TO_DEVICE src_space=DMA_ADDRESS src=0x000000000f197000 dst_space=EDU_LOCAL dst=0x0000000000040000 bytes=512 command=0x0000000000000005
+   qedu_workload-517     [001] .l...  2174.307084: qedu_wait: device=0000:00:05.0 io_id=2 engine=DMA phase=BEGIN timeout_ms=1200 wait_ret=0 completion_bits=0x1
+   qedu_workload-517     [001] d..2.  2174.307283: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=R+ ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+     rcu_preempt-15      [001] d..2.  2174.307484: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [001] d..2.  2174.307959: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=S ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h1.  2174.396894: irq_handler_entry: irq=10 name=qedu
+          <idle>-0       [000] d.h1.  2174.397881: qedu_irq_ack: device=0000:00:05.0 io_id=2 engine=DMA irq=10 status=0x00000100 ack=0x00000100 dma_stage=TO_DEVICE
+          <idle>-0       [000] d.h2.  2174.398481: workqueue_queue_work: work struct=00000000eaeb9d9b function=qedu_dma_advance_work [qedu] workqueue=qedu_dma req_cpu=64 cpu=-1
+          <idle>-0       [000] d.h2.  2174.398506: workqueue_activate_work: work struct 00000000eaeb9d9b function=qedu_dma_advance_work [qedu] 
+          <idle>-0       [001] d..2.  2174.399158: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] .....  2174.399704: workqueue_execute_start: work struct 00000000eaeb9d9b: function qedu_dma_advance_work [qedu]
+          <idle>-0       [000] d.h1.  2174.400207: qedu_dma_work_queue: device=0000:00:05.0 io_id=2 dma_stage=TO_DEVICE work_kind=ADVANCE work=00000000eaeb9d9b queued=1
+    kworker/u8:4-466     [001] .....  2174.400530: qedu_dma_stage: device=0000:00:05.0 io_id=2 old=TO_DEVICE new=FROM_DEVICE reason=ADVANCE_WORK
+    kworker/u8:4-466     [001] d..2.  2174.401894: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=D ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h1.  2174.402215: irq_handler_exit: irq=10 ret=handled
+          <idle>-0       [001] d..2.  2174.422786: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] .....  2174.423359: qedu_cpu_buffer_io: device=0000:00:05.0 io_id=2 operation=CLEAR_FOR_DMA_RETURN offset=0 requested=512 completed=512
+    kworker/u8:4-466     [001] .....  2174.441798: qedu_dma_submit: device=0000:00:05.0 io_id=2 leg=1 direction=DMA_FROM_DEVICE src_space=EDU_LOCAL src=0x0000000000040000 dst_space=DMA_ADDRESS dst=0x000000000f197000 bytes=512 command=0x0000000000000007
+    kworker/u8:4-466     [001] .....  2174.441930: workqueue_execute_end: work struct 00000000eaeb9d9b: function qedu_dma_advance_work [qedu]
+    kworker/u8:4-466     [001] d..2.  2174.442041: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h1.  2174.540556: irq_handler_entry: irq=10 name=qedu
+          <idle>-0       [000] d.h1.  2174.540621: qedu_irq_ack: device=0000:00:05.0 io_id=2 engine=DMA irq=10 status=0x00000100 ack=0x00000100 dma_stage=FROM_DEVICE
+          <idle>-0       [000] d.h2.  2174.540825: workqueue_queue_work: work struct=00000000a4b43aef function=qedu_dma_finish_work [qedu] workqueue=qedu_dma req_cpu=64 cpu=-1
+          <idle>-0       [000] d.h2.  2174.540844: workqueue_activate_work: work struct 00000000a4b43aef function=qedu_dma_finish_work [qedu] 
+          <idle>-0       [000] d.h1.  2174.540938: qedu_dma_work_queue: device=0000:00:05.0 io_id=2 dma_stage=FROM_DEVICE work_kind=FINISH work=00000000a4b43aef queued=1
+          <idle>-0       [000] d.h1.  2174.541171: irq_handler_exit: irq=10 ret=handled
+          <idle>-0       [001] d..2.  2174.541393: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] .....  2174.541472: workqueue_execute_start: work struct 00000000a4b43aef: function qedu_dma_finish_work [qedu]
+    kworker/u8:4-466     [001] .....  2174.542618: qedu_dma_stage: device=0000:00:05.0 io_id=2 old=FROM_DEVICE new=IDLE reason=FINISH_WORK
+    kworker/u8:4-466     [001] .....  2174.543401: qedu_completion_publish: device=0000:00:05.0 io_id=2 engine=DMA event_bit=1 bits_before=0x1 bits_after=0x3
+    kworker/u8:4-466     [001] d..3.  2174.560902: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=001
+    kworker/u8:4-466     [001] d..4.  2174.561002: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=001
+    kworker/u8:4-466     [001] .l...  2174.561759: workqueue_execute_end: work struct 00000000a4b43aef: function qedu_dma_finish_work [qedu]
+          <idle>-0       [000] d..2.  2174.562041: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.562041: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/1 next_pid=0 next_prio=120
+   qedu_workload-517     [000] .....  2174.568417: qedu_wait: device=0000:00:05.0 io_id=2 engine=DMA phase=END timeout_ms=1200 wait_ret=945 completion_bits=0x3
+   qedu_workload-517     [000] .....  2174.569860: qedu_file_op: device=0000:00:05.0 io_id=2 operation=WRITE phase=EXIT file=000000001fb21d02 count=512 offset=0 result=512 engine=DMA
+   qedu_workload-517     [000] .....  2174.569933: sys_write -> 0x200
+   qedu_workload-517     [000] .....  2174.570099: sys_read(fd: 3, buf: 0x7ffea0bb9ed0, count: 0x200)
+   qedu_workload-517     [000] .....  2174.570182: qedu_file_op: device=0000:00:05.0 io_id=2 operation=READ phase=ENTER file=000000001fb21d02 count=512 offset=0 result=0 engine=NONE
+   qedu_workload-517     [000] .....  2174.570353: qedu_cpu_buffer_io: device=0000:00:05.0 io_id=2 operation=COPY_TO_USER offset=0 requested=512 completed=512
+   qedu_workload-517     [000] .....  2174.570369: qedu_file_op: device=0000:00:05.0 io_id=2 operation=READ phase=EXIT file=000000001fb21d02 count=512 offset=0 result=512 engine=NONE
+   qedu_workload-517     [000] .....  2174.570391: sys_read -> 0x200
+   qedu_workload-517     [000] .....  2174.570469: sys_close(fd: 3)
+   qedu_workload-517     [000] .....  2174.570513: qedu_file_op: device=0000:00:05.0 io_id=2 operation=RELEASE phase=ENTER file=000000001fb21d02 count=0 offset=0 result=0 engine=NONE
+   qedu_workload-517     [000] .....  2174.570595: qedu_file_op: device=0000:00:05.0 io_id=2 operation=RELEASE phase=EXIT file=000000001fb21d02 count=0 offset=0 result=0 engine=NONE
+   qedu_workload-517     [000] .....  2174.570756: sys_close -> 0x0
+   qedu_workload-517     [000] d..2.  2174.587080: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.H5.  2174.587638: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] dNH6.  2174.587758: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] d..2.  2174.587942: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+     rcu_preempt-15      [001] d..2.  2174.592502: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.593119: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=systemd-journal next_pid=102 next_prio=119
+   qedu_workload-517     [000] d..2.  2174.599777: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=R ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+     rcu_preempt-15      [000] d..2.  2174.600512: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.603600: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=R+ ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+     rcu_preempt-15      [000] d..2.  2174.603971: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [000] .....  2174.605046: sys_write(fd: 1, buf: 0x2e0ff900 (7b:22:73:63:68:65:6d:61:5f:76:65:72:73:69:6f:6e:22:3a:31:2c:22:65:78:70:65:72:69:6d:65:6e:74:22:3a:22:69:6f:22:2c:22:6b:69:6e:64:22:3a:22:70:68:61:73:65:22:2c:22:73:6f:75:72:63:65:22:3a:22, ...) "{"schema_version":1,"experiment":"io","kind":"phase","source":""..., count: 0xdd)
+   qedu_workload-517     [000] d..2.  2174.606261: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+     rcu_preempt-15      [000] d.h5.  2174.607004: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+     rcu_preempt-15      [000] d.h6.  2174.607537: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+     rcu_preempt-15      [000] d..2.  2174.608126: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [000] .....  2174.608727: sys_write -> 0xdd
+ systemd-journal-102     [001] d..2.  2174.608834: sched_switch: prev_comm=systemd-journal prev_pid=102 prev_prio=119 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.609141: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=systemd-journal next_pid=102 next_prio=119
+   qedu_workload-517     [000] .l...  2174.609568: sys_write(fd: 1, buf: 0x2e0ff900 (7b:22:73:63:68:65:6d:61:5f:76:65:72:73:69:6f:6e:22:3a:31:2c:22:65:78:70:65:72:69:6d:65:6e:74:22:3a:22:69:6f:22:2c:22:6b:69:6e:64:22:3a:22:70:68:61:73:65:22:2c:22:73:6f:75:72:63:65:22:3a:22, ...) "{"schema_version":1,"experiment":"io","kind":"phase","source":""..., count: 0xbd)
+   qedu_workload-517     [000] d..2.  2174.610486: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+     rcu_preempt-15      [000] d.h5.  2174.611153: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+     rcu_preempt-15      [000] d.h6.  2174.611234: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+     rcu_preempt-15      [000] d..2.  2174.611620: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [000] .....  2174.611991: sys_write -> 0xbd
+ systemd-journal-102     [001] d..2.  2174.612096: sched_switch: prev_comm=systemd-journal prev_pid=102 prev_prio=119 prev_state=S ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.612674: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/1 next_pid=0 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.616790: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.617224: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] dNh6.  2174.617286: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] d..2.  2174.617769: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [001] d..2.  2174.618130: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.618649: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.621029: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.H5.  2174.621695: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] dNH6.  2174.621765: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] d..2.  2174.621952: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+     rcu_preempt-15      [001] d..2.  2174.622570: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.622763: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/1 next_pid=0 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.624187: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.H5.  2174.624803: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] dNH6.  2174.624860: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] d..2.  2174.624997: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+     rcu_preempt-15      [001] d..2.  2174.625496: sched_switch: prev_comm=rcu_preempt prev_pid=15 prev_prio=120 prev_state=I ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.625636: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/1 next_pid=0 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.626194: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.H5.  2174.626557: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] dNH6.  2174.626600: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] d..2.  2174.626758: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+          <idle>-0       [001] d..2.  2174.626990: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.627107: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=swapper/1 next_pid=0 next_prio=120
+          <idle>-0       [001] d..2.  2174.646732: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:4 next_pid=466 next_prio=120
+    kworker/u8:4-466     [001] d..2.  2174.646916: sched_switch: prev_comm=kworker/u8:4 prev_pid=466 prev_prio=120 prev_state=I ==> next_comm=kworker/u8:1 next_pid=31 next_prio=120
+    kworker/u8:1-31      [001] d..2.  2174.646950: sched_switch: prev_comm=kworker/u8:1 prev_pid=31 prev_prio=120 prev_state=I ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.651374: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.651596: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] dNh6.  2174.651629: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] d..2.  2174.651700: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.652005: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.652086: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] dNh6.  2174.652135: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [001] d..2.  2174.652279: sched_switch: prev_comm=swapper/1 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:1 next_pid=31 next_prio=120
+          <idle>-0       [000] d..2.  2174.652283: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+    kworker/u8:1-31      [001] d..2.  2174.652412: sched_switch: prev_comm=kworker/u8:1 prev_pid=31 prev_prio=120 prev_state=I ==> next_comm=swapper/1 next_pid=0 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.652530: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.652567: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] dNh6.  2174.652589: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] d..2.  2174.652619: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.652777: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.652919: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] dNh6.  2174.652942: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] d..2.  2174.652975: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.668594: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=D ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d.h5.  2174.668648: sched_waking: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] dNh6.  2174.668689: sched_wakeup: comm=qedu_workload pid=517 prio=120 target_cpu=000
+          <idle>-0       [000] d..2.  2174.668727: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=qedu_workload next_pid=517 next_prio=120
+   qedu_workload-517     [000] d..2.  2174.668930: sched_switch: prev_comm=qedu_workload prev_pid=517 prev_prio=120 prev_state=Z ==> next_comm=swapper/0 next_pid=0 next_prio=120
+          <idle>-0       [000] d..2.  2174.676776: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/u8:1 next_pid=31 next_prio=120
+    kworker/u8:1-31      [000] d..2.  2174.677445: sched_switch: prev_comm=kworker/u8:1 prev_pid=31 prev_prio=120 prev_state=I ==> next_comm=rcu_preempt next_pid=15 next_prio=120
+          <idle>-0       [000] d..2.  2174.678329: sched_switch: prev_comm=swapper/0 prev_pid=0 prev_prio=120 prev_state=R ==> next_comm=kworker/0:2 next_pid=444 next_prio=120
+     kworker/0:2-444     [000] d..2.  2174.678444: sched_switch: prev_comm=kworker/0:2 prev_pid=444 prev_prio=120 prev_state=I ==> next_comm=swapper/0 next_pid=0 next_prio=120

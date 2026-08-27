@@ -1,0 +1,100 @@
+{
+  "record_template": {
+    "roles": [
+      "trader"
+    ],
+    "markets": [
+      "crypto"
+    ],
+    "assets": [
+      "BTC",
+      "ETH"
+    ],
+    "topics": [
+      "liquidity",
+      "macro"
+    ],
+    "signal": "directional_view",
+    "horizon": "swing",
+    "use": "idea_generation",
+    "scrape_data_used_from": "ISO timestamp matching scrape_state[handle].scraped_at for the scrape used to create this taxonomy",
+    "scrape_data_tweet_count": "tweet_count from that scrape — provides confidence in the taxonomy",
+    "quality": {
+      "specificity": 3,
+      "originality": 3,
+      "timeliness": 3,
+      "noise": 3,
+      "overall": 3
+    },
+    "flags": [],
+    "notes": "Brief explanation of recurring patterns in the user's tweets."
+  },
+  "allowed_values": {
+    "roles": {
+      "news": "Reports headlines, movers, events, and market updates.",
+      "analyst": "Explains markets, assets, sectors, protocols, or macro themes with original analysis.",
+      "trader": "Posts directional views, setups, levels, charts, flow, or trade plans.",
+      "builder": "Works on or represents a company, protocol, product, fund, or project and posts primary-source updates.",
+      "educator": "Focuses on process, psychology, risk management, or teaching frameworks.",
+      "commentator": "Provides narrative, opinion, sentiment, or cultural context more than direct analysis.",
+      "tool_or_bot": "Mostly automated, data-driven, scanner-like, or dashboard-style output.",
+      "mixed": "No single role clearly dominates."
+    },
+    "markets": [
+      "crypto",
+      "equities",
+      "options",
+      "macro",
+      "rates_fx",
+      "commodities",
+      "private_markets",
+      "culture",
+      "mixed"
+    ],
+    "signal": {
+      "headline": "Fast factual update with little interpretation.",
+      "directional_view": "Directional or contextual view on an asset or market.",
+      "setup_or_level": "Specific technical level, setup, trigger, target, or invalidation.",
+      "flow_or_positioning": "Options flow, positioning, gamma, liquidity, or order-flow style signal.",
+      "research": "Structured fundamental, macro, sector, or protocol analysis.",
+      "primary_update": "Direct product, protocol, company, governance, or operational update.",
+      "process": "Trading or investing process, education, psychology, or risk management.",
+      "sentiment": "Narrative, memes, culture, attention, or vibe signal.",
+      "promotion": "Mainly subscription, product, referral, or self-promotional content."
+    },
+    "horizon": [
+      "real_time",
+      "intraday",
+      "swing",
+      "long_term",
+      "not_applicable",
+      "mixed"
+    ],
+    "use": {
+      "alerts": "Worth monitoring quickly when new posts appear.",
+      "watchlist_context": "Useful context for markets or assets already being followed.",
+      "idea_generation": "Can surface trade or research candidates.",
+      "research_context": "Useful for deeper understanding rather than immediate action.",
+      "sentiment_tracking": "Useful for narrative and attention monitoring.",
+      "low_signal": "Mostly noisy, stale, promotional, or off-topic."
+    },
+    "flags": [
+      "promotional",
+      "sponsored",
+      "high_noise",
+      "low_originality",
+      "image_only",
+      "off_topic",
+      "possible_conflict",
+      "thin_sample"
+    ]
+  },
+  "scoring": {
+    "scale": "1-5",
+    "specificity": "How concrete the claims are: symbols, levels, dates, catalysts, or mechanisms.",
+    "originality": "How much value is added beyond reposting or restating common information.",
+    "timeliness": "How useful the account is near the time information matters.",
+    "noise": "1 is clean, 5 is noisy.",
+    "overall": "Practical usefulness for the selected use."
+  }
+}

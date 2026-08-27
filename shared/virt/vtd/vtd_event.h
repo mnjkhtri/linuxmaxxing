@@ -53,6 +53,35 @@ enum vtd_event_kind {
     VTD_EVENT_GUEST_IRQ_EXIT,
     VTD_EVENT_GUEST_NETDEV_OPEN,
     VTD_EVENT_GUEST_NETDEV_CLOSE,
+    VTD_EVENT_IOMMU_FAULT,
+    VTD_EVENT_DOMAIN_ATTACH_ENTER,
+    VTD_EVENT_DOMAIN_ATTACH_EXIT,
+    VTD_EVENT_IOTLB_INVALIDATE,
+    VTD_EVENT_QI_SUBMIT,
+    VTD_EVENT_QI_COMPLETE,
+    VTD_EVENT_PI_SYNC_EXIT,
+    VTD_EVENT_PI_WAKEUP,
+    VTD_EVENT_PI_WAKEUP_VECTOR,
+    VTD_EVENT_GUEST_DIAG_ENTRY,
+    VTD_EVENT_GUEST_DIAG_EXIT,
+    VTD_EVENT_GUEST_INTR_TEST_ENTRY,
+    VTD_EVENT_GUEST_INTR_TEST_EXIT,
+    VTD_EVENT_GUEST_LOOPBACK_ENTRY,
+    VTD_EVENT_GUEST_LOOPBACK_EXIT,
+    VTD_EVENT_GUEST_SOFTIRQ_RAISE,
+    VTD_EVENT_GUEST_SOFTIRQ_ENTRY,
+    VTD_EVENT_GUEST_NAPI_POLL,
+    VTD_EVENT_GUEST_SOFTIRQ_EXIT,
+};
+
+enum vtd_guest_phase {
+    VTD_GUEST_PHASE_NONE,
+    VTD_GUEST_PHASE_INTERFACE_START,
+    VTD_GUEST_PHASE_OFFLINE_DIAG,
+    VTD_GUEST_PHASE_INTR_TEST,
+    VTD_GUEST_PHASE_LOOPBACK_SETUP,
+    VTD_GUEST_PHASE_LOOPBACK_RUN,
+    VTD_GUEST_PHASE_INTERFACE_RESTORE,
 };
 
 enum vtd_sample_status {
@@ -81,6 +110,8 @@ struct vtd_event_info {
 struct vtd_context {
     unsigned int pid;
     unsigned int tid;
+    unsigned int cpu;
+    unsigned int reserved;
     char comm[VTD_COMM_LEN];
 };
 
@@ -116,7 +147,23 @@ struct vtd_state {
     unsigned int vcpu_id;
     unsigned int posted;
     unsigned long long pi_desc_address;
+    unsigned long long domain_address;
+    unsigned long long iommu_address;
+    unsigned long long qi_descriptor_0;
+    unsigned long long qi_descriptor_1;
+    unsigned int iommu_id;
+    unsigned int qi_count;
+    unsigned int qi_options;
+    unsigned int invalidation_hint;
+    unsigned int invalidation_map;
+    unsigned long long episode_id;
+    unsigned int guest_phase;
+    unsigned int softirq_vector;
+    unsigned int napi_work;
+    unsigned int napi_budget;
+    unsigned int wakeup_count;
     char device[VTD_DEVICE_NAME_LEN];
+    char driver[VTD_DEVICE_NAME_LEN];
     char action[VTD_ACTION_NAME_LEN];
 };
 

@@ -1,0 +1,10 @@
+{"schema_version":1,"experiment":"io","kind":"phase","source":"workload","seq":1,"time_ns":2174058517884,"event_info":{"phase":"run","category":"io","action":"begin","device":"/dev/qedu"},"context":{"pid":517}}
+{"schema_version":1,"experiment":"io","kind":"phase","source":"workload","seq":2,"time_ns":2174117959794,"event_info":{"phase":"sysfs","category":"syscall","action":"begin","attribute":"timeout_ms"},"context":{"pid":517}}
+{"schema_version":1,"experiment":"io","kind":"phase","source":"workload","seq":3,"time_ns":2174121035564,"event_info":{"phase":"sysfs","category":"syscall","action":"end","attribute":"timeout_ms"},"context":{"pid":517}}
+{"schema_version":1,"experiment":"io","kind":"phase","source":"workload","seq":4,"time_ns":2174122152514,"event_info":{"phase":"debugfs","category":"syscall","action":"begin","file":"status"},"context":{"pid":517}}
+{"schema_version":1,"experiment":"io","kind":"phase","source":"workload","seq":5,"time_ns":2174133582264,"event_info":{"phase":"debugfs","category":"syscall","action":"end","file":"status"},"context":{"pid":517}}
+{"schema_version":1,"experiment":"io","kind":"phase","source":"workload","seq":6,"time_ns":2174145004734,"event_info":{"phase":"factorial","category":"mmio","action":"begin","input":10},"context":{"pid":517}}
+{"schema_version":1,"experiment":"io","kind":"phase","source":"workload","seq":7,"time_ns":2174227391034,"event_info":{"phase":"factorial","category":"mmio","action":"end","input":10,"result":3628800,"bytes":8},"context":{"pid":517}}
+{"schema_version":1,"experiment":"io","kind":"phase","source":"workload","seq":8,"time_ns":2174250792214,"event_info":{"phase":"dma_echo","category":"dma","action":"begin","bytes":512},"context":{"pid":517}}
+{"schema_version":1,"experiment":"io","kind":"phase","source":"workload","seq":9,"time_ns":2174604597424,"event_info":{"phase":"dma_echo","category":"dma","action":"end","bytes":512,"read_calls":1},"context":{"pid":517}}
+{"schema_version":1,"experiment":"io","kind":"phase","source":"workload","seq":10,"time_ns":2174608879624,"event_info":{"phase":"run","category":"io","action":"end"},"context":{"pid":517}}
