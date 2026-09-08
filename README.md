@@ -133,4 +133,20 @@ The visualizer is a static client and can be served locally:
 ./run-app.sh
 ```
 
-Open `http://localhost:8000/app/`. Frontend migration to the canonical capture paths is a later step; experiment collection and validation define the source of truth first.
+Open `http://localhost:8000/app/`. Each view reads the latest `captures/<experiment>/events.ndjson`. Refresh reloads that capture; there are no run selectors or legacy capture readers. Missing, incomplete, and malformed captures are reported explicitly. Host and guest clocks remain separate; publication order is not elapsed time across machines.
+
+Each experiment has exactly three files in `app/views/<experiment>/`: its HTML, CSS, and JavaScript. `app/theme.css` owns shared colors, typography, controls, and responsive layout. `app/common.js` owns capture loading, status, accessible details panels, and playback utilities; `app/app.js` owns navigation. Keep experiment-specific diagrams and evidence interpretation in the experiment's JavaScript and geometry in its CSS.
+
+Laptop layouts keep controls visible and open the inspector with **Details**. Wide screens show the inspector beside the diagram. Narrow screens stack panels and scroll complex diagrams without shrinking their labels. Motion respects the operating-system reduced-motion preference.
+
+GitHub Pages publishes the client only, not private capture data. It displays unavailable states until captures are supplied. A `captureBase` URL query parameter can point a view at an explicitly hosted capture directory (cross-origin hosting requires CORS). The shell propagates its `data-capture-base` HTML attribute to its views.
+
+Browser regression checks require Playwright and Chromium:
+
+```bash
+python3 -m pip install playwright
+python3 -m playwright install chromium
+python3 -m unittest discover -s tests -p 'test_app.py' -v
+```
+
+The browser suite checks every view at laptop, desktop, tablet, and phone sizes, plus malformed captures, exact timestamps, refresh failures, and inspector keyboard behavior. Real capture rendering checks use whichever local captures are available; an absent capture tests the unavailable state, not that experiment's scientific rendering.

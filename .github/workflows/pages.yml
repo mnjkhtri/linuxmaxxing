@@ -28,6 +28,7 @@ jobs:
         run: |
           mkdir -p _site
           cp -R app/. _site/
+          sed -i 's/<html lang="en">/<html lang="en" data-capture-base="captures\/">/' _site/index.html
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:

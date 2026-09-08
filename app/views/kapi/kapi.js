@@ -1,9 +1,13 @@
+import {
+  mountView,
+  relativeNs
+} from '../../common.js';
 /*
  * KAPI view: kernel API study report -> task / address-space / allocator map.
- * Parsing boundary: parseCapture() and parseFields() are the only functions that read the raw report text.
+ * Parsing boundary: parseCapture() projects canonical module observations.
  * Everything downstream (build*, render*) works on the normalized event model and never re-parses the capture.
  */
-(function () {
+(function() {
   'use strict';
 
   const $ = (id) => document.getElementById(id);
@@ -14,54 +18,34 @@
   let regions = [];
   let objectDefs = {};
 
-  const GROUPS = [
-    {
-      title: 'BUDDY / PAGE',
-      color: 'var(--blue)',
-      objects: ['one_page', 'zero_page', 'order_pages', 'page_desc', 'exact_pages']
-    },
-    {
-      title: 'SLUB OBJECTS',
-      color: 'var(--violet)',
-      objects: ['slab_buf', 'slab_context', 'custom_cache',
-        'custom_object_0', 'custom_object_1', 'custom_object_2', 'custom_object_3',
-        'custom_object_4', 'custom_object_5', 'custom_object_6', 'custom_object_7']
-    },
-    {
-      title: 'VMALLOC AREA',
-      color: 'var(--orange)',
-      objects: ['vbuf', 'vzbuf']
-    }
-  ];
+  const GROUPS = [{
+    title: 'BUDDY / PAGE',
+    color: 'var(--blue)',
+    objects: ['one_page', 'zero_page', 'order_pages', 'page_desc', 'exact_pages']
+  }, {
+    title: 'SLUB OBJECTS',
+    color: 'var(--violet)',
+    objects: ['slab_buf', 'slab_context', 'custom_cache',
+      'custom_object_0', 'custom_object_1', 'custom_object_2', 'custom_object_3',
+      'custom_object_4', 'custom_object_5', 'custom_object_6', 'custom_object_7'
+    ]
+  }, {
+    title: 'VMALLOC AREA',
+    color: 'var(--orange)',
+    objects: ['vbuf', 'vzbuf']
+  }];
 
-  /* Parse one key=value field list as emitted by the kernel. */
-  function parseFields(text) {
-    const out = {};
-    const re = /([A-Za-z_][\w]*)=(?:"([^"]*)"|(\S+))/g;
-    let m;
-    while ((m = re.exec(text))) out[m[1]] = m[2] !== undefined ? m[2] : m[3];
-    return out;
-  }
-
-  /* The single parsing boundary: raw report text -> normalized events. */
-  function parseCapture(text) {
-    return text.split(/\r?\n/)
-      .map((line, index) => {
-        const m = line.match(/^\[\s*([\d.]+)\]\s+KAPI_EVT\s+(.+)$/);
-        if (!m) return null;
-        const f = parseFields(m[2]);
-        return {
-          index,
-          time: +m[1],
-          domain: f.domain || 'other',
-          phase: f.phase || 'other',
-          action: f.action || 'event',
-          fields: f,
-          raw: m[2]
-        };
-      })
-      .filter(Boolean)
-      .map((e, i) => { e.index = i; return e; });
+  function parseCapture(capture) {
+    return capture.events.filter(e => e.source.mechanism === 'module').map((e, index) => ({
+      index,
+      time: relativeNs(capture, e) / 1e9,
+      domain: e.data.domain,
+      phase: e.data.phase,
+      action: e.kind,
+      fields: e.data,
+      raw: JSON.stringify(e),
+      canonical: e
+    }));
   }
 
   /* ---- value helpers --------------------------------------------------- */
@@ -84,7 +68,13 @@
 
   function esc(s) {
     return String(s == null ? '—' : s)
-      .replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+      .replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[c]);
   }
 
   function shortAddr(v) {
@@ -98,7 +88,11 @@
   }
 
   function asBig(v) {
-    try { return BigInt(v); } catch { return 0n; }
+    try {
+      return BigInt(v);
+    } catch {
+      return 0n;
+    }
   }
 
   function hex64(v) {
@@ -114,7 +108,16 @@
       const id = e.fields.id;
       const ok = ['page_allocator', 'slab', 'custom_cache', 'vmalloc', 'mapping', 'memory', 'cleanup'].includes(e.phase);
       if (!id || !ok) return;
-      if (!objectDefs[id]) objectDefs[id] = { id, alloc: null, create: null, free: null, destroy: null, maps: [], sample: null, summary: null };
+      if (!objectDefs[id]) objectDefs[id] = {
+        id,
+        alloc: null,
+        create: null,
+        free: null,
+        destroy: null,
+        maps: [],
+        sample: null,
+        summary: null
+      };
       const o = objectDefs[id];
       if (e.action === 'alloc') o.alloc = e;
       if (e.action === 'create') o.create = e;
@@ -165,8 +168,14 @@
     maps.forEach((m) => {
       const p = number(m.fields.pfn);
       const last = runs[runs.length - 1];
-      if (last && p === last.end + 1) { last.end = p; last.count++; }
-      else runs.push({ start: p, end: p, count: 1 });
+      if (last && p === last.end + 1) {
+        last.end = p;
+        last.count++;
+      } else runs.push({
+        start: p,
+        end: p,
+        count: 1
+      });
     });
     return runs;
   }
@@ -260,11 +269,18 @@
     const root = $('vas-stack');
     root.innerHTML = '<div class="vas-table-head"><span>REGION</span><span>ADDRESS RANGE</span><span>SIZE</span></div>';
     const palette = {
-      kernel_image: 'var(--green)', module_space: 'var(--blue)',
-      vmalloc: 'var(--orange)', physical_direct_map: 'var(--blue)',
-      struct_page_array: 'var(--violet)', reserved: 'var(--faint)',
-      guard: 'var(--red)', invalid: 'var(--red)', efi_runtime: 'var(--orange)',
-      per_cpu_entry: 'var(--green)', conditional: 'var(--violet)', process_specific: 'var(--green)'
+      kernel_image: 'var(--green)',
+      module_space: 'var(--blue)',
+      vmalloc: 'var(--orange)',
+      physical_direct_map: 'var(--blue)',
+      struct_page_array: 'var(--violet)',
+      reserved: 'var(--faint)',
+      guard: 'var(--red)',
+      invalid: 'var(--red)',
+      efi_runtime: 'var(--orange)',
+      per_cpu_entry: 'var(--green)',
+      conditional: 'var(--violet)',
+      process_specific: 'var(--green)'
     };
     regions.slice().sort((a, b) => asBig(b.fields.start) > asBig(a.fields.start) ? 1 : -1).forEach((e) => {
       const start = asBig(e.fields.start);
@@ -326,7 +342,11 @@
   function taskRegionHits(e) {
     const hits = {};
     if (!e || e.action !== 'task') return hits;
-    [['task_struct', e.fields.task], ['kstack', e.fields.stack], ['mm_struct', e.fields.mm]].forEach(([label, addr]) => {
+    [
+      ['task_struct', e.fields.task],
+      ['kstack', e.fields.stack],
+      ['mm_struct', e.fields.mm]
+    ].forEach(([label, addr]) => {
       const r = regionContainingAddress(addr);
       if (!r) return;
       const id = r.fields.id;
@@ -356,7 +376,10 @@
         delete n.dataset.taskHit;
       }
     });
-    if (e.action === 'task' && firstTaskTarget) firstTaskTarget.scrollIntoView({ block: 'center', inline: 'nearest' });
+    if (e.action === 'task' && firstTaskTarget) firstTaskTarget.scrollIntoView({
+      block: 'center',
+      inline: 'nearest'
+    });
     const selectedRegion = e.action === 'region' ? e : (e.action === 'task' ? null : targetRegionForObject(e.fields.id && objectDefs[e.fields.id]));
     const target = selectedRegion && selectedRegion.fields.id;
     document.querySelectorAll('.vas-region[data-region-id]').forEach((n) => n.classList.toggle('alloc-target', target && n.dataset.regionId === target));
@@ -365,9 +388,9 @@
       n.classList.toggle('region-match', e.action === 'region' && n.dataset.target === target);
     });
     const hitCount = Object.keys(taskHits).length;
-    $('stage-stat').textContent = hitCount
-      ? ('task addresses in ' + hitCount + ' canonical region' + (hitCount === 1 ? '' : 's'))
-      : (regions.length + ' regions · allocator targets highlighted');
+    $('stage-stat').textContent = hitCount ?
+      ('task addresses in ' + hitCount + ' canonical region' + (hitCount === 1 ? '' : 's')) :
+      (regions.length + ' regions · allocator targets highlighted');
   }
 
   function render() {
@@ -380,25 +403,21 @@
 
   /* ---- load --------------------------------------------------------------- */
 
-  fetch('../../shared/_captures/kapi-Report.txt?v=' + Date.now(), { cache: 'no-store' })
-    .then((r) => {
-      if (!r.ok) throw Error('HTTP ' + r.status);
-      return r.text();
-    })
-    .then((text) => {
-      events = parseCapture(text);
-      if (!events.length) throw Error('no kernel API events');
-      buildModel();
-      buildTasks();
-      buildLayout();
-      buildAllocatorLinks();
+  mountView('kapi', async capture => {
+    events = parseCapture(capture);
+    if (!events.length) throw Error('no kernel API events');
+    buildModel();
+    buildTasks();
+    buildLayout();
+    buildAllocatorLinks();
+    if (!document.body.dataset.bound) {
       installSelectionDelegation();
-      cursor = regions[0] ? regions[0].index : 0;
-      $('status').innerHTML = '<i class="trace-dot"></i><span>' + events.length + ' kernel API events</span>';
-      render();
-      markSelected();
-    })
-    .catch((err) => {
-      $('status').textContent = 'KAPI data error · ' + err.message;
-    });
+      document.body.dataset.bound = "true";
+    }
+    cursor = regions[0] ? regions[0].index : 0;
+    $('status').innerHTML = '<i class="trace-dot"></i><span>' + events.length + ' kernel API events</span>';
+    render();
+    markSelected();
+  });
+
 })();

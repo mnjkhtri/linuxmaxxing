@@ -37,7 +37,7 @@ body {
 .head p {
   margin: 5px 0 0;
   color: var(--muted);
-  font: 10px/1.45 var(--mono);
+  font: 11px/1.45 var(--mono);
 }
 
 #status {
@@ -46,7 +46,7 @@ body {
   align-items: center;
   gap: 8px;
   color: var(--muted);
-  font: 10px var(--mono);
+  font: 11px var(--mono);
   white-space: nowrap;
 }
 
@@ -77,7 +77,7 @@ body {
 .cpu-card span,
 .cpu-card code {
   color: var(--muted);
-  font: 9px var(--mono);
+  font: 11px var(--mono);
 }
 
 /* Workbench */
@@ -123,7 +123,7 @@ body {
 
 .panel-head h2 {
   margin: 0;
-  font: 600 10px var(--mono);
+  font: 600 11px var(--mono);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -131,7 +131,7 @@ body {
 .panel-head span {
   margin-left: auto;
   color: var(--faint);
-  font: 9px var(--mono);
+  font: 11px var(--mono);
 }
 
 .pulse {
@@ -166,7 +166,7 @@ body {
   display: grid;
   place-items: center;
   color: var(--faint);
-  font: 9px var(--mono);
+  font: 11px var(--mono);
 }
 
 /* RB tree drawing */
@@ -213,12 +213,12 @@ body {
   pointer-events: none;
   text-anchor: middle;
   fill: var(--muted);
-  font: 7.5px var(--mono);
+  font: 11px var(--mono);
 }
 
 .node-text.comm {
   fill: var(--text);
-  font-size: 8.5px;
+  font-size: 11px;
   font-weight: 650;
 }
 
@@ -234,7 +234,7 @@ body {
   padding: 7px 10px;
   border-top: 1px solid var(--line);
   color: var(--muted);
-  font: 9.5px var(--mono);
+  font: 11px var(--mono);
   white-space: nowrap;
   overflow: hidden;
 }
@@ -279,7 +279,7 @@ body {
   align-items: center;
   gap: 7px;
   color: var(--blue);
-  font: 10px var(--mono);
+  font: 11px var(--mono);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -292,7 +292,7 @@ body {
 .note p {
   margin: 0;
   color: var(--muted);
-  font: 10px/1.45 var(--sans);
+  font: 11px/1.45 var(--sans);
 }
 
 .kv {
@@ -309,7 +309,7 @@ body {
   margin: 0;
   padding: 3px 6px;
   border-bottom: 1px solid var(--line);
-  font: 8px var(--mono);
+  font: 11px var(--mono);
 }
 
 .kv dt {
@@ -339,7 +339,7 @@ body {
   display: flex;
   gap: 7px;
   color: var(--muted);
-  font: 9.5px/1.4 var(--mono);
+  font: 11px/1.4 var(--mono);
 }
 
 .check i {
@@ -363,7 +363,7 @@ body {
   border-radius: 6px;
   background: var(--panel-2);
   color: var(--muted);
-  font: 9.5px/1.45 var(--mono);
+  font: 11px/1.45 var(--mono);
 }
 
 .migration-head {
@@ -375,7 +375,7 @@ body {
 
 .migration-head b {
   color: var(--orange);
-  font: 600 9px var(--mono);
+  font: 600 11px var(--mono);
   letter-spacing: 0.06em;
 }
 
@@ -392,7 +392,7 @@ body {
 .migration-nav button {
   min-height: 20px;
   padding: 2px 5px;
-  font-size: 8px;
+  font-size: 11px;
 }
 
 .migration.show {
@@ -425,7 +425,7 @@ body {
 #counter {
   min-width: 92px;
   color: var(--text);
-  font: 9px var(--mono);
+  font: 11px var(--mono);
 }
 
 .badge {
@@ -434,7 +434,7 @@ body {
   border-radius: 5px;
   background: var(--soft);
   color: var(--muted);
-  font: 9.5px var(--mono);
+  font: 11px var(--mono);
   white-space: nowrap;
 }
 
@@ -454,11 +454,11 @@ body {
 }
 
 .life-rail .panel-head h2 {
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .life-rail .panel-head span {
-  font-size: 7px;
+  font-size: 11px;
   max-width: 80px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -488,7 +488,7 @@ body {
 .life-name {
   overflow: hidden;
   color: var(--text);
-  font: 8px var(--mono);
+  font: 11px var(--mono);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
@@ -558,71 +558,8 @@ body {
   justify-content: space-between;
   padding: 4px 0 0 95px;
   color: var(--faint);
-  font: 7px var(--mono);
+  font: 11px var(--mono);
   flex: 0 0 14px;
 }
 
 /* Responsive */
-@media (max-width: 1100px) {
-  html,
-  body {
-    height: auto;
-    overflow: auto;
-  }
-
-  .cfs {
-    height: auto;
-    min-height: 100vh;
-  }
-
-  .workbench {
-    grid-template-columns: 1fr;
-  }
-
-  .trees {
-    min-height: 600px;
-  }
-
-  .notebook {
-    min-height: 330px;
-  }
-}
-
-@media (max-width: 760px) {
-  .trees {
-    grid-template-columns: 1fr;
-    min-height: 1100px;
-  }
-
-  .tree-panel {
-    min-height: 530px;
-  }
-
-  .toolbar {
-    flex-wrap: wrap;
-  }
-
-  #scrub {
-    order: 10;
-    width: 100%;
-  }
-}
-
-@media (max-width: 520px) {
-  .cfs {
-    padding: 12px;
-  }
-
-  .head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  #status {
-    margin-left: 0;
-  }
-
-  .cpu-card {
-    min-width: 160px;
-  }
-}

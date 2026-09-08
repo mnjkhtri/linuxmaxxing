@@ -1,10 +1,16 @@
+import {
+  mountView,
+  observation,
+  relativeNs,
+  parseCapture as parseCaptureFile
+} from '../../common.js';
 /*
  * Scheduler capture lab: CFS per-CPU runqueues.
  *
  * Architecture
  * ------------
- *   capture loading   -> raw text from scheduler.eBPF.ndjson + scheduler-Trace.txt
- *   NDJSON parsing    -> parseSnapshot(): canonical v1 envelope -> internal frame
+ *   capture loading   -> canonical scheduler/events.ndjson
+ *   NDJSON parsing    -> parseSnapshot(): canonical envelope -> internal frame
  *   tracefs parsing   -> parseSchedulerTrace(): raw lines -> lifecycle model
  *   model/index       -> parseCapture(): frames, per-CPU streams, migrations
  *   RB-tree validation-> verifyFrame(): derive invariants from captured state
@@ -16,7 +22,7 @@
  *
  * All rendering reads only the normalized internal frame/lifecycle model, never raw capture JSON fields.
  */
-(function () {
+(function() {
   'use strict';
 
   /* ------------------------------------------------------------------ */
@@ -26,9 +32,7 @@
   var SVG_NS = 'http://www.w3.org/2000/svg';
   var NODE_RADIUS = 22;
   var ZERO_ADDR = '0000000000000000';
-  var SCHEMA_VERSION = 1;
-  var NDJSON_PATH = '../../shared/_captures/scheduler.eBPF.ndjson';
-  var TRACE_PATH = '../../shared/_captures/scheduler-Trace.txt';
+
 
   /* ------------------------------------------------------------------ */
   /* State                                                              */
@@ -44,7 +48,11 @@
   var migrationFrames = [];
   var playAnchorTime = 0;
   var playAnchorIndex = 0;
-  var lifecycle = { rows: [], start: 0, end: 0 };
+  var lifecycle = {
+    rows: [],
+    start: 0,
+    end: 0
+  };
 
   /* ------------------------------------------------------------------ */
   /* DOM helpers                                                        */
@@ -68,7 +76,7 @@
 
   function svgAdd(parent, name, attrs, text) {
     var node = svgEl(name);
-    Object.keys(attrs || {}).forEach(function (key) {
+    Object.keys(attrs || {}).forEach(function(key) {
       node.setAttribute(key, attrs[key]);
     });
     if (text != null) node.textContent = text;
@@ -81,11 +89,11 @@
   /* ------------------------------------------------------------------ */
 
   /*
-   * Consume one canonical v1 snapshot record and return the internal frame representation the renderer works with, or null for meta records and malformed lines.
+   * Project an enqueue observation into the renderer's frame representation.
    * This is the only place capture JSON fields are read.
    */
   function parseSnapshot(record) {
-    if (!record || record.kind !== 'snapshot' || record.schema_version !== SCHEMA_VERSION) {
+    if (!record || record.kind !== 'enqueue_entity') {
       return null;
     }
     var ctx = record.context || {};
@@ -95,7 +103,7 @@
     }
 
     var map = {};
-    (rq.nodes || []).forEach(function (node) {
+    (rq.nodes || []).forEach(function(node) {
       if (!valid(node.address)) return;
       map[node.address] = {
         address: node.address,
@@ -135,21 +143,15 @@
   /*
    * Build the playback model: ordered frames (seq = output order), per-CPU streams, and cross-CPU reappearance edges keyed on the enqueued entity.
    */
-  function parseCapture(text) {
+  function parseCapture(capture) {
     var outFrames = [];
     var streamsByKey = {};
     var localByKey = {};
     var lastCpuByEntity = {};
     var keyCpuByRq = {};
 
-    text.split(/\n/).forEach(function (line) {
-      if (!line.trim()) return;
-      var record;
-      try {
-        record = JSON.parse(line);
-      } catch (err) {
-        return;
-      }
+    capture.events.filter(e => e.source.mechanism === 'ebpf').forEach(function(event) {
+      var record = observation(capture, event);
       var frame = parseSnapshot(record);
       if (!frame) return;
 
@@ -183,15 +185,15 @@
      * A cfs_rq belongs to exactly one CPU, but the probe may have run on a different CPU during wakeups and remote enqueues.
      * Derive the owning CPU by majority across each runqueue's frames so one physical runqueue renders as one panel.
      */
-    Object.keys(streamsByKey).forEach(function (key) {
+    Object.keys(streamsByKey).forEach(function(key) {
       var stream = streamsByKey[key];
       var counts = {};
-      stream.frames.forEach(function (frame) {
+      stream.frames.forEach(function(frame) {
         counts[frame.cpu] = (counts[frame.cpu] || 0) + 1;
       });
       var best = 0;
       var winner = 0;
-      Object.keys(counts).forEach(function (cpu) {
+      Object.keys(counts).forEach(function(cpu) {
         if (counts[cpu] > best) {
           best = counts[cpu];
           winner = +cpu;
@@ -199,22 +201,25 @@
       });
       keyCpuByRq[key] = winner;
       stream.cpu = winner;
-      stream.frames.forEach(function (frame) {
+      stream.frames.forEach(function(frame) {
         frame.cpu = winner;
       });
     });
 
-    outFrames.forEach(function (frame) {
+    outFrames.forEach(function(frame) {
       if (frame.from) frame.fromCpu = keyCpuByRq[frame.from];
     });
 
-    var streamList = Object.keys(streamsByKey).map(function (key) {
+    var streamList = Object.keys(streamsByKey).map(function(key) {
       return streamsByKey[key];
-    }).sort(function (a, b) {
+    }).sort(function(a, b) {
       return a.cpu - b.cpu || String(a.rq).localeCompare(String(b.rq));
     });
 
-    return { frames: outFrames, streams: streamList };
+    return {
+      frames: outFrames,
+      streams: streamList
+    };
   }
 
   /* ------------------------------------------------------------------ */
@@ -225,19 +230,10 @@
    * Parse the raw tracefs capture into a lifecycle model.
    * Timestamps are normalized to timeNs = seconds * 1e9, the same unit as eBPF time_ns.
    */
-  function parseSchedulerTrace(text) {
+  function parseSchedulerTrace(capture) {
     var rows = {};
     var start = Infinity;
     var end = 0;
-    var lineRe = /^\s*(.+?)-(\d+)\s+\[(\d+)\]\s+\S+\s+([0-9.]+):\s+([A-Za-z0-9_]+):\s*(.*)$/;
-
-    function fields(line) {
-      var out = {};
-      var m;
-      var re = /([A-Za-z_]+)=([^\s]+)/g;
-      while ((m = re.exec(line))) out[m[1]] = m[2];
-      return out;
-    }
 
     function row(pid, name, timeNs) {
       if (!pid) return null;
@@ -254,18 +250,18 @@
 
     function mark(r, type, timeNs) {
       if (!r) return;
-      r.marks.push({ timeNs: timeNs, type: type });
+      r.marks.push({
+        timeNs: timeNs,
+        type: type
+      });
       r.last = timeNs;
     }
 
-    text.split(/\n/).forEach(function (raw) {
-      var m = raw.match(lineRe);
-      if (!m) return;
-      var timeNs = Math.round(parseFloat(m[4]) * 1e9);
-      var cpu = +m[3];
-      var type = m[5];
-      var f = fields(m[6]);
-
+    capture.events.filter(e => e.source.mechanism === 'tracefs').forEach(function(event) {
+      var timeNs = relativeNs(capture, event),
+        cpu = event.context.cpu,
+        type = event.kind,
+        f = event.data.fields;
       if (type === 'sched_process_fork') {
         mark(row(f.child_pid, f.child_comm, timeNs), 'fork', timeNs);
         row(f.pid, f.comm, timeNs);
@@ -277,12 +273,19 @@
         if (prev && f.prev_comm) prev.name = f.prev_comm;
         if (next && f.next_comm) next.name = f.next_comm;
         if (prev && prev.running) {
-          prev.runs.push({ from: prev.running.timeNs, to: timeNs, cpu: prev.running.cpu });
+          prev.runs.push({
+            from: prev.running.timeNs,
+            to: timeNs,
+            cpu: prev.running.cpu
+          });
           prev.running = null;
           prev.last = timeNs;
         }
         if (next) {
-          next.running = { timeNs: timeNs, cpu: cpu };
+          next.running = {
+            timeNs: timeNs,
+            cpu: cpu
+          };
           next.last = timeNs;
         }
       } else if (type === 'sched_process_wait' ||
@@ -299,10 +302,14 @@
       }
     });
 
-    Object.keys(rows).forEach(function (pid) {
+    Object.keys(rows).forEach(function(pid) {
       var r = rows[pid];
       if (r.running) {
-        r.runs.push({ from: r.running.timeNs, to: end, cpu: r.running.cpu });
+        r.runs.push({
+          from: r.running.timeNs,
+          to: end,
+          cpu: r.running.cpu
+        });
         r.running = null;
       }
       start = Math.min(start, r.first);
@@ -310,9 +317,9 @@
     });
 
     return {
-      rows: Object.keys(rows).map(function (id) {
+      rows: Object.keys(rows).map(function(id) {
         return rows[id];
-      }).sort(function (a, b) {
+      }).sort(function(a, b) {
         return a.first - b.first || a.pid - b.pid;
       }),
       start: start,
@@ -397,7 +404,10 @@
       } else {
         s = left != null ? left + 0.7 : right - 0.7;
       }
-      raw[address] = { slot: s, depth: depth };
+      raw[address] = {
+        slot: s,
+        depth: depth
+      };
       maxDepth = Math.max(maxDepth, depth);
       return s;
     }
@@ -409,7 +419,7 @@
     var max = 0;
     if (addresses.length) {
       min = max = raw[addresses[0]].slot;
-      addresses.forEach(function (a) {
+      addresses.forEach(function(a) {
         min = Math.min(min, raw[a].slot);
         max = Math.max(max, raw[a].slot);
       });
@@ -418,16 +428,19 @@
     var pos = {};
     var padX = 45;
     var padY = 43;
-    addresses.forEach(function (a) {
+    addresses.forEach(function(a) {
       pos[a] = {
-        x: addresses.length === 1
-          ? width / 2
-          : padX + (raw[a].slot - min) / Math.max(1, max - min) * (width - padX * 2),
+        x: addresses.length === 1 ?
+          width / 2 : padX + (raw[a].slot - min) / Math.max(1, max - min) * (width - padX * 2),
         y: maxDepth ? padY + raw[a].depth / maxDepth * (height - padY * 2) : height / 2
       };
     });
 
-    return { pos: pos, depth: maxDepth + 1, root: root };
+    return {
+      pos: pos,
+      depth: maxDepth + 1,
+      root: root
+    };
   }
 
   /* ------------------------------------------------------------------ */
@@ -450,7 +463,7 @@
     var old = panel.pos || {};
     var t0 = performance.now();
 
-    keys.forEach(function (key) {
+    keys.forEach(function(key) {
       start[key] = old[key] || target[key];
     });
     if (rafById[panel.key]) cancelAnimationFrame(rafById[panel.key]);
@@ -459,7 +472,7 @@
       var t = playing ? 1 : Math.min(1, (now - t0) / 160);
       var ease = t * t * (3 - 2 * t);
       var pos = {};
-      keys.forEach(function (key) {
+      keys.forEach(function(key) {
         pos[key] = {
           x: start[key].x + (target[key].x - start[key].x) * ease,
           y: start[key].y + (target[key].y - start[key].y) * ease
@@ -467,9 +480,9 @@
       });
 
       svg.innerHTML = '';
-      keys.forEach(function (a) {
+      keys.forEach(function(a) {
         var node = frame.map[a];
-        [node.left, node.right].forEach(function (to) {
+        [node.left, node.right].forEach(function(to) {
           if (!to || !pos[to]) return;
           svgAdd(svg, 'line', {
             x1: pos[a].x,
@@ -481,7 +494,7 @@
         });
       });
 
-      keys.forEach(function (a) {
+      keys.forEach(function(a) {
         var node = frame.map[a];
         var p = pos[a];
         var isRed = node.color === 'red';
@@ -503,16 +516,28 @@
         });
 
         var label = node.comm.length > 10 ? node.comm.slice(0, 9) + '\u2026' : node.comm;
-        svgAdd(group, 'text', { x: p.x, y: p.y - 7, 'class': 'node-text comm' }, label);
-        svgAdd(group, 'text', { x: p.x, y: p.y + 4, 'class': 'node-text' }, short(a));
-        svgAdd(group, 'text', { x: p.x, y: p.y + 15, 'class': 'node-text ' + (isRed ? 'red' : '') },
+        svgAdd(group, 'text', {
+          x: p.x,
+          y: p.y - 7,
+          'class': 'node-text comm'
+        }, label);
+        svgAdd(group, 'text', {
+          x: p.x,
+          y: p.y + 4,
+          'class': 'node-text'
+        }, short(a));
+        svgAdd(group, 'text', {
+            x: p.x,
+            y: p.y + 15,
+            'class': 'node-text ' + (isRed ? 'red' : '')
+          },
           isRed ? 'RED' : 'BLACK');
 
         function inspect() {
           inspectNode(frame, a);
         }
         group.addEventListener('click', inspect);
-        group.addEventListener('keydown', function (e) {
+        group.addEventListener('keydown', function(e) {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
             inspect();
@@ -582,7 +607,7 @@
   function renderMigration(frame) {
     var prev = null;
     var next = null;
-    migrationFrames.forEach(function (candidate) {
+    migrationFrames.forEach(function(candidate) {
       if (candidate.global < frame.global) prev = candidate;
       if (candidate.global > frame.global && !next) next = candidate;
     });
@@ -597,10 +622,10 @@
         frame.cpu + ' \u00b7 event ' + frame.global;
     } else {
       box.className = 'migration';
-      text.textContent = next
-        ? 'Next: ' + frameComm(next) + ' \u00b7 event ' + next.global + ' \u00b7 CPU ' +
-        next.fromCpu + ' \u2192 CPU ' + next.cpu
-        : 'No later cross-CPU event.';
+      text.textContent = next ?
+        'Next: ' + frameComm(next) + ' \u00b7 event ' + next.global + ' \u00b7 CPU ' +
+        next.fromCpu + ' \u2192 CPU ' + next.cpu :
+        'No later cross-CPU event.';
     }
   }
 
@@ -608,9 +633,9 @@
     var checks = verifyFrame(frame);
     byId('op').textContent = frame.op;
     byId('layer').textContent = 'CPU ' + frame.cpu;
-    byId('title').textContent = frame.focus && frame.map[frame.focus]
-      ? frame.map[frame.focus].comm
-      : 'enqueue snapshot';
+    byId('title').textContent = frame.focus && frame.map[frame.focus] ?
+      frame.map[frame.focus].comm :
+      'enqueue snapshot';
     byId('v-cpu').textContent = 'CPU ' + frame.cpu;
     byId('v-rq').textContent = frame.rq;
     byId('v-rq').title = frame.rq;
@@ -627,7 +652,7 @@
       ['Equal black height: ' + checks.height, checks.bh],
       ['Cached leftmost is structural minimum', checks.leftmost]
     ];
-    byId('checks').innerHTML = rows.map(function (item) {
+    byId('checks').innerHTML = rows.map(function(item) {
       return '<div class="check ' + (item[1] ? '' : 'bad') + '"><i></i><span>' + item[0] + '</span></div>';
     }).join('');
 
@@ -672,7 +697,7 @@
     var available = Math.max(200, root.clientHeight - 16);
     var rowHeight = Math.max(10, Math.min(16, available / lifecycle.rows.length));
 
-    lifecycle.rows.forEach(function (r) {
+    lifecycle.rows.forEach(function(r) {
       var row = document.createElement('div');
       row.className = 'life-row';
       row.style.height = rowHeight + 'px';
@@ -685,14 +710,14 @@
 
       var track = document.createElement('div');
       track.className = 'life-track';
-      r.runs.forEach(function (run) {
+      r.runs.forEach(function(run) {
         var bar = document.createElement('i');
         bar.className = 'life-run cpu-' + run.cpu;
         bar.style.left = (run.from - lifecycle.start) / span * 100 + '%';
         bar.style.width = Math.max(0.6, (run.to - run.from) / span * 100) + '%';
         track.appendChild(bar);
       });
-      r.marks.forEach(function (ev) {
+      r.marks.forEach(function(ev) {
         var mark = document.createElement('i');
         mark.className = 'life-mark ' + ev.type;
         mark.style.left = (ev.timeNs - lifecycle.start) / span * 100 + '%';
@@ -736,7 +761,7 @@
     if (!frames.length) return;
     currentIndex = Math.max(0, Math.min(index, frames.length - 1));
     var current = frames[currentIndex];
-    streams.forEach(function (stream) {
+    streams.forEach(function(stream) {
       renderTreePanel(stream, frameAtStream(stream, current.global), stream.key === current.key);
     });
     renderNotebook(current);
@@ -760,9 +785,14 @@
     }
   }
 
+  document.addEventListener('capture-refresh', () => setPlaying(false));
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) setPlaying(false);
+  });
+
   function schedule() {
     if (!playing) return;
-    animationTimer = requestAnimationFrame(function (now) {
+    animationTimer = requestAnimationFrame(function(now) {
       var rate = Number(byId('speed').value);
       var target = Math.min(frames.length - 1, playAnchorIndex + Math.floor((now - playAnchorTime) * rate / 1000));
       if (target !== currentIndex) render(target);
@@ -785,15 +815,15 @@
     trees.innerHTML = '';
     panels = {};
 
-    streams.forEach(function (stream) {
+    streams.forEach(function(stream) {
       var card = document.createElement('button');
       card.className = 'cpu-card';
       card.innerHTML =
         '<strong>CPU ' + stream.cpu + '</strong>' +
         '<span>' + stream.frames.length.toLocaleString() + ' frames \u00b7 max ' + stream.max + ' nodes</span>' +
         '<code>cfs_rq ' + short(stream.rq) + '</code>';
-      card.addEventListener('click', function () {
-        var best = stream.frames.reduce(function (a, f) {
+      card.addEventListener('click', function() {
+        var best = stream.frames.reduce(function(a, f) {
           return f.count > a.count ? f : a;
         }, stream.frames[0]);
         render(best.global - 1);
@@ -831,7 +861,7 @@
     var parsed = parseCapture(text);
     frames = parsed.frames;
     streams = parsed.streams;
-    migrationFrames = frames.filter(function (frame) {
+    migrationFrames = frames.filter(function(frame) {
       return !!frame.from;
     });
     byId('status').innerHTML =
@@ -849,71 +879,54 @@
     drawLifecycle();
   }
 
-  function fetchWithCacheBust(path) {
-    return fetch(path + '?v=' + Date.now(), { cache: 'no-store' }).then(function (response) {
-      if (!response.ok) throw new Error(path + ' HTTP ' + response.status);
-      return response.text();
-    });
-  }
-
-  function loadCaptures() {
-    Promise.all([fetchWithCacheBust(NDJSON_PATH), fetchWithCacheBust(TRACE_PATH)])
-      .then(function (parts) {
-        loadLifecycle(parts[1]);
-        loadCapture(parts[0]);
-      })
-      .catch(function (err) {
-        byId('status').textContent = 'SCHED data error \u00b7 ' + err.message;
-        byId('life-summary').textContent = 'task data unavailable';
-      });
-  }
-
   /* ------------------------------------------------------------------ */
   /* Event listeners                                                     */
   /* ------------------------------------------------------------------ */
 
   function bindEvents() {
-    byId('prev-mig').addEventListener('click', function () {
+    byId('prev-mig').addEventListener('click', function() {
       jumpMigration(-1);
     });
-    byId('next-mig').addEventListener('click', function () {
+    byId('next-mig').addEventListener('click', function() {
       jumpMigration(1);
     });
-    byId('load').addEventListener('click', function () {
+    byId('load').addEventListener('click', function() {
       byId('file').click();
     });
-    byId('file').addEventListener('change', function () {
+    byId('file').addEventListener('change', function() {
       var file = this.files[0];
       if (!file) return;
       var reader = new FileReader();
-      reader.onload = function (event) {
-        loadCapture(event.target.result);
+      reader.onload = function(event) {
+        const capture = parseCaptureFile(event.target.result, 'scheduler');
+        loadLifecycle(capture);
+        loadCapture(capture);
       };
       reader.readAsText(file);
       this.value = '';
     });
-    byId('prev').addEventListener('click', function () {
+    byId('prev').addEventListener('click', function() {
       setPlaying(false);
       render(currentIndex - 1);
     });
-    byId('next').addEventListener('click', function () {
+    byId('next').addEventListener('click', function() {
       setPlaying(false);
       render(currentIndex + 1);
     });
-    byId('play').addEventListener('click', function () {
+    byId('play').addEventListener('click', function() {
       setPlaying(!playing);
     });
-    byId('scrub').addEventListener('input', function () {
+    byId('scrub').addEventListener('input', function() {
       setPlaying(false);
       render(+this.value);
     });
-    byId('speed').addEventListener('change', function () {
+    byId('speed').addEventListener('change', function() {
       if (playing) {
         playAnchorTime = performance.now();
         playAnchorIndex = currentIndex;
       }
     });
-    document.addEventListener('keydown', function (e) {
+    document.addEventListener('keydown', function(e) {
       if (/INPUT|SELECT|BUTTON/.test(e.target.tagName)) return;
       if (e.key === 'ArrowLeft') byId('prev').click();
       if (e.key === 'ArrowRight') byId('next').click();
@@ -922,8 +935,8 @@
         byId('play').click();
       }
     });
-    window.addEventListener('resize', function () {
-      Object.keys(panels).forEach(function (key) {
+    window.addEventListener('resize', function() {
+      Object.keys(panels).forEach(function(key) {
         panels[key].lastGlobal = 0;
         panels[key].pos = {};
       });
@@ -937,5 +950,9 @@
   /* ------------------------------------------------------------------ */
 
   bindEvents();
-  loadCaptures();
+  mountView('scheduler', capture => {
+    loadLifecycle(capture);
+    loadCapture(capture);
+    if (!frames.length) throw Error('No runqueue observations');
+  });
 })();
