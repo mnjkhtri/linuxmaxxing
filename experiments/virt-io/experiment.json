@@ -1,0 +1,50 @@
+{
+  "name": "virt-io",
+  "source": "experiments/virt-io",
+  "environment": "host",
+  "observer": "build/io",
+  "workload": [
+    "./build/vmm"
+  ],
+  "required": [
+    "sys_enter_ioctl",
+    "device_mmio_write",
+    "device_execute_command_return",
+    "device_dma_transfer_return",
+    "kvm_mmio",
+    "kvm_pio",
+    "kvm_set_irq"
+  ],
+  "trace": {
+    "required": [
+      "kvm/kvm_entry",
+      "kvm/kvm_exit",
+      "kvm/kvm_userspace_exit",
+      "kvm/kvm_mmio",
+      "kvm/kvm_pio",
+      "kvm/kvm_page_fault",
+      "kvm/kvm_set_irq",
+      "kvm/kvm_ioapic_set_irq",
+      "kvm/kvm_apic_accept_irq",
+      "kvm/kvm_apic",
+      "kvm/kvm_msi_set_irq"
+    ],
+    "optional": [
+      "kvm/kvm_fast_mmio",
+      "kvm/kvm_emulate_insn",
+      "kvm/kvm_cr",
+      "kvm/kvm_ack_irq",
+      "kvm/kvm_inj_virq",
+      "kvm/kvm_eoi"
+    ]
+  },
+  "question": "Observe guest PIO/MMIO, VMM device actions, DMA, and interrupt injection across the KVM boundary.",
+  "timeouts": {
+    "ready_s": 20,
+    "workload_s": 180,
+    "shutdown_s": 20,
+    "guest_boot_s": 300
+  },
+  "buffer_kib": 32768,
+  "allow_partial": false
+}

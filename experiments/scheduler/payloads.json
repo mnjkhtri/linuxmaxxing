@@ -1,0 +1,359 @@
+{
+  "ebpf:collector_metadata": {
+    "$ref": "shape_0"
+  },
+  "ebpf:enqueue_entity": {
+    "$ref": "shape_7"
+  },
+  "tracefs:sched_process_exit": {
+    "$ref": "shape_9"
+  },
+  "tracefs:sched_process_fork": {
+    "$ref": "shape_11"
+  },
+  "tracefs:sched_process_free": {
+    "$ref": "shape_13"
+  },
+  "tracefs:sched_process_wait": {
+    "$ref": "shape_13"
+  },
+  "tracefs:sched_switch": {
+    "$ref": "shape_15"
+  },
+  "tracefs:sched_wakeup_new": {
+    "$ref": "shape_17"
+  },
+  "$defs": {
+    "shape_0": {
+      "type": "object",
+      "fields": {
+        "capture": {
+          "type": "string"
+        },
+        "max_nodes": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "capture",
+        "max_nodes"
+      ]
+    },
+    "shape_1": {
+      "type": "object",
+      "fields": {
+        "name": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "probe": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "phase",
+        "probe"
+      ]
+    },
+    "shape_2": {
+      "type": "object",
+      "fields": {
+        "address": {
+          "type": "hex"
+        },
+        "rb_node": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "address",
+        "rb_node"
+      ]
+    },
+    "shape_3": {
+      "type": "object",
+      "fields": {
+        "address": {
+          "type": "hex"
+        },
+        "left": {
+          "type": "hex",
+          "nullable": true
+        },
+        "right": {
+          "type": "hex",
+          "nullable": true
+        },
+        "color": {
+          "type": "string"
+        },
+        "comm": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "address",
+        "color",
+        "comm",
+        "left",
+        "right"
+      ]
+    },
+    "shape_4": {
+      "type": "array",
+      "items": {
+        "$ref": "shape_3"
+      }
+    },
+    "shape_5": {
+      "type": "object",
+      "fields": {
+        "address": {
+          "type": "hex"
+        },
+        "nr_running": {
+          "type": "integer64"
+        },
+        "root": {
+          "type": "hex"
+        },
+        "leftmost": {
+          "type": "hex"
+        },
+        "enqueued_entity": {
+          "$ref": "shape_2"
+        },
+        "node_count": {
+          "type": "integer64"
+        },
+        "truncated": {
+          "type": "boolean"
+        },
+        "nodes": {
+          "$ref": "shape_4"
+        }
+      },
+      "required": [
+        "address",
+        "enqueued_entity",
+        "leftmost",
+        "node_count",
+        "nodes",
+        "nr_running",
+        "root",
+        "truncated"
+      ]
+    },
+    "shape_6": {
+      "type": "object",
+      "fields": {
+        "runqueue": {
+          "$ref": "shape_5"
+        }
+      },
+      "required": [
+        "runqueue"
+      ]
+    },
+    "shape_7": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_1"
+        },
+        "state": {
+          "$ref": "shape_6"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_8": {
+      "type": "object",
+      "fields": {
+        "comm": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer64"
+        },
+        "prio": {
+          "type": "integer64"
+        },
+        "group_dead": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "comm",
+        "group_dead",
+        "pid",
+        "prio"
+      ]
+    },
+    "shape_9": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_8"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_10": {
+      "type": "object",
+      "fields": {
+        "comm": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer64"
+        },
+        "child_comm": {
+          "type": "string"
+        },
+        "child_pid": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "child_comm",
+        "child_pid",
+        "comm",
+        "pid"
+      ]
+    },
+    "shape_11": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_10"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_12": {
+      "type": "object",
+      "fields": {
+        "comm": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer64"
+        },
+        "prio": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "comm",
+        "pid",
+        "prio"
+      ]
+    },
+    "shape_13": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_12"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_14": {
+      "type": "object",
+      "fields": {
+        "prev_comm": {
+          "type": "string"
+        },
+        "prev_pid": {
+          "type": "integer64"
+        },
+        "prev_prio": {
+          "type": "integer64"
+        },
+        "prev_state": {
+          "type": "string"
+        },
+        "next_comm": {
+          "type": "string"
+        },
+        "next_pid": {
+          "type": "integer64"
+        },
+        "next_prio": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "next_comm",
+        "next_pid",
+        "next_prio",
+        "prev_comm",
+        "prev_pid",
+        "prev_prio",
+        "prev_state"
+      ]
+    },
+    "shape_15": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_14"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_16": {
+      "type": "object",
+      "fields": {
+        "comm": {
+          "type": "string"
+        },
+        "pid": {
+          "type": "integer64"
+        },
+        "prio": {
+          "type": "integer64"
+        },
+        "target_cpu": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "comm",
+        "pid",
+        "prio",
+        "target_cpu"
+      ]
+    },
+    "shape_17": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_16"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    }
+  }
+}

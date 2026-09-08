@@ -1,0 +1,38 @@
+{
+  "name": "virt-virtio",
+  "source": "experiments/virt-virtio",
+  "environment": "host",
+  "observer": "build/virtio",
+  "workload": [
+    "./build/vmm"
+  ],
+  "required": [
+    "kvm_entry",
+    "kvm_exit"
+  ],
+  "trace": {
+    "required": [
+      "kvm/kvm_entry",
+      "kvm/kvm_exit",
+      "kvm/kvm_userspace_exit"
+    ],
+    "optional": [
+      "kvm/kvm_set_irq",
+      "kvm/kvm_ioapic_set_irq",
+      "kvm/kvm_apic_accept_irq",
+      "kvm/kvm_inj_virq",
+      "kvm/kvm_eoi",
+      "kvm/kvm_msi_set_irq",
+      "kvm/kvm_mmio"
+    ]
+  },
+  "question": "Observe virtqueue descriptors, available/used rings, buffer contents, polling completion, and ioeventfd/irqfd handoff.",
+  "timeouts": {
+    "ready_s": 20,
+    "workload_s": 180,
+    "shutdown_s": 20,
+    "guest_boot_s": 300
+  },
+  "buffer_kib": 32768,
+  "allow_partial": false
+}

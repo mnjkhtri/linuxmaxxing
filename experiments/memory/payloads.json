@@ -1,0 +1,1847 @@
+{
+  "ebpf:collector_metadata": {
+    "$ref": "shape_0"
+  },
+  "ebpf:memory_snapshot": {
+    "$ref": "shape_16"
+  },
+  "tracefs:exit_mmap": {
+    "$ref": "shape_18"
+  },
+  "tracefs:kfree": {
+    "$ref": "shape_20"
+  },
+  "tracefs:kmalloc": {
+    "$ref": "shape_22"
+  },
+  "tracefs:kmem_cache_alloc": {
+    "$ref": "shape_24"
+  },
+  "tracefs:kmem_cache_free": {
+    "$ref": "shape_26"
+  },
+  "tracefs:mm_collapse_huge_page": {
+    "$ref": "shape_28"
+  },
+  "tracefs:mm_collapse_huge_page_isolate": {
+    "$ref": "shape_30"
+  },
+  "tracefs:mm_compaction_kcompactd_sleep": {
+    "$ref": "shape_32"
+  },
+  "tracefs:mm_filemap_add_to_page_cache": {
+    "$ref": "shape_34"
+  },
+  "tracefs:mm_filemap_delete_from_page_cache": {
+    "$ref": "shape_34"
+  },
+  "tracefs:mm_filemap_fault": {
+    "$ref": "shape_36"
+  },
+  "tracefs:mm_filemap_map_pages": {
+    "$ref": "shape_38"
+  },
+  "tracefs:mm_khugepaged_scan": {
+    "$ref": "shape_40"
+  },
+  "tracefs:mm_khugepaged_scan_pmd": {
+    "$ref": "shape_42"
+  },
+  "tracefs:mm_lru_activate": {
+    "$ref": "shape_44"
+  },
+  "tracefs:mm_lru_insertion": {
+    "$ref": "shape_46"
+  },
+  "tracefs:mm_page_alloc": {
+    "$ref": "shape_48"
+  },
+  "tracefs:mm_page_alloc_extfrag": {
+    "$ref": "shape_50"
+  },
+  "tracefs:mm_page_alloc_zone_locked": {
+    "$ref": "shape_52"
+  },
+  "tracefs:mm_page_free": {
+    "$ref": "shape_54"
+  },
+  "tracefs:mm_page_free_batched": {
+    "$ref": "shape_54"
+  },
+  "tracefs:mm_page_pcpu_drain": {
+    "$ref": "shape_56"
+  },
+  "tracefs:mm_vmscan_reclaim_pages": {
+    "$ref": "shape_58"
+  },
+  "tracefs:mm_vmscan_write_folio": {
+    "$ref": "shape_60"
+  },
+  "tracefs:mmap_lock_released": {
+    "$ref": "shape_62"
+  },
+  "tracefs:page_fault_user": {
+    "$ref": "shape_64"
+  },
+  "tracefs:percpu_alloc_percpu": {
+    "$ref": "shape_66"
+  },
+  "tracefs:percpu_free_percpu": {
+    "$ref": "shape_68"
+  },
+  "tracefs:rss_stat": {
+    "$ref": "shape_70"
+  },
+  "tracefs:tlb_flush": {
+    "$ref": "shape_72"
+  },
+  "tracefs:vm_unmapped_area": {
+    "$ref": "shape_74"
+  },
+  "tracefs:wbc_writepage": {
+    "$ref": "shape_76"
+  },
+  "tracefs:writeback_dirty_folio": {
+    "$ref": "shape_78"
+  },
+  "tracefs:writeback_pages_written": {
+    "$ref": "shape_80"
+  },
+  "tracefs:writeback_single_inode": {
+    "$ref": "shape_82"
+  },
+  "tracefs:writeback_single_inode_start": {
+    "$ref": "shape_82"
+  },
+  "tracefs:writeback_start": {
+    "$ref": "shape_84"
+  },
+  "workload:collector_metadata": {
+    "$ref": "shape_85"
+  },
+  "workload:phase": {
+    "$ref": "shape_86"
+  },
+  "workload:result": {
+    "$ref": "shape_87"
+  },
+  "$defs": {
+    "shape_0": {
+      "type": "object",
+      "fields": {
+        "capture": {
+          "type": "string"
+        },
+        "max_vmas": {
+          "type": "integer64"
+        },
+        "max_pages_per_vma": {
+          "type": "integer64"
+        },
+        "max_xarray_scan_slots": {
+          "type": "integer64"
+        },
+        "max_xarray_depth": {
+          "type": "integer64"
+        },
+        "max_cache_orders": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "capture",
+        "max_cache_orders",
+        "max_pages_per_vma",
+        "max_vmas",
+        "max_xarray_depth",
+        "max_xarray_scan_slots"
+      ]
+    },
+    "shape_1": {
+      "type": "object",
+      "fields": {
+        "phase_seq": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "phase_seq"
+      ]
+    },
+    "shape_2": {
+      "type": "object",
+      "fields": {
+        "total_vm": {
+          "type": "integer64"
+        },
+        "data_vm": {
+          "type": "integer64"
+        },
+        "exec_vm": {
+          "type": "integer64"
+        },
+        "stack_vm": {
+          "type": "integer64"
+        },
+        "pgtables_bytes": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "data_vm",
+        "exec_vm",
+        "pgtables_bytes",
+        "stack_vm",
+        "total_vm"
+      ]
+    },
+    "shape_3": {
+      "type": "object",
+      "fields": {
+        "anon_pages": {
+          "type": "integer64"
+        },
+        "file_pages": {
+          "type": "integer64"
+        },
+        "shmem_pages": {
+          "type": "integer64"
+        },
+        "swap_entries": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "anon_pages",
+        "file_pages",
+        "shmem_pages",
+        "swap_entries"
+      ]
+    },
+    "shape_4": {
+      "type": "object",
+      "fields": {
+        "address": {
+          "type": "hex"
+        },
+        "mmap_base": {
+          "type": "hex"
+        },
+        "accounting": {
+          "$ref": "shape_2"
+        },
+        "rss": {
+          "$ref": "shape_3"
+        },
+        "map_count": {
+          "type": "integer64"
+        },
+        "vma_count": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "accounting",
+        "address",
+        "map_count",
+        "mmap_base",
+        "rss",
+        "vma_count"
+      ]
+    },
+    "shape_5": {
+      "type": "object",
+      "fields": {
+        "start": {
+          "type": "hex"
+        },
+        "end": {
+          "type": "hex"
+        },
+        "pgoff": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "end",
+        "pgoff",
+        "start"
+      ]
+    },
+    "shape_6": {
+      "type": "object",
+      "fields": {
+        "address": {
+          "type": "hex",
+          "nullable": true
+        },
+        "root": {
+          "type": "hex",
+          "nullable": true
+        },
+        "parent": {
+          "type": "hex",
+          "nullable": true
+        }
+      },
+      "required": [
+        "address",
+        "parent",
+        "root"
+      ]
+    },
+    "shape_7": {
+      "type": "object",
+      "fields": {
+        "name": {
+          "type": "string"
+        },
+        "inode": {
+          "type": "integer64"
+        },
+        "device": {
+          "type": "integer64"
+        },
+        "mapping": {
+          "type": "hex"
+        },
+        "cache_pages": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "cache_pages",
+        "device",
+        "inode",
+        "mapping",
+        "name"
+      ],
+      "nullable": true
+    },
+    "shape_8": {
+      "type": "object",
+      "fields": {
+        "order": {
+          "type": "integer64"
+        },
+        "pages_per_folio": {
+          "type": "integer64"
+        },
+        "folios": {
+          "type": "integer64"
+        },
+        "dirty": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "dirty",
+        "folios",
+        "order",
+        "pages_per_folio"
+      ]
+    },
+    "shape_9": {
+      "type": "array",
+      "items": {
+        "$ref": "shape_8"
+      }
+    },
+    "shape_10": {
+      "type": "object",
+      "fields": {
+        "folios": {
+          "type": "integer64"
+        },
+        "clean_folios": {
+          "type": "integer64"
+        },
+        "dirty_folios": {
+          "type": "integer64"
+        },
+        "writeback_folios": {
+          "type": "integer64"
+        },
+        "lru_folios": {
+          "type": "integer64"
+        },
+        "active_folios": {
+          "type": "integer64"
+        },
+        "referenced_folios": {
+          "type": "integer64"
+        },
+        "workingset_folios": {
+          "type": "integer64"
+        },
+        "unevictable_folios": {
+          "type": "integer64"
+        },
+        "order_buckets": {
+          "$ref": "shape_9"
+        }
+      },
+      "required": [
+        "active_folios",
+        "clean_folios",
+        "dirty_folios",
+        "folios",
+        "lru_folios",
+        "order_buckets",
+        "referenced_folios",
+        "unevictable_folios",
+        "workingset_folios",
+        "writeback_folios"
+      ]
+    },
+    "shape_11": {
+      "type": "array",
+      "items": {
+        "type": "integer64"
+      }
+    },
+    "shape_12": {
+      "type": "object",
+      "fields": {
+        "scanned_pages": {
+          "type": "integer64"
+        },
+        "present_pages": {
+          "type": "integer64"
+        },
+        "none_pages": {
+          "type": "integer64"
+        },
+        "swap_pages": {
+          "type": "integer64"
+        },
+        "huge_pmd_pages": {
+          "type": "integer64"
+        },
+        "huge_pmd_entries": {
+          "type": "integer64"
+        },
+        "huge_pud_pages": {
+          "type": "integer64"
+        },
+        "huge_pud_entries": {
+          "type": "integer64"
+        },
+        "dirty_entries": {
+          "type": "integer64"
+        },
+        "pages": {
+          "$ref": "shape_11"
+        },
+        "dirty": {
+          "$ref": "shape_11"
+        },
+        "targets": {
+          "$ref": "shape_11"
+        }
+      },
+      "required": [
+        "dirty",
+        "dirty_entries",
+        "huge_pmd_entries",
+        "huge_pmd_pages",
+        "huge_pud_entries",
+        "huge_pud_pages",
+        "none_pages",
+        "pages",
+        "present_pages",
+        "scanned_pages",
+        "swap_pages",
+        "targets"
+      ]
+    },
+    "shape_13": {
+      "type": "object",
+      "fields": {
+        "range": {
+          "$ref": "shape_5"
+        },
+        "flags": {
+          "type": "hex"
+        },
+        "anon_vma": {
+          "$ref": "shape_6"
+        },
+        "file": {
+          "$ref": "shape_7"
+        },
+        "file_cache": {
+          "$ref": "shape_10"
+        },
+        "page_table": {
+          "$ref": "shape_12"
+        }
+      },
+      "required": [
+        "anon_vma",
+        "file",
+        "file_cache",
+        "flags",
+        "page_table",
+        "range"
+      ]
+    },
+    "shape_14": {
+      "type": "array",
+      "items": {
+        "$ref": "shape_13"
+      }
+    },
+    "shape_15": {
+      "type": "object",
+      "fields": {
+        "mm": {
+          "$ref": "shape_4"
+        },
+        "vmas": {
+          "$ref": "shape_14"
+        }
+      },
+      "required": [
+        "mm",
+        "vmas"
+      ]
+    },
+    "shape_16": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_1"
+        },
+        "state": {
+          "$ref": "shape_15"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_17": {
+      "type": "object",
+      "fields": {
+        "maple_tree": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "maple_tree",
+        "operation"
+      ]
+    },
+    "shape_18": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_17"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_19": {
+      "type": "object",
+      "fields": {
+        "call_site": {
+          "type": "string"
+        },
+        "ptr": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "call_site",
+        "ptr"
+      ]
+    },
+    "shape_20": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_19"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_21": {
+      "type": "object",
+      "fields": {
+        "call_site": {
+          "type": "string"
+        },
+        "ptr": {
+          "type": "string"
+        },
+        "bytes_req": {
+          "type": "integer64"
+        },
+        "bytes_alloc": {
+          "type": "integer64"
+        },
+        "gfp_flags": {
+          "type": "string"
+        },
+        "node": {
+          "type": "integer64"
+        },
+        "accounted": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accounted",
+        "bytes_alloc",
+        "bytes_req",
+        "call_site",
+        "gfp_flags",
+        "node",
+        "ptr"
+      ]
+    },
+    "shape_22": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_21"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_23": {
+      "type": "object",
+      "fields": {
+        "call_site": {
+          "type": "string"
+        },
+        "ptr": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "bytes_req": {
+          "type": "integer64"
+        },
+        "bytes_alloc": {
+          "type": "integer64"
+        },
+        "gfp_flags": {
+          "type": "string"
+        },
+        "node": {
+          "type": "integer64"
+        },
+        "accounted": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accounted",
+        "bytes_alloc",
+        "bytes_req",
+        "call_site",
+        "gfp_flags",
+        "name",
+        "node",
+        "ptr"
+      ]
+    },
+    "shape_24": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_23"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_25": {
+      "type": "object",
+      "fields": {
+        "call_site": {
+          "type": "string"
+        },
+        "ptr": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "call_site",
+        "name",
+        "ptr"
+      ]
+    },
+    "shape_26": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_25"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_27": {
+      "type": "object",
+      "fields": {
+        "mm": {
+          "type": "string"
+        },
+        "isolated": {
+          "type": "integer64"
+        },
+        "status": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "isolated",
+        "mm",
+        "order",
+        "status"
+      ]
+    },
+    "shape_28": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_27"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_29": {
+      "type": "object",
+      "fields": {
+        "scan_pfn": {
+          "type": "hex"
+        },
+        "none_or_zero": {
+          "type": "integer64"
+        },
+        "referenced": {
+          "type": "integer64"
+        },
+        "status": {
+          "type": "string"
+        },
+        "order": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "none_or_zero",
+        "order",
+        "referenced",
+        "scan_pfn",
+        "status"
+      ]
+    },
+    "shape_30": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_29"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_31": {
+      "type": "object",
+      "fields": {
+        "nid": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "nid"
+      ]
+    },
+    "shape_32": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_31"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_33": {
+      "type": "object",
+      "fields": {
+        "device": {
+          "type": "string"
+        },
+        "inode": {
+          "type": "string"
+        },
+        "pfn": {
+          "type": "hex"
+        },
+        "ofs": {
+          "type": "integer64"
+        },
+        "order": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "device",
+        "inode",
+        "ofs",
+        "order",
+        "pfn"
+      ]
+    },
+    "shape_34": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_33"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_35": {
+      "type": "object",
+      "fields": {
+        "dev": {
+          "type": "string"
+        },
+        "ino": {
+          "type": "string"
+        },
+        "ofs": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "dev",
+        "ino",
+        "ofs"
+      ]
+    },
+    "shape_36": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_35"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_37": {
+      "type": "object",
+      "fields": {
+        "dev": {
+          "type": "string"
+        },
+        "ino": {
+          "type": "string"
+        },
+        "ofs": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "dev",
+        "ino",
+        "ofs"
+      ]
+    },
+    "shape_38": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_37"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_39": {
+      "type": "object",
+      "fields": {
+        "mm": {
+          "type": "string"
+        },
+        "progress": {
+          "type": "integer64"
+        },
+        "full_scan_finished": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "full_scan_finished",
+        "mm",
+        "progress"
+      ]
+    },
+    "shape_40": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_39"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_41": {
+      "type": "object",
+      "fields": {
+        "mm": {
+          "type": "string"
+        },
+        "scan_pfn": {
+          "type": "hex"
+        },
+        "referenced": {
+          "type": "integer64"
+        },
+        "none_or_zero": {
+          "type": "integer64"
+        },
+        "status": {
+          "type": "string"
+        },
+        "unmapped": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "mm",
+        "none_or_zero",
+        "referenced",
+        "scan_pfn",
+        "status",
+        "unmapped"
+      ]
+    },
+    "shape_42": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_41"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_43": {
+      "type": "object",
+      "fields": {
+        "folio": {
+          "type": "string"
+        },
+        "pfn": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "folio",
+        "pfn"
+      ]
+    },
+    "shape_44": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_43"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_45": {
+      "type": "object",
+      "fields": {
+        "folio": {
+          "type": "string"
+        },
+        "pfn": {
+          "type": "hex"
+        },
+        "lru": {
+          "type": "integer64"
+        },
+        "flags": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "flags",
+        "folio",
+        "lru",
+        "pfn"
+      ]
+    },
+    "shape_46": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_45"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_47": {
+      "type": "object",
+      "fields": {
+        "page": {
+          "type": "string"
+        },
+        "pfn": {
+          "type": "hex"
+        },
+        "order": {
+          "type": "integer64"
+        },
+        "migratetype": {
+          "type": "integer64"
+        },
+        "gfp_flags": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "gfp_flags",
+        "migratetype",
+        "order",
+        "page",
+        "pfn"
+      ]
+    },
+    "shape_48": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_47"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_49": {
+      "type": "object",
+      "fields": {
+        "page": {
+          "type": "string"
+        },
+        "pfn": {
+          "type": "hex"
+        },
+        "alloc_order": {
+          "type": "integer64"
+        },
+        "fallback_order": {
+          "type": "integer64"
+        },
+        "pageblock_order": {
+          "type": "integer64"
+        },
+        "alloc_migratetype": {
+          "type": "integer64"
+        },
+        "fallback_migratetype": {
+          "type": "integer64"
+        },
+        "fragmenting": {
+          "type": "integer64"
+        },
+        "change_ownership": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "alloc_migratetype",
+        "alloc_order",
+        "change_ownership",
+        "fallback_migratetype",
+        "fallback_order",
+        "fragmenting",
+        "page",
+        "pageblock_order",
+        "pfn"
+      ]
+    },
+    "shape_50": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_49"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_51": {
+      "type": "object",
+      "fields": {
+        "page": {
+          "type": "string"
+        },
+        "pfn": {
+          "type": "hex"
+        },
+        "order": {
+          "type": "integer64"
+        },
+        "migratetype": {
+          "type": "integer64"
+        },
+        "percpu_refill": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "migratetype",
+        "order",
+        "page",
+        "percpu_refill",
+        "pfn"
+      ]
+    },
+    "shape_52": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_51"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_53": {
+      "type": "object",
+      "fields": {
+        "page": {
+          "type": "string"
+        },
+        "pfn": {
+          "type": "hex"
+        },
+        "order": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "order",
+        "page",
+        "pfn"
+      ]
+    },
+    "shape_54": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_53"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_55": {
+      "type": "object",
+      "fields": {
+        "page": {
+          "type": "string"
+        },
+        "pfn": {
+          "type": "hex"
+        },
+        "order": {
+          "type": "integer64"
+        },
+        "migratetype": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "migratetype",
+        "order",
+        "page",
+        "pfn"
+      ]
+    },
+    "shape_56": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_55"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_57": {
+      "type": "object",
+      "fields": {
+        "nid": {
+          "type": "integer64"
+        },
+        "nr_scanned": {
+          "type": "integer64"
+        },
+        "nr_reclaimed": {
+          "type": "integer64"
+        },
+        "nr_dirty": {
+          "type": "integer64"
+        },
+        "nr_writeback": {
+          "type": "integer64"
+        },
+        "nr_congested": {
+          "type": "integer64"
+        },
+        "nr_immediate": {
+          "type": "integer64"
+        },
+        "nr_activate_anon": {
+          "type": "integer64"
+        },
+        "nr_activate_file": {
+          "type": "integer64"
+        },
+        "nr_ref_keep": {
+          "type": "integer64"
+        },
+        "nr_unmap_fail": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "nid",
+        "nr_activate_anon",
+        "nr_activate_file",
+        "nr_congested",
+        "nr_dirty",
+        "nr_immediate",
+        "nr_reclaimed",
+        "nr_ref_keep",
+        "nr_scanned",
+        "nr_unmap_fail",
+        "nr_writeback"
+      ]
+    },
+    "shape_58": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_57"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_59": {
+      "type": "object",
+      "fields": {
+        "page": {
+          "type": "string"
+        },
+        "pfn": {
+          "type": "hex"
+        },
+        "flags": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "flags",
+        "page",
+        "pfn"
+      ]
+    },
+    "shape_60": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_59"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_61": {
+      "type": "object",
+      "fields": {
+        "mm": {
+          "type": "string"
+        },
+        "memcg_id": {
+          "type": "integer64"
+        },
+        "write": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "memcg_id",
+        "mm",
+        "write"
+      ]
+    },
+    "shape_62": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_61"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_63": {
+      "type": "object",
+      "fields": {
+        "address": {
+          "type": "hex"
+        },
+        "ip": {
+          "type": "hex"
+        },
+        "error_code": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "address",
+        "error_code",
+        "ip"
+      ]
+    },
+    "shape_64": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_63"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_65": {
+      "type": "object",
+      "fields": {
+        "call_site": {
+          "type": "string"
+        },
+        "reserved": {
+          "type": "integer64"
+        },
+        "is_atomic": {
+          "type": "integer64"
+        },
+        "size": {
+          "type": "integer64"
+        },
+        "align": {
+          "type": "integer64"
+        },
+        "base_addr": {
+          "type": "string"
+        },
+        "off": {
+          "type": "integer64"
+        },
+        "ptr": {
+          "type": "string"
+        },
+        "bytes_alloc": {
+          "type": "integer64"
+        },
+        "gfp_flags": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "align",
+        "base_addr",
+        "bytes_alloc",
+        "call_site",
+        "gfp_flags",
+        "is_atomic",
+        "off",
+        "ptr",
+        "reserved",
+        "size"
+      ]
+    },
+    "shape_66": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_65"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_67": {
+      "type": "object",
+      "fields": {
+        "base_addr": {
+          "type": "string"
+        },
+        "off": {
+          "type": "integer64"
+        },
+        "ptr": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "base_addr",
+        "off",
+        "ptr"
+      ]
+    },
+    "shape_68": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_67"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_69": {
+      "type": "object",
+      "fields": {
+        "mm_id": {
+          "type": "integer64"
+        },
+        "curr": {
+          "type": "integer64"
+        },
+        "type": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "curr",
+        "mm_id",
+        "size",
+        "type"
+      ]
+    },
+    "shape_70": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_69"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_71": {
+      "type": "object",
+      "fields": {
+        "pages": {
+          "type": "integer64"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "pages",
+        "reason"
+      ]
+    },
+    "shape_72": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_71"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_73": {
+      "type": "object",
+      "fields": {
+        "addr": {
+          "type": "hex"
+        },
+        "err": {
+          "type": "integer64"
+        },
+        "total_vm": {
+          "type": "hex"
+        },
+        "flags": {
+          "type": "hex"
+        },
+        "len": {
+          "type": "hex"
+        },
+        "lo": {
+          "type": "hex"
+        },
+        "hi": {
+          "type": "hex"
+        },
+        "mask": {
+          "type": "hex"
+        },
+        "ofs": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "addr",
+        "err",
+        "flags",
+        "hi",
+        "len",
+        "lo",
+        "mask",
+        "ofs",
+        "total_vm"
+      ]
+    },
+    "shape_74": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_73"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_75": {
+      "type": "object",
+      "fields": {
+        "bdi": {
+          "type": "string"
+        },
+        "towrt": {
+          "type": "integer64"
+        },
+        "skip": {
+          "type": "integer64"
+        },
+        "mode": {
+          "type": "integer64"
+        },
+        "kupd": {
+          "type": "integer64"
+        },
+        "bgrd": {
+          "type": "integer64"
+        },
+        "cyclic": {
+          "type": "integer64"
+        },
+        "start": {
+          "type": "hex"
+        },
+        "end": {
+          "type": "hex"
+        },
+        "cgroup_ino": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "bdi",
+        "bgrd",
+        "cgroup_ino",
+        "cyclic",
+        "end",
+        "kupd",
+        "mode",
+        "skip",
+        "start",
+        "towrt"
+      ]
+    },
+    "shape_76": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_75"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_77": {
+      "type": "object",
+      "fields": {
+        "bdi": {
+          "type": "string"
+        },
+        "ino": {
+          "type": "integer64"
+        },
+        "index": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "bdi",
+        "index",
+        "ino"
+      ]
+    },
+    "shape_78": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_77"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_79": {
+      "type": "object",
+      "fields": {
+        "pages": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "pages"
+      ]
+    },
+    "shape_80": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_79"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_81": {
+      "type": "object",
+      "fields": {
+        "bdi": {
+          "type": "string"
+        },
+        "ino": {
+          "type": "integer64"
+        },
+        "state": {
+          "type": "string"
+        },
+        "dirtied_when": {
+          "type": "integer64"
+        },
+        "age": {
+          "type": "integer64"
+        },
+        "index": {
+          "type": "integer64"
+        },
+        "to_write": {
+          "type": "integer64"
+        },
+        "wrote": {
+          "type": "integer64"
+        },
+        "cgroup_ino": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "age",
+        "bdi",
+        "cgroup_ino",
+        "dirtied_when",
+        "index",
+        "ino",
+        "state",
+        "to_write",
+        "wrote"
+      ]
+    },
+    "shape_82": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_81"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_83": {
+      "type": "object",
+      "fields": {
+        "bdi": {
+          "type": "string"
+        },
+        "sb_dev": {
+          "type": "string"
+        },
+        "nr_pages": {
+          "type": "integer64"
+        },
+        "sync_mode": {
+          "type": "integer64"
+        },
+        "kupdate": {
+          "type": "integer64"
+        },
+        "range_cyclic": {
+          "type": "integer64"
+        },
+        "background": {
+          "type": "integer64"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "cgroup_ino": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "background",
+        "bdi",
+        "cgroup_ino",
+        "kupdate",
+        "nr_pages",
+        "range_cyclic",
+        "reason",
+        "sb_dev",
+        "sync_mode"
+      ]
+    },
+    "shape_84": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_83"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_85": {
+      "type": "object",
+      "fields": {
+        "pt_sample_pages": {
+          "type": "integer64"
+        },
+        "xarray_scan_slots": {
+          "type": "integer64"
+        },
+        "huge_pmd_pages": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "huge_pmd_pages",
+        "pt_sample_pages",
+        "xarray_scan_slots"
+      ]
+    },
+    "shape_86": {
+      "type": "object",
+      "fields": {
+        "name": {
+          "type": "string"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "name",
+        "producer_sequence"
+      ]
+    },
+    "shape_87": {
+      "type": "object",
+      "fields": {
+        "status": {
+          "type": "string"
+        },
+        "checksum": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "checksum",
+        "status"
+      ]
+    }
+  }
+}

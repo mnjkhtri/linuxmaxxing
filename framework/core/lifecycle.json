@@ -1,0 +1,147 @@
+{
+  "framework:capture_started": {
+    "type": "object",
+    "fields": {
+      "environment": {
+        "type": "object",
+        "fields": {
+          "kernel": {
+            "type": "string"
+          },
+          "architecture": {
+            "type": "string"
+          },
+          "os": {
+            "type": "string"
+          },
+          "packages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "image_sha256": {
+            "type": "string"
+          },
+          "kernel_revision": {
+            "type": "string"
+          },
+          "qemu": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kernel",
+          "architecture",
+          "os",
+          "packages",
+          "image_sha256",
+          "kernel_revision",
+          "qemu"
+        ]
+      },
+      "source_digest": {
+        "type": "string"
+      },
+      "enabled": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "skipped": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "environment",
+      "source_digest",
+      "enabled",
+      "skipped"
+    ]
+  },
+  "framework:collector_ready": {
+    "type": "object",
+    "fields": {
+      "collector": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "collector"
+    ]
+  },
+  "framework:workload_started": {
+    "type": "object",
+    "fields": {
+      "command": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "command"
+    ]
+  },
+  "framework:workload_finished": {
+    "type": "object",
+    "fields": {
+      "exit_code": {
+        "type": "integer64"
+      }
+    },
+    "required": [
+      "exit_code"
+    ]
+  },
+  "framework:collector_finished": {
+    "type": "object",
+    "fields": {
+      "collector": {
+        "type": "string"
+      },
+      "dropped": {
+        "type": "integer64"
+      },
+      "failures": {
+        "type": "integer64"
+      }
+    },
+    "required": [
+      "collector",
+      "dropped",
+      "failures"
+    ]
+  },
+  "framework:capture_finished": {
+    "type": "object",
+    "fields": {
+      "validated": {
+        "type": "boolean"
+      },
+      "restored": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "validated",
+      "restored"
+    ]
+  },
+  "framework:capture_failed": {
+    "type": "object",
+    "fields": {
+      "error": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "error"
+    ]
+  }
+}

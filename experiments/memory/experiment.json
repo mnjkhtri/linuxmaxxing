@@ -1,0 +1,52 @@
+{
+  "name": "memory",
+  "source": "experiments/memory",
+  "environment": "guest",
+  "observer": "build/mm",
+  "workload": [
+    "./workload_mm"
+  ],
+  "required": [
+    "memory_snapshot",
+    "phase"
+  ],
+  "trace": {
+    "required": [],
+    "optional": [
+      "mmap/vm_unmapped_area",
+      "mmap/exit_mmap",
+      "exceptions/page_fault_user",
+      "mmap_lock/mmap_lock_released",
+      "filemap/mm_filemap_fault",
+      "filemap/mm_filemap_get_pages",
+      "filemap/mm_filemap_map_pages",
+      "filemap/mm_filemap_add_to_page_cache",
+      "filemap/mm_filemap_delete_from_page_cache",
+      "writeback/writeback_dirty_folio",
+      "writeback/writeback_start",
+      "writeback/wbc_writepage",
+      "writeback/writeback_pages_written",
+      "huge_memory/mm_khugepaged_scan_pmd",
+      "huge_memory/mm_collapse_huge_page_isolate",
+      "huge_memory/mm_collapse_huge_page",
+      "huge_memory/mm_khugepaged_scan_file",
+      "huge_memory/mm_khugepaged_collapse_file",
+      "vmscan/mm_vmscan_direct_reclaim_begin",
+      "vmscan/mm_vmscan_direct_reclaim_end",
+      "vmscan/mm_vmscan_write_folio",
+      "vmscan/mm_vmscan_reclaim_pages",
+      "compaction/mm_compaction_begin",
+      "compaction/mm_compaction_end",
+      "migrate/mm_migrate_pages"
+    ]
+  },
+  "question": "Observe memory state at every workload phase: address spaces, page tables, page cache, sharing, huge pages, reclaim, and swap.",
+  "timeouts": {
+    "ready_s": 20,
+    "workload_s": 600,
+    "shutdown_s": 20,
+    "guest_boot_s": 300
+  },
+  "buffer_kib": 65536,
+  "allow_partial": true
+}

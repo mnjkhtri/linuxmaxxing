@@ -1,0 +1,44 @@
+{
+  "name": "virt-ept",
+  "source": "experiments/virt-ept",
+  "environment": "host",
+  "observer": "build/ept",
+  "workload": [
+    "./build/vmm"
+  ],
+  "required": [
+    "kvm_entry",
+    "kvm_exit",
+    "kvm_userspace_exit",
+    "control_begin",
+    "control_end",
+    "memslot_begin",
+    "memslot_end",
+    "kvm_mmu_set_spte",
+    "kvm_flush_remote_tlbs"
+  ],
+  "trace": {
+    "required": [
+      "kvm/kvm_entry",
+      "kvm/kvm_exit",
+      "kvm/kvm_userspace_exit",
+      "kvm/kvm_unmap_hva_range",
+      "kvm/kvm_page_fault",
+      "kvmmmu/kvm_mmu_spte_requested",
+      "kvmmmu/kvm_mmu_set_spte"
+    ],
+    "optional": [
+      "kvmmmu/kvm_mmu_split_huge_page",
+      "kvmmmu/kvm_tdp_mmu_spte_changed"
+    ]
+  },
+  "question": "Observe EPT mappings and changes across paired VMM control commands, memslot changes, dirty logging, invalidation, and huge-page splitting.",
+  "timeouts": {
+    "ready_s": 20,
+    "workload_s": 180,
+    "shutdown_s": 20,
+    "guest_boot_s": 300
+  },
+  "buffer_kib": 32768,
+  "allow_partial": true
+}

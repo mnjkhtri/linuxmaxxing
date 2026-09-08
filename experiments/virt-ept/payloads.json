@@ -1,0 +1,1309 @@
+{
+  "ebpf:collector_metadata": {
+    "$ref": "shape_2"
+  },
+  "ebpf:control_begin": {
+    "$ref": "shape_12"
+  },
+  "ebpf:control_end": {
+    "$ref": "shape_12"
+  },
+  "ebpf:kvm_entry": {
+    "$ref": "shape_13"
+  },
+  "ebpf:kvm_exit": {
+    "$ref": "shape_13"
+  },
+  "ebpf:kvm_flush_remote_tlbs": {
+    "$ref": "shape_13"
+  },
+  "ebpf:kvm_mmu_set_spte": {
+    "$ref": "shape_13"
+  },
+  "ebpf:kvm_mmu_split_huge_page": {
+    "$ref": "shape_13"
+  },
+  "ebpf:kvm_mmu_spte_requested": {
+    "$ref": "shape_13"
+  },
+  "ebpf:kvm_page_fault": {
+    "$ref": "shape_13"
+  },
+  "ebpf:kvm_unmap_hva_range": {
+    "$ref": "shape_13"
+  },
+  "ebpf:kvm_userspace_exit": {
+    "$ref": "shape_13"
+  },
+  "ebpf:mark_mmio_spte": {
+    "$ref": "shape_13"
+  },
+  "ebpf:memslot_begin": {
+    "$ref": "shape_17"
+  },
+  "ebpf:memslot_end": {
+    "$ref": "shape_17"
+  },
+  "ebpf:sys_enter_ioctl": {
+    "$ref": "shape_19"
+  },
+  "ebpf:sys_enter_madvise": {
+    "$ref": "shape_21"
+  },
+  "ebpf:sys_enter_mmap": {
+    "$ref": "shape_23"
+  },
+  "ebpf:sys_exit_ioctl": {
+    "$ref": "shape_19"
+  },
+  "ebpf:sys_exit_madvise": {
+    "$ref": "shape_21"
+  },
+  "ebpf:sys_exit_mmap": {
+    "$ref": "shape_25"
+  },
+  "tracefs:kvm_entry": {
+    "$ref": "shape_27"
+  },
+  "tracefs:kvm_exit": {
+    "$ref": "shape_29"
+  },
+  "tracefs:kvm_mmu_set_spte": {
+    "$ref": "shape_31"
+  },
+  "tracefs:kvm_mmu_split_huge_page": {
+    "$ref": "shape_33"
+  },
+  "tracefs:kvm_mmu_spte_requested": {
+    "$ref": "shape_35"
+  },
+  "tracefs:kvm_page_fault": {
+    "$ref": "shape_37"
+  },
+  "tracefs:kvm_tdp_mmu_spte_changed": {
+    "$ref": "shape_39"
+  },
+  "tracefs:kvm_unmap_hva_range": {
+    "$ref": "shape_41"
+  },
+  "tracefs:kvm_userspace_exit": {
+    "$ref": "shape_43"
+  },
+  "tracefs:mark_mmio_spte": {
+    "$ref": "shape_45"
+  },
+  "$defs": {
+    "shape_0": {
+      "type": "object",
+      "fields": {
+        "command": {
+          "type": "integer64"
+        },
+        "operation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "operation"
+      ]
+    },
+    "shape_1": {
+      "type": "array",
+      "items": {
+        "$ref": "shape_0"
+      }
+    },
+    "shape_2": {
+      "type": "object",
+      "fields": {
+        "capture": {
+          "type": "string"
+        },
+        "ept_levels": {
+          "type": "integer64"
+        },
+        "slot0_gfn_samples": {
+          "type": "integer64"
+        },
+        "huge_gfn_samples": {
+          "type": "integer64"
+        },
+        "max_gfn_samples": {
+          "type": "integer64"
+        },
+        "huge_gfn_base": {
+          "type": "integer64"
+        },
+        "huge_gfn_stride": {
+          "type": "integer64"
+        },
+        "data_gfn": {
+          "type": "integer64"
+        },
+        "mmio_gfn": {
+          "type": "integer64"
+        },
+        "control_port": {
+          "type": "integer64"
+        },
+        "vmx_disposition_available": {
+          "type": "boolean"
+        },
+        "split_snapshot_available": {
+          "type": "boolean"
+        },
+        "mmio_snapshot_available": {
+          "type": "boolean"
+        },
+        "control_commands": {
+          "$ref": "shape_1"
+        }
+      },
+      "required": [
+        "capture",
+        "control_commands",
+        "control_port",
+        "data_gfn",
+        "ept_levels",
+        "huge_gfn_base",
+        "huge_gfn_samples",
+        "huge_gfn_stride",
+        "max_gfn_samples",
+        "mmio_gfn",
+        "mmio_snapshot_available",
+        "slot0_gfn_samples",
+        "split_snapshot_available",
+        "vmx_disposition_available"
+      ]
+    },
+    "shape_3": {
+      "type": "object",
+      "fields": {
+        "event": {
+          "type": "integer64"
+        },
+        "event_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "event",
+        "event_name"
+      ]
+    },
+    "shape_4": {
+      "type": "object",
+      "fields": {
+        "present": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "command": {
+          "type": "integer64"
+        },
+        "operation_id": {
+          "type": "integer64"
+        },
+        "duration_ns": {
+          "type": "integer64"
+        },
+        "result": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "command",
+        "completed",
+        "duration_ns",
+        "operation_id",
+        "present",
+        "result"
+      ]
+    },
+    "shape_5": {
+      "type": "object",
+      "fields": {
+        "present": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "present"
+      ]
+    },
+    "shape_6": {
+      "type": "object",
+      "fields": {
+        "present": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "completed",
+        "present"
+      ]
+    },
+    "shape_7": {
+      "type": "object",
+      "fields": {
+        "level": {
+          "type": "integer64"
+        },
+        "table_hpa": {
+          "type": "hex"
+        },
+        "index": {
+          "type": "integer64"
+        },
+        "spte": {
+          "type": "hex"
+        },
+        "present": {
+          "type": "boolean"
+        },
+        "mmio": {
+          "type": "boolean"
+        },
+        "leaf": {
+          "type": "boolean"
+        },
+        "r": {
+          "type": "boolean"
+        },
+        "w": {
+          "type": "boolean"
+        },
+        "x": {
+          "type": "boolean"
+        },
+        "a": {
+          "type": "boolean"
+        },
+        "d": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "a",
+        "d",
+        "index",
+        "leaf",
+        "level",
+        "mmio",
+        "present",
+        "r",
+        "spte",
+        "table_hpa",
+        "w",
+        "x"
+      ]
+    },
+    "shape_8": {
+      "type": "array",
+      "items": {
+        "$ref": "shape_7"
+      }
+    },
+    "shape_9": {
+      "type": "object",
+      "fields": {
+        "gfn": {
+          "type": "integer64"
+        },
+        "gva": {
+          "type": "hex"
+        },
+        "gpa": {
+          "type": "hex"
+        },
+        "ept_mapped": {
+          "type": "boolean"
+        },
+        "ept_mmio": {
+          "type": "boolean"
+        },
+        "leaf_level": {
+          "type": "integer64"
+        },
+        "leaf_pfn": {
+          "type": "hex"
+        },
+        "entries": {
+          "$ref": "shape_8"
+        }
+      },
+      "required": [
+        "entries",
+        "ept_mapped",
+        "ept_mmio",
+        "gfn",
+        "gpa",
+        "gva",
+        "leaf_level",
+        "leaf_pfn"
+      ]
+    },
+    "shape_10": {
+      "type": "array",
+      "items": {
+        "$ref": "shape_9"
+      }
+    },
+    "shape_11": {
+      "type": "object",
+      "fields": {
+        "present": {
+          "type": "boolean"
+        },
+        "vcpu": {
+          "type": "hex"
+        },
+        "kvm": {
+          "type": "hex"
+        },
+        "mmu": {
+          "type": "hex"
+        },
+        "root_hpa": {
+          "type": "hex"
+        },
+        "root_pgd": {
+          "type": "hex"
+        },
+        "gfns": {
+          "$ref": "shape_10"
+        }
+      },
+      "required": [
+        "gfns",
+        "kvm",
+        "mmu",
+        "present",
+        "root_hpa",
+        "root_pgd",
+        "vcpu"
+      ]
+    },
+    "shape_12": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_3"
+        },
+        "control": {
+          "$ref": "shape_4"
+        },
+        "memslot": {
+          "$ref": "shape_5"
+        },
+        "ioctl": {
+          "$ref": "shape_6"
+        },
+        "madvise": {
+          "$ref": "shape_6"
+        },
+        "mmap": {
+          "$ref": "shape_6"
+        },
+        "disposition": {
+          "$ref": "shape_5"
+        },
+        "state": {
+          "$ref": "shape_11"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "control",
+        "disposition",
+        "event_info",
+        "ioctl",
+        "madvise",
+        "memslot",
+        "mmap",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_13": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_3"
+        },
+        "control": {
+          "$ref": "shape_5"
+        },
+        "memslot": {
+          "$ref": "shape_5"
+        },
+        "ioctl": {
+          "$ref": "shape_6"
+        },
+        "madvise": {
+          "$ref": "shape_6"
+        },
+        "mmap": {
+          "$ref": "shape_6"
+        },
+        "disposition": {
+          "$ref": "shape_5"
+        },
+        "state": {
+          "$ref": "shape_11"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "control",
+        "disposition",
+        "event_info",
+        "ioctl",
+        "madvise",
+        "memslot",
+        "mmap",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_14": {
+      "type": "object",
+      "fields": {
+        "present": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "control_command": {
+          "type": "integer64"
+        },
+        "vm_fd": {
+          "type": "integer64"
+        },
+        "slot": {
+          "type": "integer64"
+        },
+        "flags": {
+          "type": "hex"
+        },
+        "guest_phys_addr": {
+          "type": "hex"
+        },
+        "userspace_addr": {
+          "type": "hex",
+          "nullable": true
+        },
+        "size": {
+          "type": "hex"
+        },
+        "operation_id": {
+          "type": "integer64"
+        },
+        "duration_ns": {
+          "type": "integer64"
+        },
+        "result": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "completed",
+        "control_command",
+        "duration_ns",
+        "flags",
+        "guest_phys_addr",
+        "operation_id",
+        "present",
+        "result",
+        "size",
+        "slot",
+        "userspace_addr",
+        "vm_fd"
+      ]
+    },
+    "shape_15": {
+      "type": "array",
+      "items": {
+        "$ref": "shape_9"
+      },
+      "nullable": true
+    },
+    "shape_16": {
+      "type": "object",
+      "fields": {
+        "present": {
+          "type": "boolean"
+        },
+        "vcpu": {
+          "type": "hex",
+          "nullable": true
+        },
+        "kvm": {
+          "type": "hex",
+          "nullable": true
+        },
+        "mmu": {
+          "type": "hex",
+          "nullable": true
+        },
+        "root_hpa": {
+          "type": "hex",
+          "nullable": true
+        },
+        "root_pgd": {
+          "type": "hex",
+          "nullable": true
+        },
+        "gfns": {
+          "$ref": "shape_15"
+        }
+      },
+      "required": [
+        "gfns",
+        "kvm",
+        "mmu",
+        "present",
+        "root_hpa",
+        "root_pgd",
+        "vcpu"
+      ]
+    },
+    "shape_17": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_3"
+        },
+        "control": {
+          "$ref": "shape_5"
+        },
+        "memslot": {
+          "$ref": "shape_14"
+        },
+        "ioctl": {
+          "$ref": "shape_6"
+        },
+        "madvise": {
+          "$ref": "shape_6"
+        },
+        "mmap": {
+          "$ref": "shape_6"
+        },
+        "disposition": {
+          "$ref": "shape_5"
+        },
+        "state": {
+          "$ref": "shape_16"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "control",
+        "disposition",
+        "event_info",
+        "ioctl",
+        "madvise",
+        "memslot",
+        "mmap",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_18": {
+      "type": "object",
+      "fields": {
+        "present": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "fd": {
+          "type": "integer64"
+        },
+        "request": {
+          "type": "hex"
+        },
+        "request_name": {
+          "type": "string"
+        },
+        "argument": {
+          "type": "hex"
+        },
+        "call_id": {
+          "type": "integer64"
+        },
+        "result": {
+          "type": "integer64"
+        },
+        "duration_ns": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "argument",
+        "call_id",
+        "completed",
+        "duration_ns",
+        "fd",
+        "present",
+        "request",
+        "request_name",
+        "result"
+      ]
+    },
+    "shape_19": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_3"
+        },
+        "control": {
+          "$ref": "shape_5"
+        },
+        "memslot": {
+          "$ref": "shape_5"
+        },
+        "ioctl": {
+          "$ref": "shape_18"
+        },
+        "madvise": {
+          "$ref": "shape_6"
+        },
+        "mmap": {
+          "$ref": "shape_6"
+        },
+        "disposition": {
+          "$ref": "shape_5"
+        },
+        "state": {
+          "$ref": "shape_16"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "control",
+        "disposition",
+        "event_info",
+        "ioctl",
+        "madvise",
+        "memslot",
+        "mmap",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_20": {
+      "type": "object",
+      "fields": {
+        "present": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "start": {
+          "type": "hex"
+        },
+        "length": {
+          "type": "hex"
+        },
+        "advice": {
+          "type": "integer64"
+        },
+        "advice_name": {
+          "type": "string"
+        },
+        "call_id": {
+          "type": "integer64"
+        },
+        "result": {
+          "type": "integer64"
+        },
+        "duration_ns": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "advice",
+        "advice_name",
+        "call_id",
+        "completed",
+        "duration_ns",
+        "length",
+        "present",
+        "result",
+        "start"
+      ]
+    },
+    "shape_21": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_3"
+        },
+        "control": {
+          "$ref": "shape_5"
+        },
+        "memslot": {
+          "$ref": "shape_5"
+        },
+        "ioctl": {
+          "$ref": "shape_6"
+        },
+        "madvise": {
+          "$ref": "shape_20"
+        },
+        "mmap": {
+          "$ref": "shape_6"
+        },
+        "disposition": {
+          "$ref": "shape_5"
+        },
+        "state": {
+          "$ref": "shape_11"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "control",
+        "disposition",
+        "event_info",
+        "ioctl",
+        "madvise",
+        "memslot",
+        "mmap",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_22": {
+      "type": "object",
+      "fields": {
+        "present": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "requested_addr": {
+          "type": "null",
+          "nullable": true
+        },
+        "length": {
+          "type": "hex"
+        },
+        "prot": {
+          "type": "hex"
+        },
+        "flags": {
+          "type": "hex"
+        },
+        "fd": {
+          "type": "integer64"
+        },
+        "offset": {
+          "type": "hex"
+        },
+        "call_id": {
+          "type": "integer64"
+        },
+        "result_hva": {
+          "type": "null",
+          "nullable": true
+        },
+        "duration_ns": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "call_id",
+        "completed",
+        "duration_ns",
+        "fd",
+        "flags",
+        "length",
+        "offset",
+        "present",
+        "prot",
+        "requested_addr",
+        "result_hva"
+      ]
+    },
+    "shape_23": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_3"
+        },
+        "control": {
+          "$ref": "shape_5"
+        },
+        "memslot": {
+          "$ref": "shape_5"
+        },
+        "ioctl": {
+          "$ref": "shape_6"
+        },
+        "madvise": {
+          "$ref": "shape_6"
+        },
+        "mmap": {
+          "$ref": "shape_22"
+        },
+        "disposition": {
+          "$ref": "shape_5"
+        },
+        "state": {
+          "$ref": "shape_16"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "control",
+        "disposition",
+        "event_info",
+        "ioctl",
+        "madvise",
+        "memslot",
+        "mmap",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_24": {
+      "type": "object",
+      "fields": {
+        "present": {
+          "type": "boolean"
+        },
+        "completed": {
+          "type": "boolean"
+        },
+        "requested_addr": {
+          "type": "null",
+          "nullable": true
+        },
+        "length": {
+          "type": "hex"
+        },
+        "prot": {
+          "type": "hex"
+        },
+        "flags": {
+          "type": "hex"
+        },
+        "fd": {
+          "type": "integer64"
+        },
+        "offset": {
+          "type": "hex"
+        },
+        "call_id": {
+          "type": "integer64"
+        },
+        "result_hva": {
+          "type": "hex"
+        },
+        "duration_ns": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "call_id",
+        "completed",
+        "duration_ns",
+        "fd",
+        "flags",
+        "length",
+        "offset",
+        "present",
+        "prot",
+        "requested_addr",
+        "result_hva"
+      ]
+    },
+    "shape_25": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_3"
+        },
+        "control": {
+          "$ref": "shape_5"
+        },
+        "memslot": {
+          "$ref": "shape_5"
+        },
+        "ioctl": {
+          "$ref": "shape_6"
+        },
+        "madvise": {
+          "$ref": "shape_6"
+        },
+        "mmap": {
+          "$ref": "shape_24"
+        },
+        "disposition": {
+          "$ref": "shape_5"
+        },
+        "state": {
+          "$ref": "shape_16"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "control",
+        "disposition",
+        "event_info",
+        "ioctl",
+        "madvise",
+        "memslot",
+        "mmap",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_26": {
+      "type": "object",
+      "fields": {
+        "vcpu": {
+          "type": "integer64"
+        },
+        "rip": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "rip",
+        "vcpu"
+      ]
+    },
+    "shape_27": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_26"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_28": {
+      "type": "object",
+      "fields": {
+        "vcpu": {
+          "type": "integer64"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "rip": {
+          "type": "hex"
+        },
+        "info1": {
+          "type": "hex"
+        },
+        "info2": {
+          "type": "hex"
+        },
+        "intr_info": {
+          "type": "hex"
+        },
+        "error_code": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "error_code",
+        "info1",
+        "info2",
+        "intr_info",
+        "reason",
+        "rip",
+        "vcpu"
+      ]
+    },
+    "shape_29": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_28"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_30": {
+      "type": "object",
+      "fields": {
+        "gfn": {
+          "type": "integer64"
+        },
+        "spte": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer64"
+        },
+        "address": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "address",
+        "gfn",
+        "level",
+        "permissions",
+        "spte"
+      ]
+    },
+    "shape_31": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_30"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_32": {
+      "type": "object",
+      "fields": {
+        "gfn": {
+          "type": "integer64"
+        },
+        "spte": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer64"
+        },
+        "errno": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "errno",
+        "gfn",
+        "level",
+        "spte"
+      ]
+    },
+    "shape_33": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_32"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_34": {
+      "type": "object",
+      "fields": {
+        "gfn": {
+          "type": "string"
+        },
+        "pfn": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "gfn",
+        "level",
+        "pfn"
+      ]
+    },
+    "shape_35": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_34"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_36": {
+      "type": "object",
+      "fields": {
+        "vcpu": {
+          "type": "integer64"
+        },
+        "rip": {
+          "type": "hex"
+        },
+        "address": {
+          "type": "hex"
+        },
+        "error_code": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "address",
+        "error_code",
+        "rip",
+        "vcpu"
+      ]
+    },
+    "shape_37": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_36"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_38": {
+      "type": "object",
+      "fields": {
+        "address_space": {
+          "type": "integer64"
+        },
+        "gfn": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer64"
+        },
+        "old_spte": {
+          "type": "string"
+        },
+        "new_spte": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "address_space",
+        "gfn",
+        "level",
+        "new_spte",
+        "old_spte"
+      ]
+    },
+    "shape_39": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_38"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_40": {
+      "type": "object",
+      "fields": {
+        "start": {
+          "type": "hex"
+        },
+        "end": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "end",
+        "start"
+      ]
+    },
+    "shape_41": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_40"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_42": {
+      "type": "object",
+      "fields": {
+        "reason": {
+          "type": "string"
+        },
+        "code": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "code",
+        "reason"
+      ]
+    },
+    "shape_43": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_42"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    },
+    "shape_44": {
+      "type": "object",
+      "fields": {
+        "sptep": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "sptep"
+      ]
+    },
+    "shape_45": {
+      "type": "object",
+      "fields": {
+        "fields": {
+          "$ref": "shape_44"
+        }
+      },
+      "required": [
+        "fields"
+      ]
+    }
+  }
+}

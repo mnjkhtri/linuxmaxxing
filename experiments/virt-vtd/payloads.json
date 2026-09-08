@@ -1,0 +1,1418 @@
+{
+  "ebpf:collector_metadata": {
+    "$ref": "shape_4"
+  },
+  "ebpf:collector_summary": {
+    "$ref": "shape_7"
+  },
+  "ebpf:guest_dma_map_entry": {
+    "$ref": "shape_12"
+  },
+  "ebpf:guest_dma_map_exit": {
+    "$ref": "shape_12"
+  },
+  "ebpf:guest_dma_sync_for_cpu": {
+    "$ref": "shape_12"
+  },
+  "ebpf:guest_dma_sync_for_device": {
+    "$ref": "shape_12"
+  },
+  "ebpf:guest_dma_unmap": {
+    "$ref": "shape_12"
+  },
+  "ebpf:guest_irq_handler_entry": {
+    "$ref": "shape_16"
+  },
+  "ebpf:guest_irq_handler_exit": {
+    "$ref": "shape_16"
+  },
+  "ebpf:guest_ixgbe_clean_entry": {
+    "$ref": "shape_12"
+  },
+  "ebpf:guest_ixgbe_clean_exit": {
+    "$ref": "shape_12"
+  },
+  "ebpf:guest_ixgbe_close": {
+    "$ref": "shape_18"
+  },
+  "ebpf:guest_ixgbe_diag_entry": {
+    "$ref": "shape_18"
+  },
+  "ebpf:guest_ixgbe_diag_exit": {
+    "$ref": "shape_18"
+  },
+  "ebpf:guest_ixgbe_intr_test_entry": {
+    "$ref": "shape_18"
+  },
+  "ebpf:guest_ixgbe_intr_test_exit": {
+    "$ref": "shape_18"
+  },
+  "ebpf:guest_ixgbe_loopback_test_entry": {
+    "$ref": "shape_18"
+  },
+  "ebpf:guest_ixgbe_loopback_test_exit": {
+    "$ref": "shape_18"
+  },
+  "ebpf:guest_ixgbe_open": {
+    "$ref": "shape_18"
+  },
+  "ebpf:guest_ixgbe_run_loopback_entry": {
+    "$ref": "shape_18"
+  },
+  "ebpf:guest_ixgbe_run_loopback_exit": {
+    "$ref": "shape_18"
+  },
+  "ebpf:guest_ixgbe_xmit_entry": {
+    "$ref": "shape_12"
+  },
+  "ebpf:guest_ixgbe_xmit_exit": {
+    "$ref": "shape_12"
+  },
+  "ebpf:guest_napi_poll": {
+    "$ref": "shape_21"
+  },
+  "ebpf:guest_softirq_entry": {
+    "$ref": "shape_24"
+  },
+  "ebpf:guest_softirq_exit": {
+    "$ref": "shape_24"
+  },
+  "ebpf:guest_softirq_raise": {
+    "$ref": "shape_24"
+  },
+  "ebpf:interrupt_remap_msi_message": {
+    "$ref": "shape_26"
+  },
+  "ebpf:iommu_device_attach": {
+    "$ref": "shape_29"
+  },
+  "ebpf:iommu_domain_attach_enter": {
+    "$ref": "shape_32"
+  },
+  "ebpf:iommu_domain_attach_exit": {
+    "$ref": "shape_32"
+  },
+  "ebpf:iommu_iotlb_invalidate": {
+    "$ref": "shape_32"
+  },
+  "ebpf:iommu_map": {
+    "$ref": "shape_29"
+  },
+  "ebpf:iommu_qi_complete": {
+    "$ref": "shape_32"
+  },
+  "ebpf:iommu_qi_submit": {
+    "$ref": "shape_32"
+  },
+  "ebpf:iommu_unmap": {
+    "$ref": "shape_29"
+  },
+  "ebpf:irte_activate": {
+    "$ref": "shape_26"
+  },
+  "ebpf:irte_alloc": {
+    "$ref": "shape_26"
+  },
+  "ebpf:kvm_memory_region_enter": {
+    "$ref": "shape_29"
+  },
+  "ebpf:kvm_memory_region_exit": {
+    "$ref": "shape_29"
+  },
+  "ebpf:kvm_mmio": {
+    "$ref": "shape_35"
+  },
+  "ebpf:kvm_pi_irte_update": {
+    "$ref": "shape_26"
+  },
+  "ebpf:kvm_pi_sync_pir_to_irr_exit": {
+    "$ref": "shape_26"
+  },
+  "ebpf:kvm_pi_wakeup": {
+    "$ref": "shape_38"
+  },
+  "ebpf:vfio_dma_map_enter": {
+    "$ref": "shape_29"
+  },
+  "ebpf:vfio_dma_map_exit": {
+    "$ref": "shape_29"
+  },
+  "ebpf:vfio_dma_unmap_enter": {
+    "$ref": "shape_29"
+  },
+  "ebpf:vfio_dma_unmap_exit": {
+    "$ref": "shape_29"
+  },
+  "ebpf:vfio_irq_set_enter": {
+    "$ref": "shape_26"
+  },
+  "ebpf:vfio_irq_set_exit": {
+    "$ref": "shape_26"
+  },
+  "ebpf:vfio_page_pin_enter": {
+    "$ref": "shape_29"
+  },
+  "ebpf:vfio_page_pin_exit": {
+    "$ref": "shape_29"
+  },
+  "ebpf:vfio_page_unpin_enter": {
+    "$ref": "shape_29"
+  },
+  "ebpf:vfio_page_unpin_exit": {
+    "$ref": "shape_29"
+  },
+  "ebpf:workload_begin": {
+    "$ref": "shape_41"
+  },
+  "ebpf:workload_end": {
+    "$ref": "shape_41"
+  },
+  "$defs": {
+    "shape_0": {
+      "type": "object",
+      "fields": {
+        "observer": {
+          "type": "string"
+        },
+        "filter": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "filter",
+        "observer"
+      ]
+    },
+    "shape_1": {
+      "type": "object",
+      "fields": {
+        "monotonic_ns": {
+          "type": "integer64"
+        },
+        "realtime_ns": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "monotonic_ns",
+        "realtime_ns"
+      ]
+    },
+    "shape_2": {
+      "type": "object",
+      "fields": {
+        "syscall_ioctl": {
+          "type": "boolean"
+        },
+        "iommu_map": {
+          "type": "boolean"
+        },
+        "iommu_unmap": {
+          "type": "boolean"
+        },
+        "iommu_device_attach": {
+          "type": "boolean"
+        },
+        "vfio_type1_map_enter": {
+          "type": "boolean"
+        },
+        "vfio_type1_map_exit": {
+          "type": "boolean"
+        },
+        "page_pin_enter": {
+          "type": "boolean"
+        },
+        "page_pin_exit": {
+          "type": "boolean"
+        },
+        "page_unpin_enter": {
+          "type": "boolean"
+        },
+        "page_unpin_exit": {
+          "type": "boolean"
+        },
+        "vfio_msi": {
+          "type": "boolean"
+        },
+        "vfio_intx": {
+          "type": "boolean"
+        },
+        "irqfd_wakeup": {
+          "type": "boolean"
+        },
+        "kvm_msi_route": {
+          "type": "boolean"
+        },
+        "kvm_apic_accept": {
+          "type": "boolean"
+        },
+        "kvm_mmio": {
+          "type": "boolean"
+        },
+        "irte_alloc_enter": {
+          "type": "boolean"
+        },
+        "irte_index": {
+          "type": "boolean"
+        },
+        "irte_alloc_exit": {
+          "type": "boolean"
+        },
+        "irte_activate": {
+          "type": "boolean"
+        },
+        "ir_msi_entry": {
+          "type": "boolean"
+        },
+        "ir_msi_exit": {
+          "type": "boolean"
+        },
+        "kvm_pi_irte_update": {
+          "type": "boolean"
+        },
+        "iommu_fault": {
+          "type": "boolean"
+        },
+        "domain_attach_enter": {
+          "type": "boolean"
+        },
+        "domain_attach_exit": {
+          "type": "boolean"
+        },
+        "iotlb_invalidate": {
+          "type": "boolean"
+        },
+        "qi_submit": {
+          "type": "boolean"
+        },
+        "qi_complete": {
+          "type": "boolean"
+        },
+        "pi_sync_enter": {
+          "type": "boolean"
+        },
+        "pi_sync_exit": {
+          "type": "boolean"
+        },
+        "pi_wakeup": {
+          "type": "boolean"
+        },
+        "pi_wakeup_exit": {
+          "type": "boolean"
+        },
+        "pi_vcpu_wake_up": {
+          "type": "boolean"
+        },
+        "pi_wakeup_vector": {
+          "type": "boolean"
+        },
+        "guest_run_entry": {
+          "type": "boolean"
+        },
+        "guest_run_exit": {
+          "type": "boolean"
+        },
+        "guest_xmit_entry": {
+          "type": "boolean"
+        },
+        "guest_xmit_exit": {
+          "type": "boolean"
+        },
+        "guest_dma_map_entry": {
+          "type": "boolean"
+        },
+        "guest_dma_map_exit": {
+          "type": "boolean"
+        },
+        "guest_clean_entry": {
+          "type": "boolean"
+        },
+        "guest_clean_exit": {
+          "type": "boolean"
+        },
+        "guest_dma_unmap": {
+          "type": "boolean"
+        },
+        "guest_dma_sync_cpu": {
+          "type": "boolean"
+        },
+        "guest_dma_sync_device": {
+          "type": "boolean"
+        },
+        "guest_irq_entry": {
+          "type": "boolean"
+        },
+        "guest_irq_exit": {
+          "type": "boolean"
+        },
+        "guest_netdev_open": {
+          "type": "boolean"
+        },
+        "guest_netdev_close": {
+          "type": "boolean"
+        },
+        "guest_diag_entry": {
+          "type": "boolean"
+        },
+        "guest_diag_exit": {
+          "type": "boolean"
+        },
+        "guest_intr_test_entry": {
+          "type": "boolean"
+        },
+        "guest_intr_test_exit": {
+          "type": "boolean"
+        },
+        "guest_loopback_entry": {
+          "type": "boolean"
+        },
+        "guest_loopback_exit": {
+          "type": "boolean"
+        },
+        "guest_softirq_raise": {
+          "type": "boolean"
+        },
+        "guest_softirq_entry": {
+          "type": "boolean"
+        },
+        "guest_napi_poll": {
+          "type": "boolean"
+        },
+        "guest_softirq_exit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "domain_attach_enter",
+        "domain_attach_exit",
+        "guest_clean_entry",
+        "guest_clean_exit",
+        "guest_diag_entry",
+        "guest_diag_exit",
+        "guest_dma_map_entry",
+        "guest_dma_map_exit",
+        "guest_dma_sync_cpu",
+        "guest_dma_sync_device",
+        "guest_dma_unmap",
+        "guest_intr_test_entry",
+        "guest_intr_test_exit",
+        "guest_irq_entry",
+        "guest_irq_exit",
+        "guest_loopback_entry",
+        "guest_loopback_exit",
+        "guest_napi_poll",
+        "guest_netdev_close",
+        "guest_netdev_open",
+        "guest_run_entry",
+        "guest_run_exit",
+        "guest_softirq_entry",
+        "guest_softirq_exit",
+        "guest_softirq_raise",
+        "guest_xmit_entry",
+        "guest_xmit_exit",
+        "iommu_device_attach",
+        "iommu_fault",
+        "iommu_map",
+        "iommu_unmap",
+        "iotlb_invalidate",
+        "ir_msi_entry",
+        "ir_msi_exit",
+        "irqfd_wakeup",
+        "irte_activate",
+        "irte_alloc_enter",
+        "irte_alloc_exit",
+        "irte_index",
+        "kvm_apic_accept",
+        "kvm_mmio",
+        "kvm_msi_route",
+        "kvm_pi_irte_update",
+        "page_pin_enter",
+        "page_pin_exit",
+        "page_unpin_enter",
+        "page_unpin_exit",
+        "pi_sync_enter",
+        "pi_sync_exit",
+        "pi_vcpu_wake_up",
+        "pi_wakeup",
+        "pi_wakeup_exit",
+        "pi_wakeup_vector",
+        "qi_complete",
+        "qi_submit",
+        "syscall_ioctl",
+        "vfio_intx",
+        "vfio_msi",
+        "vfio_type1_map_enter",
+        "vfio_type1_map_exit"
+      ]
+    },
+    "shape_3": {
+      "type": "object",
+      "fields": {
+        "clock_anchor": {
+          "$ref": "shape_1"
+        },
+        "hooks": {
+          "$ref": "shape_2"
+        }
+      },
+      "required": [
+        "clock_anchor",
+        "hooks"
+      ]
+    },
+    "shape_4": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_0"
+        },
+        "state": {
+          "$ref": "shape_3"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_5": {
+      "type": "object",
+      "fields": {
+        "observer": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "observer"
+      ]
+    },
+    "shape_6": {
+      "type": "object",
+      "fields": {
+        "events": {
+          "type": "integer64"
+        },
+        "ringbuf_dropped": {
+          "type": "integer64"
+        },
+        "short_records": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "events",
+        "ringbuf_dropped",
+        "short_records"
+      ]
+    },
+    "shape_7": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_5"
+        },
+        "state": {
+          "$ref": "shape_6"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_8": {
+      "type": "object",
+      "fields": {
+        "hook": {
+          "type": "string"
+        },
+        "operation": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "integer64"
+        },
+        "correlated": {
+          "type": "boolean"
+        },
+        "sample_status": {
+          "type": "string"
+        },
+        "fd": {
+          "type": "integer64"
+        },
+        "command": {
+          "type": "hex"
+        },
+        "argsz": {
+          "type": "integer64"
+        },
+        "flags": {
+          "type": "integer64"
+        },
+        "slot": {
+          "type": "integer64"
+        },
+        "result": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "argsz",
+        "command",
+        "correlated",
+        "fd",
+        "flags",
+        "hook",
+        "operation",
+        "request_id",
+        "result",
+        "sample_status",
+        "slot"
+      ]
+    },
+    "shape_9": {
+      "type": "object",
+      "fields": {
+        "address": {
+          "type": "hex"
+        },
+        "length": {
+          "type": "integer64"
+        },
+        "direction": {
+          "type": "integer64"
+        },
+        "completed_descriptors": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "address",
+        "completed_descriptors",
+        "direction",
+        "length"
+      ]
+    },
+    "shape_10": {
+      "type": "object",
+      "fields": {
+        "episode_id": {
+          "type": "integer64"
+        },
+        "phase": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "episode_id",
+        "phase"
+      ]
+    },
+    "shape_11": {
+      "type": "object",
+      "fields": {
+        "dma": {
+          "$ref": "shape_9"
+        },
+        "execution": {
+          "$ref": "shape_10"
+        }
+      },
+      "required": [
+        "dma",
+        "execution"
+      ]
+    },
+    "shape_12": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_8"
+        },
+        "state": {
+          "$ref": "shape_11"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_13": {
+      "type": "object",
+      "fields": {
+        "irq": {
+          "type": "integer64"
+        },
+        "vector": {
+          "type": "integer64"
+        },
+        "apic_id": {
+          "type": "integer64"
+        },
+        "address": {
+          "type": "hex"
+        },
+        "data": {
+          "type": "hex"
+        },
+        "action": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer64"
+        },
+        "start": {
+          "type": "integer64"
+        },
+        "count": {
+          "type": "integer64"
+        },
+        "irte_index": {
+          "type": "integer64"
+        },
+        "gsi": {
+          "type": "integer64"
+        },
+        "vcpu_id": {
+          "type": "integer64"
+        },
+        "posted": {
+          "type": "boolean"
+        },
+        "pi_desc_address": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "action",
+        "address",
+        "apic_id",
+        "count",
+        "data",
+        "gsi",
+        "index",
+        "irq",
+        "irte_index",
+        "pi_desc_address",
+        "posted",
+        "start",
+        "vcpu_id",
+        "vector"
+      ]
+    },
+    "shape_14": {
+      "type": "object",
+      "fields": {
+        "episode_id": {
+          "type": "integer64"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "irq": {
+          "type": "integer64"
+        },
+        "action": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "episode_id",
+        "irq",
+        "phase"
+      ]
+    },
+    "shape_15": {
+      "type": "object",
+      "fields": {
+        "interrupt": {
+          "$ref": "shape_13"
+        },
+        "execution": {
+          "$ref": "shape_14"
+        }
+      },
+      "required": [
+        "execution",
+        "interrupt"
+      ]
+    },
+    "shape_16": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_8"
+        },
+        "state": {
+          "$ref": "shape_15"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_17": {
+      "type": "object",
+      "fields": {
+        "execution": {
+          "$ref": "shape_10"
+        }
+      },
+      "required": [
+        "execution"
+      ]
+    },
+    "shape_18": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_8"
+        },
+        "state": {
+          "$ref": "shape_17"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_19": {
+      "type": "object",
+      "fields": {
+        "episode_id": {
+          "type": "integer64"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "irq": {
+          "type": "integer64"
+        },
+        "action": {
+          "type": "string"
+        },
+        "softirq_vector": {
+          "type": "integer64"
+        },
+        "softirq": {
+          "type": "string"
+        },
+        "napi_work": {
+          "type": "integer64"
+        },
+        "napi_budget": {
+          "type": "integer64"
+        },
+        "device": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "device",
+        "episode_id",
+        "irq",
+        "napi_budget",
+        "napi_work",
+        "phase",
+        "softirq",
+        "softirq_vector"
+      ]
+    },
+    "shape_20": {
+      "type": "object",
+      "fields": {
+        "execution": {
+          "$ref": "shape_19"
+        }
+      },
+      "required": [
+        "execution"
+      ]
+    },
+    "shape_21": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_8"
+        },
+        "state": {
+          "$ref": "shape_20"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_22": {
+      "type": "object",
+      "fields": {
+        "episode_id": {
+          "type": "integer64"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "irq": {
+          "type": "integer64"
+        },
+        "action": {
+          "type": "string"
+        },
+        "softirq_vector": {
+          "type": "integer64"
+        },
+        "softirq": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "episode_id",
+        "irq",
+        "phase",
+        "softirq",
+        "softirq_vector"
+      ]
+    },
+    "shape_23": {
+      "type": "object",
+      "fields": {
+        "execution": {
+          "$ref": "shape_22"
+        }
+      },
+      "required": [
+        "execution"
+      ]
+    },
+    "shape_24": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_8"
+        },
+        "state": {
+          "$ref": "shape_23"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_25": {
+      "type": "object",
+      "fields": {
+        "interrupt": {
+          "$ref": "shape_13"
+        }
+      },
+      "required": [
+        "interrupt"
+      ]
+    },
+    "shape_26": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_8"
+        },
+        "state": {
+          "$ref": "shape_25"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_27": {
+      "type": "object",
+      "fields": {
+        "hva": {
+          "type": "hex"
+        },
+        "gpa": {
+          "type": "hex"
+        },
+        "iova": {
+          "type": "hex"
+        },
+        "hpa": {
+          "type": "hex"
+        },
+        "size": {
+          "type": "hex"
+        },
+        "returned_size": {
+          "type": "hex"
+        },
+        "parent_iova": {
+          "type": "hex"
+        },
+        "parent_size": {
+          "type": "hex"
+        },
+        "page_count": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "gpa",
+        "hpa",
+        "hva",
+        "iova",
+        "page_count",
+        "parent_iova",
+        "parent_size",
+        "returned_size",
+        "size"
+      ]
+    },
+    "shape_28": {
+      "type": "object",
+      "fields": {
+        "address_space": {
+          "$ref": "shape_27"
+        },
+        "device": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "address_space",
+        "device"
+      ]
+    },
+    "shape_29": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_8"
+        },
+        "state": {
+          "$ref": "shape_28"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_30": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "hex"
+        },
+        "unit": {
+          "type": "hex"
+        },
+        "unit_id": {
+          "type": "integer64"
+        },
+        "iova": {
+          "type": "hex"
+        },
+        "size": {
+          "type": "hex"
+        },
+        "invalidation_hint": {
+          "type": "boolean"
+        },
+        "mapping_invalidation": {
+          "type": "boolean"
+        },
+        "qi_count": {
+          "type": "integer64"
+        },
+        "qi_options": {
+          "type": "integer64"
+        },
+        "qi_descriptor_0": {
+          "type": "hex"
+        },
+        "qi_descriptor_1": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "domain",
+        "invalidation_hint",
+        "iova",
+        "mapping_invalidation",
+        "qi_count",
+        "qi_descriptor_0",
+        "qi_descriptor_1",
+        "qi_options",
+        "size",
+        "unit",
+        "unit_id"
+      ]
+    },
+    "shape_31": {
+      "type": "object",
+      "fields": {
+        "iommu": {
+          "$ref": "shape_30"
+        }
+      },
+      "required": [
+        "iommu"
+      ]
+    },
+    "shape_32": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_8"
+        },
+        "state": {
+          "$ref": "shape_31"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_33": {
+      "type": "object",
+      "fields": {
+        "gpa": {
+          "type": "hex"
+        },
+        "value": {
+          "type": "hex"
+        },
+        "length": {
+          "type": "integer64"
+        },
+        "type": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "gpa",
+        "length",
+        "type",
+        "value"
+      ]
+    },
+    "shape_34": {
+      "type": "object",
+      "fields": {
+        "mmio": {
+          "$ref": "shape_33"
+        }
+      },
+      "required": [
+        "mmio"
+      ]
+    },
+    "shape_35": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_8"
+        },
+        "state": {
+          "$ref": "shape_34"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_36": {
+      "type": "object",
+      "fields": {
+        "irq": {
+          "type": "integer64"
+        },
+        "vector": {
+          "type": "integer64"
+        },
+        "apic_id": {
+          "type": "integer64"
+        },
+        "address": {
+          "type": "hex"
+        },
+        "data": {
+          "type": "hex"
+        },
+        "action": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer64"
+        },
+        "start": {
+          "type": "integer64"
+        },
+        "count": {
+          "type": "integer64"
+        },
+        "irte_index": {
+          "type": "integer64"
+        },
+        "gsi": {
+          "type": "integer64"
+        },
+        "vcpu_id": {
+          "type": "integer64"
+        },
+        "posted": {
+          "type": "boolean"
+        },
+        "pi_desc_address": {
+          "type": "hex"
+        },
+        "wakeup_count": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "action",
+        "address",
+        "apic_id",
+        "count",
+        "data",
+        "gsi",
+        "index",
+        "irq",
+        "irte_index",
+        "pi_desc_address",
+        "posted",
+        "start",
+        "vcpu_id",
+        "vector",
+        "wakeup_count"
+      ]
+    },
+    "shape_37": {
+      "type": "object",
+      "fields": {
+        "interrupt": {
+          "$ref": "shape_36"
+        }
+      },
+      "required": [
+        "interrupt"
+      ]
+    },
+    "shape_38": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_8"
+        },
+        "state": {
+          "$ref": "shape_37"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    },
+    "shape_39": {
+      "type": "object",
+      "fields": {
+        "boundary": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "boundary"
+      ]
+    },
+    "shape_40": {
+      "type": "object",
+      "fields": {
+        "clock_anchor": {
+          "$ref": "shape_1"
+        }
+      },
+      "required": [
+        "clock_anchor"
+      ]
+    },
+    "shape_41": {
+      "type": "object",
+      "fields": {
+        "event_info": {
+          "$ref": "shape_39"
+        },
+        "state": {
+          "$ref": "shape_40"
+        },
+        "producer_sequence": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "event_info",
+        "producer_sequence",
+        "state"
+      ]
+    }
+  },
+  "sysfs:host_owns_device": {
+    "type": "object",
+    "fields": {
+      "host_bdf": {
+        "type": "string"
+      },
+      "host_driver": {
+        "type": "string",
+        "nullable": true
+      },
+      "management_bdf": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "host_bdf",
+      "host_driver",
+      "management_bdf"
+    ]
+  },
+  "sysfs:vfio_bound": {
+    "type": "object",
+    "fields": {
+      "host_bdf": {
+        "type": "string"
+      },
+      "host_driver": {
+        "type": "string",
+        "nullable": true
+      },
+      "management_bdf": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "host_bdf",
+      "host_driver",
+      "management_bdf"
+    ]
+  },
+  "sysfs:qemu_attached": {
+    "type": "object",
+    "fields": {
+      "host_bdf": {
+        "type": "string"
+      },
+      "host_driver": {
+        "type": "string",
+        "nullable": true
+      },
+      "management_bdf": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "host_bdf",
+      "host_driver",
+      "management_bdf"
+    ]
+  },
+  "sysfs:guest_visible": {
+    "type": "object",
+    "fields": {
+      "host_bdf": {
+        "type": "string"
+      },
+      "host_driver": {
+        "type": "string",
+        "nullable": true
+      },
+      "management_bdf": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "host_bdf",
+      "host_driver",
+      "management_bdf"
+    ]
+  },
+  "sysfs:host_reclaims_device": {
+    "type": "object",
+    "fields": {
+      "host_bdf": {
+        "type": "string"
+      },
+      "host_driver": {
+        "type": "string",
+        "nullable": true
+      },
+      "management_bdf": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "host_bdf",
+      "host_driver",
+      "management_bdf"
+    ]
+  }
+}

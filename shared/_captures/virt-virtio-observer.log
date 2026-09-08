@@ -1,2 +1,0 @@
-LX_READY experiment=virt-virtio observer=virtio
-LX_DONE experiment=virt-virtio observer=virtio records=249

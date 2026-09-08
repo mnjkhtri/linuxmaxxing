@@ -1,0 +1,482 @@
+{
+  "module:alloc": {
+    "$ref": "shape_0"
+  },
+  "module:begin": {
+    "$ref": "shape_1"
+  },
+  "module:constants": {
+    "$ref": "shape_2"
+  },
+  "module:create": {
+    "$ref": "shape_3"
+  },
+  "module:destroy": {
+    "$ref": "shape_4"
+  },
+  "module:end": {
+    "$ref": "shape_1"
+  },
+  "module:free": {
+    "$ref": "shape_5"
+  },
+  "module:page": {
+    "$ref": "shape_6"
+  },
+  "module:ready": {
+    "$ref": "shape_1"
+  },
+  "module:region": {
+    "$ref": "shape_7"
+  },
+  "module:run_begin": {
+    "$ref": "shape_8"
+  },
+  "module:run_end": {
+    "$ref": "shape_1"
+  },
+  "module:sample": {
+    "$ref": "shape_9"
+  },
+  "module:summary": {
+    "$ref": "shape_10"
+  },
+  "module:task": {
+    "$ref": "shape_11"
+  },
+  "$defs": {
+    "shape_0": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "api": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "addr": {
+          "type": "hex"
+        },
+        "order": {
+          "type": "integer64"
+        },
+        "struct_page": {
+          "type": "hex"
+        },
+        "requested": {
+          "type": "integer64"
+        },
+        "actual": {
+          "type": "integer64"
+        },
+        "waste": {
+          "type": "integer64"
+        },
+        "flags": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "action",
+        "addr",
+        "api",
+        "domain",
+        "id",
+        "phase"
+      ]
+    },
+    "shape_1": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "domain",
+        "phase"
+      ]
+    },
+    "shape_2": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "page_size": {
+          "type": "integer64"
+        },
+        "page_shift": {
+          "type": "integer64"
+        },
+        "page_mask": {
+          "type": "hex"
+        },
+        "bits_per_long": {
+          "type": "integer64"
+        },
+        "ram_bytes": {
+          "type": "integer64"
+        },
+        "paging_levels": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "action",
+        "bits_per_long",
+        "domain",
+        "page_mask",
+        "page_shift",
+        "page_size",
+        "paging_levels",
+        "phase",
+        "ram_bytes"
+      ]
+    },
+    "shape_3": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "api": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "object_size": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "action",
+        "api",
+        "domain",
+        "id",
+        "object_size",
+        "phase"
+      ]
+    },
+    "shape_4": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "api": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "api",
+        "domain",
+        "id",
+        "phase"
+      ]
+    },
+    "shape_5": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "api": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "addr": {
+          "type": "hex"
+        },
+        "order": {
+          "type": "integer64"
+        }
+      },
+      "required": [
+        "action",
+        "addr",
+        "api",
+        "domain",
+        "id",
+        "phase"
+      ]
+    },
+    "shape_6": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "index": {
+          "type": "integer64"
+        },
+        "kva": {
+          "type": "hex"
+        },
+        "pa": {
+          "type": "hex"
+        },
+        "pfn": {
+          "type": "integer64"
+        },
+        "struct_page": {
+          "type": "hex"
+        }
+      },
+      "required": [
+        "action",
+        "domain",
+        "id",
+        "index",
+        "kva",
+        "pa",
+        "pfn",
+        "phase"
+      ]
+    },
+    "shape_7": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "start": {
+          "type": "hex"
+        },
+        "end": {
+          "type": "hex"
+        },
+        "bytes": {
+          "type": "integer64"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "bytes",
+        "domain",
+        "end",
+        "id",
+        "kind",
+        "phase",
+        "source",
+        "start"
+      ]
+    },
+    "shape_8": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "domain",
+        "phase"
+      ]
+    },
+    "shape_9": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer64"
+        },
+        "data": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "bytes",
+        "data",
+        "domain",
+        "id",
+        "phase"
+      ]
+    },
+    "shape_10": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kva": {
+          "type": "hex"
+        },
+        "bytes": {
+          "type": "integer64"
+        },
+        "pages": {
+          "type": "integer64"
+        },
+        "physical_contiguous": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "bytes",
+        "domain",
+        "id",
+        "kva",
+        "pages",
+        "phase",
+        "physical_contiguous"
+      ]
+    },
+    "shape_11": {
+      "type": "object",
+      "fields": {
+        "domain": {
+          "type": "string"
+        },
+        "phase": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "tgid": {
+          "type": "integer64"
+        },
+        "pid": {
+          "type": "integer64"
+        },
+        "ppid": {
+          "type": "integer64"
+        },
+        "cpu": {
+          "type": "integer64"
+        },
+        "task": {
+          "type": "hex"
+        },
+        "stack": {
+          "type": "hex"
+        },
+        "mm": {
+          "type": "hex",
+          "nullable": true
+        },
+        "type": {
+          "type": "string"
+        },
+        "comm": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "comm",
+        "cpu",
+        "domain",
+        "mm",
+        "phase",
+        "pid",
+        "ppid",
+        "stack",
+        "task",
+        "tgid",
+        "type"
+      ]
+    }
+  }
+}

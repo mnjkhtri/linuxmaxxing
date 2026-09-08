@@ -1,0 +1,23 @@
+{
+  "name": "kapi",
+  "source": "experiments/kapi",
+  "environment": "guest",
+  "observer": null,
+  "workload": [],
+  "required": [
+    "ready"
+  ],
+  "trace": {
+    "required": [],
+    "optional": []
+  },
+  "question": "Observe a complete kernel module lifetime and its task, allocation, and resource facts.",
+  "timeouts": {
+    "ready_s": 20,
+    "workload_s": 180,
+    "shutdown_s": 20,
+    "guest_boot_s": 300
+  },
+  "buffer_kib": 32768,
+  "allow_partial": false
+}

@@ -1,0 +1,33 @@
+{
+  "name": "scheduler",
+  "source": "experiments/scheduler",
+  "environment": "guest",
+  "observer": "cfs",
+  "workload": [
+    "./workload_fork",
+    "--trace-wait"
+  ],
+  "required": [
+    "enqueue_entity"
+  ],
+  "trace": {
+    "required": [
+      "sched/sched_process_fork",
+      "sched/sched_wakeup_new",
+      "sched/sched_switch",
+      "sched/sched_process_exit",
+      "sched/sched_process_wait",
+      "sched/sched_process_free"
+    ],
+    "optional": []
+  },
+  "question": "Observe the CFS runqueue tree after workload task enqueue and correlate it with task lifecycle tracepoints.",
+  "timeouts": {
+    "ready_s": 20,
+    "workload_s": 180,
+    "shutdown_s": 20,
+    "guest_boot_s": 300
+  },
+  "buffer_kib": 32768,
+  "allow_partial": true
+}

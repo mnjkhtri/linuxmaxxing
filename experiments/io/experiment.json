@@ -1,0 +1,63 @@
+{
+  "name": "io",
+  "source": "experiments/io",
+  "environment": "guest",
+  "observer": null,
+  "workload": [
+    "./workload_qedu",
+    "--trace-wait"
+  ],
+  "required": [
+    "phase",
+    "qedu_probe_stage",
+    "qedu_dma_submit",
+    "qedu_irq_ack",
+    "qedu_dma_work_queue"
+  ],
+  "trace": {
+    "required": [
+      "dma/dma_alloc",
+      "qedu/qedu_probe_stage",
+      "qedu/qedu_file_op",
+      "qedu/qedu_cpu_buffer_io",
+      "qedu/qedu_dma_stage",
+      "qedu/qedu_dma_submit",
+      "qedu/qedu_irq_ack",
+      "qedu/qedu_dma_work_queue",
+      "qedu/qedu_completion_publish",
+      "qedu/qedu_wait",
+      "qedu/qedu_factorial_submit",
+      "qedu/qedu_factorial_result",
+      "irq/irq_handler_entry",
+      "irq/irq_handler_exit",
+      "workqueue/workqueue_queue_work",
+      "workqueue/workqueue_activate_work",
+      "workqueue/workqueue_execute_start",
+      "workqueue/workqueue_execute_end",
+      "syscalls/sys_enter_openat",
+      "syscalls/sys_exit_openat",
+      "syscalls/sys_enter_read",
+      "syscalls/sys_exit_read",
+      "syscalls/sys_enter_write",
+      "syscalls/sys_exit_write",
+      "syscalls/sys_enter_close",
+      "syscalls/sys_exit_close",
+      "sched/sched_switch",
+      "sched/sched_wakeup",
+      "sched/sched_waking"
+    ],
+    "optional": [
+      "irq_vectors/vector_config",
+      "irq_vectors/vector_alloc"
+    ]
+  },
+  "question": "Observe EDU probe, factorial and directed DMA submissions, IRQ acknowledgement, workqueue handoff, completion, and resource restoration.",
+  "timeouts": {
+    "ready_s": 20,
+    "workload_s": 180,
+    "shutdown_s": 20,
+    "guest_boot_s": 300
+  },
+  "buffer_kib": 32768,
+  "allow_partial": false
+}

@@ -1,0 +1,19 @@
+{
+  "os": "ubuntu",
+  "release": "24.04",
+  "architecture": "x86_64",
+  "kernel_repository": "https://github.com/torvalds/linux.git",
+  "kernel_revision": "1229e2e57a5c2980ccd457b9b53ea0eed5a22ab3",
+  "image_url": "https://cloud-images.ubuntu.com/releases/noble/release-20260826/ubuntu-24.04-server-cloudimg-amd64.img",
+  "image_sha256": "d0fe84bb5f80853425fa6be28e2c106f30104c3cfe8611933f2e65c9b63f0e30",
+  "guest_memory_mib": 1024,
+  "guest_cpus": 2,
+  "guest_swap_mib": 128,
+  "security": {
+    "ssh_port": 22,
+    "firewall": "ufw",
+    "fail2ban": true,
+    "unattended_upgrades": true
+  },
+  "packages": ["build-essential", "bc", "bison", "flex", "libssl-dev", "libelf-dev", "dwarves", "clang", "llvm", "libbpf-dev", "pkg-config", "zlib1g-dev", "linux-tools-common", "linux-tools-generic", "qemu-system-x86", "qemu-utils", "cloud-image-utils", "ccache", "curl", "git", "python3", "openssh-client", "libguestfs-tools", "pciutils", "iproute2", "ethtool", "ufw", "fail2ban", "unattended-upgrades"]
+}
