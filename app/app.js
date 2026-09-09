@@ -45,7 +45,7 @@
     if (frame.dataset.view !== tab.dataset.view) {
       loader.classList.remove('hidden');
       var url = new URL(tab.dataset.src, location.href);
-      url.searchParams.set('v', 'kapi-2');
+      url.searchParams.set('v', 'ui-4');
       var base = document.documentElement.dataset.captureBase;
       if (base) url.searchParams.set('captureBase', new URL(base, location.href).href);
       frame.dataset.view = tab.dataset.view;

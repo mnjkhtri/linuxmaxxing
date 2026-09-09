@@ -29,6 +29,7 @@ import {
   var phases = [],
     snapshots = [],
     traceEvents = [],
+    traceAvailable = new Set,
     constraints = {
       pt_sample_pages: 512,
       xarray_scan_slots: 4096,
@@ -220,10 +221,20 @@ import {
   }
 
   function parseTrace(capture) {
+    traceAvailable = new Set;
+    capture.events.forEach(function(event) {
+      if (event.kind !== "capture_started" || !event.data) return;
+      (event.data.enabled || []).concat(event.data.skipped || []).forEach(function(name) {
+        traceAvailable.add(String(name).split("/").pop().split(":")[0])
+      })
+    });
     traceEvents = capture.events.filter(e => e.source.mechanism === 'tracefs').map(e => ({
       time_ns: relativeNs(capture, e),
       event: e.kind
     })).sort((a, b) => a.time_ns - b.time_ns)
+    traceEvents.forEach(function(event) {
+      traceAvailable.add(event.event)
+    })
   }
 
   function traceWindow(snapshot) {
@@ -248,9 +259,9 @@ import {
     var row = document.createElement("div"),
       label = document.createElement("span"),
       count = document.createElement("strong");
-    row.className = "trace-row" + (value ? "" : " zero");
+    row.className = "trace-row" + (value === null ? " unavailable" : value ? "" : " zero");
     label.textContent = name;
-    count.textContent = fmt(value);
+    count.textContent = value === null ? "N/A" : fmt(value);
     row.append(label, count);
     root.appendChild(row)
   }
@@ -259,7 +270,7 @@ import {
     var root = $("trace-events");
     if (!root) return;
     root.replaceChildren();
-    if (!traceEvents.length) {
+    if (!traceEvents.length && !traceAvailable.size) {
       var empty = document.createElement("div");
       empty.className = "trace-empty";
       empty.textContent = "no trace file";
@@ -274,7 +285,7 @@ import {
       title.textContent = group.title;
       section.appendChild(title);
       group.events.forEach(function(name) {
-        renderTraceRow(section, name, counts.get(name) || 0)
+        renderTraceRow(section, name, traceAvailable.has(name) ? counts.get(name) || 0 : null)
       });
       root.appendChild(section)
     })
@@ -401,7 +412,7 @@ import {
     if (!selected.length) {
       var empty = document.createElement("div");
       empty.className = "pt-target empty";
-      empty.textContent = "Select a VMA to see page slot → PFN ID mappings.";
+      empty.textContent = "Select a VMA";
       root.appendChild(empty);
       return
     }
@@ -695,7 +706,18 @@ import {
         top = Math.max(cursor, Math.min(root.clientHeight - height, card._desired - height / 2));
       card.style.top = Math.max(0, top) + "px";
       cursor = Math.max(0, top) + height + 7
-    })
+    });
+    // Pull the packed stack back into the rail when desired VMA positions
+    // would otherwise push the final backing object below the panel.
+    const required = cards.reduce((sum, card) => sum + card.offsetHeight + 7, -7);
+    if (required <= root.clientHeight) {
+      let bottom = root.clientHeight;
+      [...cards].reverse().forEach(card => {
+        const top = Math.min(parseFloat(card.style.top), bottom - card.offsetHeight);
+        card.style.top = top + 'px';
+        bottom = top - 7;
+      });
+    }
   }
 
   function layoutCacheObjects() {
@@ -790,7 +812,7 @@ import {
       card.dataset.objectId = "anon:" + item.anon;
       card.dataset.root = item.root || "0x0";
       card.dataset.parent = item.parent || "0x0";
-      var extra = ["<span>root: " + (item.root || "0x0") + "</span>", "<span>parent: " + (item.parent || "0x0") + "</span>"];
+      var extra = ["<span>r: " + (item.root || "0x0") + "</span>", "<span>p: " + (item.parent || "0x0") + "</span>"];
       card.innerHTML = '<div class="cache-chain"><div class="cache-node"><label>ANON_VMA</label><strong>' + item.anon + '</strong></div><div class="anon-rel">' + extra.join('') + '</div></div>';
       root.appendChild(card)
     });
@@ -812,7 +834,7 @@ import {
       card.className = "cache-object" + (item.mapping === selectedMapping ? " selected" : "");
       card.dataset.mapping = item.mapping;
       card.dataset.objectId = "mapping:" + item.mapping;
-      card.innerHTML = '<div class="cache-chain"><div class="cache-node"><label>ADDRESS_SPACE</label><strong>' + item.mapping + '</strong></div><div class="cache-node"><label>INODE</label><strong>' + item.inode + '</strong></div></div><div class="cache-track" title="relative bar scaled from address_space->nrpages"><i style="width:' + totalFill + '%"></i></div><div class="order-card" title="folio order distribution; blue total, red dirty"><h4><span>FOLIO ORDERS</span><span>total / dirty</span></h4><div class="order-dist">' + orderDistribution(item) + '</div></div><div class="cache-meta"><span>cache</span><strong>nrpages ' + fmt(item.pages) + ' · folios ' + fmt(item.folios) + '</strong></div><div class="cache-meta"><span>PG flags</span><strong>lru ' + fmt(item.lruFolios) + 'f · act ' + fmt(item.activeFolios) + 'f · ref ' + fmt(item.referencedFolios) + 'f · dirty ' + fmt(item.dirtyFolios) + 'f · wb ' + fmt(item.writebackFolios) + 'f · ws ' + fmt(item.workingsetFolios) + 'f · unevict ' + fmt(item.unevictableFolios) + 'f</strong></div>';
+      card.innerHTML = '<div class="cache-chain"><div class="cache-node"><label>ADDRESS_SPACE</label><strong>' + item.mapping + '</strong></div><div class="cache-node"><label>INODE</label><strong>' + item.inode + '</strong></div></div><div class="cache-track" title="relative bar scaled from address_space->nrpages"><i style="width:' + totalFill + '%"></i></div><div class="order-card" title="folio order distribution; blue total, red dirty"><h4><span>FOLIO ORDERS</span><span>total / dirty</span></h4><div class="order-dist">' + orderDistribution(item) + '</div></div><div class="cache-meta"><span>cache</span><strong>nrpages ' + fmt(item.pages) + ' · folios ' + fmt(item.folios) + '</strong></div><div class="cache-meta"><span>PG flags</span><strong>lru ' + fmt(item.lruFolios) + 'f · act ' + fmt(item.activeFolios) + 'f · dirty ' + fmt(item.dirtyFolios) + 'f · wb ' + fmt(item.writebackFolios) + 'f</strong></div>';
       root.appendChild(card)
     });
     requestAnimationFrame(layoutCacheObjects)
@@ -911,5 +933,6 @@ import {
   window.addEventListener("resize", function() {
     requestAnimationFrame(layoutCacheObjects)
   });
+  $('page-cache').addEventListener('scroll', () => requestAnimationFrame(drawCacheLinks));
   mountView('memory', load);
 })();
