@@ -34,7 +34,17 @@ body {
 .head p {
   margin: 5px 0 0;
   color: var(--muted);
-  font: 11px/1.45 var(--mono)
+  font: 10px/1.45 var(--mono)
+}
+
+.page-head > div:first-child {
+  min-width: 0
+}
+
+.page-head p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap
 }
 
 #status {
@@ -43,7 +53,7 @@ body {
   gap: 8px;
   align-items: center;
   color: var(--muted);
-  font: 11px var(--mono);
+  font: 10px var(--mono);
   white-space: nowrap
 }
 
@@ -61,47 +71,14 @@ body {
   overflow: hidden
 }
 
-.visual {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr)
-}
-
-.panel-head {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 11px;
-  border-bottom: 1px solid var(--line)
-}
-
-.panel-head h2 {
-  margin: 0;
-  font: 600 11px var(--mono);
-  letter-spacing: .06em;
-  text-transform: uppercase
-}
-
-.panel-head p {
-  margin: 0;
-  color: var(--faint);
-  font: 11px var(--mono)
-}
-
-.panel-stat {
-  margin-left: auto;
-  color: var(--cyan);
-  font: 11px var(--mono);
-  white-space: nowrap
-}
-
 .stage-wrap {
   min-height: 0;
   padding: 9px;
   display: grid;
-  grid-template-columns: minmax(360px, .85fr) minmax(430px, .9fr) minmax(560px, 1.25fr);
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
   overflow: hidden;
-  background-image: radial-gradient(circle, rgba(82, 183, 232, .035) 1px, transparent 1px);
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--blue) 3.5%, transparent) 1px, transparent 1px);
   background-size: 21px 21px
 }
 
@@ -114,11 +91,11 @@ body {
   grid-column: 1
 }
 
-.task-stage {
+.allocator-links {
   grid-column: 2
 }
 
-.allocator-links {
+.task-stage {
   grid-column: 3
 }
 
@@ -131,38 +108,14 @@ body {
 .task-stage {
   position: static;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  gap: 7px;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   padding: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: rgba(7, 12, 18, .9);
+  background: var(--panel);
   padding: 7px
-}
-
-.summary-row {
-  display: flex;
-  gap: 5px;
-  min-width: 0
-}
-
-.summary-chip {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 7px;
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  background: rgba(13, 19, 27, .88);
-  color: var(--muted);
-  font: 11px var(--mono)
-}
-
-.summary-chip b {
-  color: var(--text);
-  font-size: 11px
 }
 
 .task-list {
@@ -172,7 +125,7 @@ body {
   align-content: start;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: rgba(7, 12, 18, .55);
+  background: var(--panel-2);
   overflow-y: auto;
   overflow-x: hidden
 }
@@ -194,25 +147,25 @@ body {
   border-bottom: 1px solid var(--line);
   background: var(--panel);
   color: var(--faint);
-  font: 650 11px var(--mono);
+  font: 650 8px var(--mono);
   letter-spacing: .07em
 }
 
 .task-row {
   border: 0;
-  border-bottom: 1px solid rgba(38, 52, 64, .72);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
   border-radius: 0;
   background: transparent;
   text-align: left
 }
 
 .task-row:hover {
-  background: rgba(82, 183, 232, .035)
+  background: color-mix(in srgb, var(--blue) 3.5%, transparent)
 }
 
 .vas-region:hover,
 .alloc-row:hover {
-  background: rgba(82, 183, 232, .035)
+  background: color-mix(in srgb, var(--blue) 3.5%, transparent)
 }
 
 .task-row b,
@@ -225,30 +178,30 @@ body {
 
 .task-row b {
   color: var(--muted);
-  font: 11px var(--mono)
+  font: 8.5px var(--mono)
 }
 
 .task-row span {
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .task-row.user b {
-  color: var(--green)
+  color: var(--muted)
 }
 
 .task-row.kthread b {
-  color: var(--violet)
+  color: var(--muted)
 }
 
 .task-row.idle b {
-  color: var(--orange)
+  color: var(--muted)
 }
 
 .task-row.current,
 .task-row[data-selected="1"] {
-  background: rgba(232, 207, 104, .065);
-  box-shadow: inset 2px 0 rgba(232, 207, 104, .75)
+  background: color-mix(in srgb, var(--yellow) 6.5%, transparent);
+  box-shadow: inset 2px 0 color-mix(in srgb, var(--yellow) 75%, transparent)
 }
 
 .task-row.current b,
@@ -264,7 +217,7 @@ body {
   min-height: 0;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: rgba(7, 12, 18, .9);
+  background: var(--panel);
   overflow: hidden
 }
 
@@ -284,7 +237,7 @@ body {
 
 .vas-head b,
 .alloc-title b {
-  font: 650 11px var(--mono);
+  font: 650 9px var(--mono);
   letter-spacing: .05em
 }
 
@@ -292,17 +245,17 @@ body {
 .alloc-title span {
   margin-left: auto;
   color: var(--faint);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   white-space: nowrap
 }
 
 .vas-head span {
-  color: var(--orange)
+  color: var(--faint)
 }
 
 .vas-table-head,
 .vas-region {
-  --cols: minmax(120px, 1fr) minmax(112px, .9fr) 62px 0px;
+  --cols: minmax(0, 1fr) minmax(0, 1.15fr) 52px 0px;
   display: grid;
   grid-template-columns: var(--cols);
   column-gap: 8px;
@@ -321,7 +274,7 @@ body {
   z-index: 2;
   padding: 7px 10px;
   color: var(--faint);
-  font: 650 11px var(--mono);
+  font: 650 8px var(--mono);
   letter-spacing: .07em;
   text-transform: uppercase;
   border: 1px solid transparent;
@@ -352,7 +305,7 @@ body {
   position: absolute;
   inset: 0 auto 0 0;
   width: 2px;
-  background: var(--region-color, var(--blue))
+  background: var(--line-hot)
 }
 
 .vas-region b,
@@ -366,48 +319,52 @@ body {
 
 .vas-region b {
   color: var(--text);
-  font: 11px var(--mono)
+  font: 9px var(--mono)
 }
 
 .vas-region code {
   color: var(--cyan);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   letter-spacing: -.045em
 }
 
 .vas-region .vas-size {
   color: var(--text);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   text-align: right
 }
 
 .vas-region.current,
 .vas-region.alloc-target,
 .vas-region[data-selected="1"] {
-  border-color: rgba(232, 207, 104, .72);
-  box-shadow: 0 0 8px rgba(232, 207, 104, .08)
+  border-color: color-mix(in srgb, var(--yellow) 72%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--yellow) 8%, transparent)
 }
 
 .vas-region.task-target {
   --cols: minmax(112px, .95fr) minmax(88px, .7fr) 62px minmax(74px, .7fr);
-  border-color: rgba(109, 221, 155, .56);
-  box-shadow: inset 2px 0 0 rgba(109, 221, 155, .72), 0 0 8px rgba(109, 221, 155, .07)
+  min-height: 52px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  row-gap: 4px;
+  border-color: color-mix(in srgb, var(--green) 56%, transparent);
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--green) 72%, transparent), 0 0 8px color-mix(in srgb, var(--green) 7%, transparent)
 }
 
 .vas-region.task-target::after {
   content: attr(data-task-hit);
-  grid-column: 4;
-  justify-self: end;
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: stretch;
   max-width: 100%;
   padding: 2px 5px;
-  border: 1px solid rgba(109, 221, 155, .32);
+  border: 1px solid color-mix(in srgb, var(--green) 32%, transparent);
   border-radius: 4px;
-  background: rgba(7, 12, 18, .86);
-  color: rgba(109, 221, 155, .86);
-  font: 650 11px var(--mono);
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  color: color-mix(in srgb, var(--green) 86%, transparent);
+  font: 650 7px/1.2 var(--mono);
   letter-spacing: .04em;
   text-transform: uppercase;
-  white-space: nowrap;
+  white-space: normal;
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none
@@ -415,7 +372,7 @@ body {
 
 .vas-region.unknown {
   border-style: dashed;
-  background: rgba(95, 108, 119, .035)
+  background: color-mix(in srgb, var(--faint) 3.5%, transparent)
 }
 
 .vas-region.unknown::before {
@@ -428,7 +385,7 @@ body {
   padding: 4px 9px;
   border-top: 1px solid var(--line);
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .allocator-links {
@@ -436,8 +393,11 @@ body {
   grid-template-rows: auto minmax(0, 1fr)
 }
 
+.vas-head b,
 .alloc-title b {
-  color: var(--cyan)
+  color: var(--text);
+  font: 650 9px var(--mono);
+  letter-spacing: .05em;
 }
 
 .alloc-stack {
@@ -454,7 +414,7 @@ body {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: rgba(13, 22, 31, .62);
+  background: var(--panel-2);
   overflow: hidden
 }
 
@@ -466,9 +426,9 @@ body {
 }
 
 .alloc-group header b {
-  color: var(--group-color, var(--cyan));
-  opacity: .82;
-  font: 650 11px var(--mono);
+  color: var(--muted);
+  opacity: 1;
+  font: 650 8.5px var(--mono);
   letter-spacing: .06em
 }
 
@@ -485,11 +445,11 @@ body {
   margin: 0 5px;
   padding: 5px 8px 4px;
   color: var(--faint);
-  font: 650 11px var(--mono);
+  font: 650 8px var(--mono);
   letter-spacing: .07em;
   text-transform: uppercase;
   border: 1px solid transparent;
-  border-bottom-color: rgba(38, 52, 64, .72)
+  border-bottom-color: color-mix(in srgb, var(--line) 72%, transparent)
 }
 
 .alloc-list {
@@ -501,9 +461,9 @@ body {
 .alloc-row {
   min-height: 29px;
   padding: 5px 8px;
-  border: 1px solid rgba(75, 104, 126, .42);
+  border: 1px solid color-mix(in srgb, var(--line-hot) 42%, transparent);
   border-radius: 5px;
-  background: rgba(7, 12, 18, .58);
+  background: var(--panel);
   text-align: left
 }
 
@@ -514,25 +474,25 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
-  font: 650 11px/1.05 var(--mono)
+  font: 650 8px/1.05 var(--mono)
 }
 
 .alloc-name {
-  color: var(--text);
-  font-size: 11px
+  color: var(--muted);
+  font-size: 8.2px
 }
 
 .alloc-kva {
   color: var(--cyan);
-  font-size: 11px;
+  font-size: 8px;
   letter-spacing: -.045em
 }
 
 .alloc-row.current,
 .alloc-row[data-selected="1"] {
-  border-color: rgba(232, 207, 104, .72);
-  background: rgba(232, 207, 104, .045);
-  box-shadow: 0 0 8px rgba(232, 207, 104, .08)
+  border-color: color-mix(in srgb, var(--yellow) 72%, transparent);
+  background: color-mix(in srgb, var(--yellow) 4.5%, transparent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--yellow) 8%, transparent)
 }
 
 .alloc-row.current .alloc-name,
@@ -543,38 +503,8 @@ body {
 }
 
 .alloc-row.region-match {
-  border-color: rgba(82, 183, 232, .36);
-  background: rgba(82, 183, 232, .018)
-}
-
-.stage-wrap {
-  grid-template-columns: minmax(250px, .62fr) minmax(0, 1fr) minmax(500px, 1.18fr)
-}
-
-.vas-map {
-  grid-column: 1
-}
-
-.allocator-links {
-  grid-column: 2
-}
-
-.task-stage {
-  grid-column: 3
-}
-
-.summary-row {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px
-}
-
-.summary-chip {
-  justify-content: center;
-  min-width: 0;
-  padding: 5px 3px;
-  font-size: 11px;
-  white-space: nowrap
+  border-color: color-mix(in srgb, var(--blue) 36%, transparent);
+  background: color-mix(in srgb, var(--blue) 1.8%, transparent)
 }
 
 .task-list {
@@ -627,7 +557,7 @@ body {
 .task-row span:nth-of-type(n+4) {
   grid-row: 2;
   color: var(--cyan);
-  font-size: 11px;
+  font-size: 8px;
   letter-spacing: -.04em
 }
 
@@ -695,7 +625,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--muted);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .task-cpu {
@@ -712,7 +642,7 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--cyan);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   letter-spacing: -.04em
 }
 
@@ -733,7 +663,7 @@ body {
 
 
 .stage-wrap {
-  grid-template-columns: minmax(0, 28fr) minmax(0, 34fr) minmax(0, 38fr)
+  grid-template-columns: repeat(3, minmax(0, 1fr))
 }
 
 .task-list .task-list-head,

@@ -12,7 +12,7 @@
 <body>
   <main class="cfs">
 
-    <header class="head">
+    <header class="head page-head">
       <div>
         <h1>CFS runqueue</h1>
         <p>Per-CPU cfs_rq state</p>
@@ -25,53 +25,11 @@
     <section class="workbench">
 
       <aside class="panel life-rail">
-        <header class="panel-head">
-          <h2>Task lifetimes</h2>
-          <span id="life-summary">building…</span>
-        </header>
         <div class="life-canvas" id="life-canvas" role="img" aria-label="Task lifetimes aligned with CFS state changes">
         </div>
       </aside>
 
       <div class="trees" id="trees"></div>
-
-      <aside class="panel notebook">
-        <header class="panel-head">
-          <h2>CFS internals</h2>
-          <span id="op">enqueue</span>
-        </header>
-        <div class="note">
-          <div class="layer"><i class="trace-dot"></i><span id="layer">current transition</span></div>
-          <h2 id="title">Per-CPU CFS state</h2>
-          <p id="copy"></p>
-          <dl class="kv">
-            <dt>CPU</dt>
-            <dd id="v-cpu">—</dd>
-            <dt>cfs_rq</dt>
-            <dd id="v-rq">—</dd>
-            <dt>emitter TID</dt>
-            <dd id="v-tid">—</dd>
-            <dt>sched_entity</dt>
-            <dd id="v-se">—</dd>
-            <dt>rb_node</dt>
-            <dd id="v-node">—</dd>
-            <dt>leftmost</dt>
-            <dd id="v-left">—</dd>
-          </dl>
-          <div class="checks" id="checks"></div>
-          <div class="migration" id="migration">
-            <div class="migration-head">
-              <b>CROSS-CPU</b>
-              <span id="migration-count">0 events</span>
-              <span class="migration-nav">
-                <button id="prev-mig" aria-label="Previous cross-CPU event">←</button>
-                <button id="next-mig" aria-label="Next cross-CPU event">→</button>
-              </span>
-            </div>
-            <div id="migration-text">Building cross-CPU index…</div>
-          </div>
-        </div>
-      </aside>
 
     </section>
 

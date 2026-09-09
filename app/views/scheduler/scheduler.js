@@ -15,8 +15,7 @@ import {
  *   RB-tree validation-> verifyFrame(): derive invariants from captured state
  *   tree layout       -> layoutTree(): depth / slot positions from the captured root
  *   tree rendering    -> paintTree(): SVG RB tree per CPU
- *   lifecycle rendering-> drawLifecycle(): task lanes + playhead
- *   notebook rendering-> renderNotebook(): details + invariant checks + migration
+ *   lifecycle rendering-> drawLifecycle(): CPU rails + playhead
  *   playback          -> render()/setPlaying()/schedule(): scrub, prev/next, speed
  *
  * All rendering reads only the normalized internal frame/lifecycle model, never raw capture JSON fields.
@@ -42,6 +41,8 @@ import {
   var panels = {};
   var currentIndex = -1;
   var playing = false;
+  var lifecycleCpu = null;
+  var lifecycleTask = null;
   var animationTimer = null;
   var rafById = {};
   var migrationFrames = [];
@@ -253,11 +254,12 @@ import {
       });
     }
 
-    function mark(r, type, timeNs) {
+    function mark(r, type, timeNs, cpu) {
       if (!r) return;
       r.marks.push({
         timeNs: timeNs,
-        type: type
+        type: type,
+        cpu: cpu
       });
       r.last = timeNs;
     }
@@ -268,13 +270,13 @@ import {
         type = event.kind,
         f = event.data.fields;
       if (type === 'sched_process_fork') {
-        mark(row(f.child_pid, f.child_comm, timeNs), 'fork', timeNs);
+        mark(row(f.child_pid, f.child_comm, timeNs), 'fork', timeNs, cpu);
         if (rows[f.pid]) {
           rows[f.pid].name = f.comm || rows[f.pid].name;
           rows[f.pid].last = timeNs;
         }
       } else if (type === 'sched_wakeup_new') {
-        mark(row(f.pid, f.comm, timeNs), 'wake', timeNs);
+        mark(row(f.pid, f.comm, timeNs), 'wake', timeNs, cpu);
       } else if (type === 'sched_switch') {
         var prev = row(f.prev_pid, f.prev_comm, timeNs);
         var next = row(f.next_pid, f.next_comm, timeNs);
@@ -284,7 +286,9 @@ import {
           prev.runs.push({
             from: prev.running.timeNs,
             to: timeNs,
-            cpu: prev.running.cpu
+            cpu: prev.running.cpu,
+            taskName: prev.name,
+            taskPid: prev.pid
           });
           prev.running = null;
           prev.last = timeNs;
@@ -292,14 +296,16 @@ import {
         if (next) {
           next.running = {
             timeNs: timeNs,
-            cpu: cpu
+            cpu: cpu,
+            taskName: next.name,
+            taskPid: next.pid
           };
           next.last = timeNs;
         }
       } else if (type === 'sched_process_wait' ||
         type === 'sched_process_exit' ||
         type === 'sched_process_free') {
-        mark(row(f.pid, f.comm, timeNs), type.replace('sched_process_', ''), timeNs);
+        mark(row(f.pid, f.comm, timeNs), type.replace('sched_process_', ''), timeNs, cpu);
       }
 
       start = Math.min(start, timeNs);
@@ -341,7 +347,9 @@ import {
         r.runs.push({
           from: r.running.timeNs,
           to: workloadEnd == null ? end : workloadEnd,
-          cpu: r.running.cpu
+          cpu: r.running.cpu,
+          taskName: r.name,
+          taskPid: r.pid
         });
         r.running = null;
       }
@@ -502,10 +510,9 @@ import {
 
   function inspectNode(frame, address) {
     var node = frame.map[address];
-    byId('layer').textContent = 'CPU ' + frame.cpu + ' / rb_node';
-    byId('title').textContent = node.comm;
-    byId('v-node').textContent = address;
-    byId('v-node').title = address;
+    lifecycleCpu = frame.cpu;
+    lifecycleTask = String(node.pid);
+    drawLifecycle();
   }
 
   function paintTree(panel, frame, laid) {
@@ -632,6 +639,7 @@ import {
   function renderTreePanel(stream, frame, isCurrent) {
     var panel = panels[stream.key];
     panel.el.classList.toggle('current', isCurrent);
+    panel.el.classList.toggle('cross-cpu', !!(frame && frame.from));
     if (!frame) {
       panel.empty.style.display = 'grid';
       panel.empty.textContent = 'No snapshot yet at capture ' + (currentIndex + 1);
@@ -647,113 +655,11 @@ import {
       '<span>' + frame.count + ' nodes</span>' +
       '<span>depth ' + laid.depth + '</span>' +
       '<span class="' + (checks.ok ? 'pass' : 'fail') + '">RB ' + (checks.ok ? 'pass' : 'fail') + '</span>' +
+      (frame.from ? '<span class="migration-note">from CPU ' + frame.fromCpu + '</span>' : '') +
       '<span class="frame">local ' + frame.local + ' \u00b7 updated @ ' + frame.global + '</span>';
     if (panel.lastGlobal !== frame.global) {
       paintTree(panel, frame, laid);
       panel.lastGlobal = frame.global;
-    }
-  }
-
-  /* ------------------------------------------------------------------ */
-  /* Notebook / details rendering                                        */
-  /* ------------------------------------------------------------------ */
-
-  function frameComm(frame) {
-    return frame.focus && frame.map[frame.focus] ? frame.map[frame.focus].comm : short(frame.entity);
-  }
-
-  function renderMigration(frame) {
-    var prev = null;
-    var next = null;
-    migrationFrames.forEach(function(candidate) {
-      if (candidate.global < frame.global) prev = candidate;
-      if (candidate.global > frame.global && !next) next = candidate;
-    });
-    byId('migration-count').textContent = migrationFrames.length + ' events';
-    byId('prev-mig').disabled = !prev;
-    byId('next-mig').disabled = !next;
-    var box = byId('migration');
-    var text = byId('migration-text');
-    if (frame.from) {
-      box.className = 'migration show';
-      text.textContent = frameComm(frame) + '\nCPU ' + frame.fromCpu + ' \u2192 CPU ' +
-        frame.cpu + ' \u00b7 event ' + frame.global;
-    } else {
-      box.className = 'migration';
-      text.textContent = next ?
-        'Next: ' + frameComm(next) + '\nevent ' + next.global + ' \u00b7 CPU ' +
-        next.fromCpu + ' \u2192 CPU ' + next.cpu :
-        'No later cross-CPU event.';
-    }
-  }
-
-  function renderNotebook(frame) {
-    if (frame.placeholder) {
-      byId('op').textContent = frame.label;
-      byId('layer').textContent = 'scheduler lifecycle';
-      byId('title').textContent = frame.fields && (frame.fields.next_comm || frame.fields.child_comm || frame.fields.comm) || 'Scheduler activity';
-      byId('copy').textContent = 'No runqueue snapshot has been sampled at this point. The lifecycle trace is active; the tree panels will populate at the first enqueue observation.';
-      byId('v-cpu').textContent = frame.cpu == null ? '—' : 'CPU ' + frame.cpu;
-      byId('v-rq').textContent = 'not sampled';
-      byId('v-tid').textContent = frame.fields && (frame.fields.next_pid || frame.fields.pid || frame.fields.prev_pid) || '—';
-      byId('v-se').textContent = 'not sampled';
-      byId('v-node').textContent = 'not sampled';
-      byId('v-left').textContent = 'not sampled';
-      byId('checks').innerHTML = '<div class="check"><i></i><span>Runqueue state unavailable before first eBPF snapshot</span></div>';
-      renderMigration(frame);
-      return;
-    }
-    var checks = verifyFrame(frame);
-    byId('op').textContent = frame.op;
-    byId('layer').textContent = 'CPU ' + frame.cpu;
-    byId('title').textContent = frame.focus && frame.map[frame.focus] ?
-      frame.map[frame.focus].comm :
-      'enqueue snapshot';
-    byId('v-cpu').textContent = 'CPU ' + frame.cpu;
-    byId('v-rq').textContent = frame.rq;
-    byId('v-rq').title = frame.rq;
-    byId('v-tid').textContent = String(frame.tid);
-    byId('v-se').textContent = frame.entity || '\u2014';
-    byId('v-se').title = frame.entity || '';
-    byId('v-node').textContent = frame.focus || 'not present';
-    byId('v-left').textContent = frame.leftmost || '\u2014';
-    byId('v-left').title = frame.leftmost || '';
-
-    var rows = [
-      ['Root is black', checks.rootBlack],
-      ['No red-red parent/child', checks.red],
-      ['Equal black height: ' + checks.height, checks.bh],
-      ['Cached leftmost is structural minimum', checks.leftmost]
-    ];
-    byId('checks').innerHTML = rows.map(function(item) {
-      return '<div class="check ' + (item[1] ? '' : 'bad') + '"><i></i><span>' + item[0] + '</span></div>';
-    }).join('');
-
-    renderMigration(frame);
-  }
-
-  function jumpMigration(direction) {
-    if (!migrationFrames.length) return;
-    var g = frames[currentIndex].global;
-    var target = null;
-    if (direction > 0) {
-      for (var i = 0; i < migrationFrames.length; i++) {
-        if (migrationFrames[i].global > g) {
-          target = migrationFrames[i];
-          break;
-        }
-      }
-    } else {
-      for (var j = migrationFrames.length - 1; j >= 0; j--) {
-        if (migrationFrames[j].global < g) {
-          target = migrationFrames[j];
-          break;
-        }
-      }
-    }
-    if (target) {
-      setPlaying(false);
-      render(target.global - 1);
     }
   }
 
@@ -765,14 +671,66 @@ import {
     var root = byId('life-canvas');
     if (!root || !lifecycle.rows.length) return;
     root.innerHTML = '';
+    document.querySelectorAll('.life-filter').forEach(function(button) {
+      button.classList.toggle('active', Number(button.dataset.cpu) === lifecycleCpu);
+    });
 
     var span = Math.max(0.001, lifecycle.end - lifecycle.start);
-    var available = Math.max(200, root.clientHeight - 16);
-    var rowHeight = Math.max(16, available / lifecycle.rows.length);
+    // Keep the time axis visible: account for the canvas padding and its
+    // fixed-height axis row before distributing space between CPU rails.
+    var available = Math.max(1, root.clientHeight - 24);
+    var visibleRows;
+    if (lifecycleTask != null) {
+      var selected = lifecycle.rows.filter(function(r) {
+        return String(r.pid) === String(lifecycleTask);
+      })[0];
+      var selectedName = selected ? selected.name : String(lifecycleTask);
+      visibleRows = [0, 1].map(function(cpu) {
+        var runs = lifecycle.rows.reduce(function(all, r) {
+          return all.concat(r.runs.filter(function(run) {
+            return run.cpu === cpu && String(run.taskPid) === String(lifecycleTask);
+          }));
+        }, []);
+        var time = frames[currentIndex] ? frames[currentIndex].timeNs : lifecycle.start;
+        var running = runs.some(function(run) {
+          return run.from <= time && time < run.to;
+        });
+        return {
+          pid: 'selected-cpu-' + cpu,
+          name: 'CPU ' + cpu,
+          runs: runs,
+          marks: [],
+          aggregate: true,
+          activeTask: running ? selectedName : 'N/A'
+        };
+      });
+    } else {
+      visibleRows = [0, 1].map(function(cpu) {
+        var runs = lifecycle.rows.reduce(function(all, r) {
+          return all.concat(r.runs.filter(function(run) {
+            return run.cpu === cpu;
+          }));
+        }, []);
+        return {
+          pid: 'cpu-' + cpu,
+          name: 'CPU ' + cpu,
+          runs: runs,
+          marks: [],
+          aggregate: true,
+          activeTask: runs.filter(function(run) {
+            var time = frames[currentIndex] ? frames[currentIndex].timeNs : lifecycle.start;
+            return run.from <= time && time < run.to;
+          }).map(function(run) {
+            return run.taskName;
+          })[0] || 'idle'
+        };
+      });
+    }
+    var rowHeight = Math.max(20, available / visibleRows.length);
 
-    lifecycle.rows.forEach(function(r) {
+    visibleRows.forEach(function(r) {
       var row = document.createElement('div');
-      row.className = 'life-row';
+      row.className = 'life-row' + (lifecycleTask != null && String(r.pid) === String(lifecycleTask) ? ' focused' : '');
       row.style.height = rowHeight + 'px';
       row.style.flexBasis = rowHeight + 'px';
 
@@ -789,9 +747,19 @@ import {
         if (to <= from) return;
         var bar = document.createElement('i');
         bar.className = 'life-run cpu-' + run.cpu;
+        bar.title = run.taskName ? run.taskName + ' [' + run.taskPid + ']' : '';
         bar.style.left = (from - lifecycle.start) / span * 100 + '%';
         bar.style.width = Math.max(0.6, (to - from) / span * 100) + '%';
         track.appendChild(bar);
+        if (r.aggregate) {
+          [from].forEach(function(point) {
+            var change = document.createElement('i');
+            change.className = 'life-switch-dot';
+            change.style.left = (point - lifecycle.start) / span * 100 + '%';
+            change.title = run.taskName ? run.taskName + ' [' + run.taskPid + ']' : 'scheduler switch';
+            track.appendChild(change);
+          });
+        }
       });
       r.marks.forEach(function(ev) {
         if (ev.timeNs < lifecycle.start || ev.timeNs > lifecycle.end) return;
@@ -803,6 +771,13 @@ import {
 
       row.appendChild(name);
       row.appendChild(track);
+      if (r.aggregate) {
+        var current = document.createElement('span');
+        current.className = 'life-current';
+        current.textContent = r.activeTask;
+        current.title = r.activeTask;
+        row.appendChild(current);
+      }
       root.appendChild(row);
     });
 
@@ -823,8 +798,9 @@ import {
     var playhead = byId('life-playhead');
     var root = byId('life-canvas');
     if (!playhead || !root || timeNs == null) return;
-    var trackStart = 87;
-    var trackWidth = Math.max(0, root.clientWidth - trackStart);
+    var trackStart = 63;
+    var trackEndInset = 123;
+    var trackWidth = Math.max(0, root.clientWidth - trackStart - trackEndInset);
     var span = Math.max(1, lifecycle.end - lifecycle.start);
     var progress = Math.max(0, Math.min(1, (timeNs - lifecycle.start) / span));
     playhead.style.left = trackStart + progress * trackWidth + 'px';
@@ -838,10 +814,11 @@ import {
     if (!frames.length) return;
     currentIndex = Math.max(0, Math.min(index, frames.length - 1));
     var current = frames[currentIndex];
+    if (lifecycleCpu == null) lifecycleCpu = current.cpu;
     streams.forEach(function(stream) {
       renderTreePanel(stream, frameAtStream(stream, current.global), stream.key === current.key);
     });
-    renderNotebook(current);
+    drawLifecycle();
     updateLifecyclePlayhead(currentIndex === frames.length - 1 ? lifecycle.end : current.timeNs);
     byId('scrub').value = String(currentIndex);
     byId('counter').textContent = (currentIndex + 1) + ' / ' + frames.length;
@@ -907,7 +884,7 @@ import {
       var el = document.createElement('section');
       el.className = 'panel tree-panel';
       el.innerHTML =
-        '<header class="panel-head"><i class="pulse"></i><h2>CPU ' + stream.cpu + '</h2>' +
+        '<header class="panel-head"><button class="life-filter" type="button" data-cpu="' + stream.cpu + '">CPU ' + stream.cpu + '</button>' +
         '<span>cfs_rq ' + short(stream.rq) + '</span></header>' +
         '<div class="canvas"><svg role="img" aria-label="CPU ' + stream.cpu + ' CFS runqueue tree"></svg>' +
         '<div class="empty">waiting for snapshot</div></div>' +
@@ -941,8 +918,8 @@ import {
       return !!frame.from;
     });
     byId('status').innerHTML =
-      '<i class="trace-dot"></i><span>' + frames.length.toLocaleString() + ' frames \u00b7 ' +
-      streams.length + ' runqueues \u00b7 ' + migrationFrames.length + ' cross-CPU reappearances</span>';
+      '<i class="trace-dot"></i><span>' + streams.length + ' runqueues \u00b7 ' +
+      migrationFrames.length + ' cross-CPU reappearances</span>';
     if (!frames.length) return;
     build();
     byId('scrub').max = String(frames.length - 1);
@@ -951,7 +928,6 @@ import {
 
   function loadLifecycle(text) {
     lifecycle = parseSchedulerTrace(text);
-    byId('life-summary').textContent = lifecycle.rows.length + ' task lanes';
     drawLifecycle();
   }
 
@@ -960,11 +936,12 @@ import {
   /* ------------------------------------------------------------------ */
 
   function bindEvents() {
-    byId('prev-mig').addEventListener('click', function() {
-      jumpMigration(-1);
-    });
-    byId('next-mig').addEventListener('click', function() {
-      jumpMigration(1);
+    document.querySelectorAll('.life-filter').forEach(function(button) {
+      button.addEventListener('click', function() {
+        lifecycleCpu = Number(button.dataset.cpu);
+        lifecycleTask = null;
+        drawLifecycle();
+      });
     });
     byId('prev').addEventListener('click', function() {
       setPlaying(false);

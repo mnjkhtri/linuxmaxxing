@@ -258,11 +258,6 @@ import {
         '<code title="' + esc(e.fields.mm) + '">' + esc(ptrLabel(e.fields.mm)) + '</code></span>';
       root.appendChild(row);
     });
-    const users = taskEvents.filter((e) => (e.fields.type || '').indexOf('user') === 0).length;
-    const kthreads = taskEvents.filter((e) => e.fields.type === 'kthread').length;
-    $('task-summary').innerHTML = '<span class="summary-chip"><b>' + taskEvents.length + '</b> tasks</span>' +
-      '<span class="summary-chip"><b>' + kthreads + '</b> kthreads</span>' +
-      '<span class="summary-chip"><b>' + users + '</b> user tasks</span>';
   }
 
   function buildLayout() {
@@ -304,7 +299,7 @@ import {
 
   function buildAllocatorLinks() {
     const root = $('allocator-links');
-    root.innerHTML = '<header class="alloc-title"><b>ALLOCATOR → VIRTUAL RANGE</b><span>range lookup from returned KVA</span></header><div class="alloc-stack"></div>';
+      root.innerHTML = '<header class="alloc-title"><b>ALLOCATOR</b></header><div class="alloc-stack"></div>';
     const stack = root.querySelector('.alloc-stack');
     GROUPS.forEach((g) => {
       const section = document.createElement('section');
@@ -325,7 +320,7 @@ import {
         button.dataset.event = e.index;
         button.dataset.object = id;
         button.dataset.target = region ? region.fields.id : '';
-        button.title = targetEvidence(o);
+        button.setAttribute('aria-label', targetEvidence(o));
         button.innerHTML = '<b class="alloc-cell alloc-name">' + esc(id.replace(/_/g, ' ')) + '</b>' +
           '<code class="alloc-cell alloc-kva" title="' + esc(addr) + '">' + esc(addr || '—') + '</code>' +
           '<span class="alloc-cell">' + printedApi(o) + '</span>' +
@@ -359,7 +354,6 @@ import {
 
   function renderTasks() {
     document.querySelectorAll('.task-row').forEach((n) => n.classList.toggle('current', number(n.dataset.event) === cursor));
-    $('stage-stat').textContent = taskEvents.length + ' task_struct records';
   }
 
   function renderLayout(e) {
@@ -387,16 +381,10 @@ import {
       n.classList.toggle('current', n.dataset.object === e.fields.id);
       n.classList.toggle('region-match', e.action === 'region' && n.dataset.target === target);
     });
-    const hitCount = Object.keys(taskHits).length;
-    $('stage-stat').textContent = hitCount ?
-      ('task addresses in ' + hitCount + ' canonical region' + (hitCount === 1 ? '' : 's')) :
-      (regions.length + ' regions · allocator targets highlighted');
   }
 
   function render() {
     const e = events[cursor] || events[0];
-    $('stage-title').textContent = 'Kernel API map';
-    $('stage-description').textContent = 'task_struct inventory · canonical regions · allocator return addresses · physical backing';
     renderLayout(e);
     renderTasks(e);
   }

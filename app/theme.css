@@ -618,11 +618,11 @@ body[data-experiment="scheduler"] .cfs {
 }
 
 body[data-experiment="kapi"] .stage-wrap {
-  grid-template-columns: minmax(220px, .6fr) minmax(420px, 1fr) minmax(540px, 1.2fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 body[data-experiment="kapi"] :is(.task-stage, .allocator-links, .vas-map) {
-  min-height: 460px;
+  min-height: 0;
 }
 
 body[data-experiment="virt-ept"] .workbench,
