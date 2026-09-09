@@ -29,5 +29,6 @@
     "guest_boot_s": 300
   },
   "buffer_kib": 32768,
+  "post_workload_grace_ms": 100,
   "allow_partial": true
 }

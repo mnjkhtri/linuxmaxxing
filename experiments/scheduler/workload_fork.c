@@ -13,14 +13,14 @@
 #include <unistd.h>
 
 #define CHILDREN 8
-#define DEFAULT_SECONDS 3
+#define DEFAULT_SECONDS 1
 
 /*
  * Create repeatable but varied scheduler pressure for both observers in run.sh.
  * Eight children are released together, named schedNNN, and assigned different positive nice values. Some periodically sleep or yield; the rest stay CPU-bound.
  * This exposes forks, wakeups, context switches, per-CPU CFS tree changes, and cross-CPU movement in one experiment.
  *
- * The eBPF CFS observer scopes its capture to the schedNNN children, so tracing starts with them and ends the moment they all exit.
+ * The eBPF CFS observer captures the launcher and schedNNN children, so the first tree state includes the launcher before the child burst.
  * The tracefs side still records the full sched_* stream for cross-reference.
  */
 static volatile sig_atomic_t stop;
@@ -148,6 +148,8 @@ int main(int argc, char **argv)
 	for (i = 0; i < CHILDREN; i++)
 		waitpid(pids[i], NULL, 0);
 
+	/* Capture one final natural enqueue after all children have exited. */
+	sched_yield();
 	printf("workload complete\n");
 	return 0;
 }

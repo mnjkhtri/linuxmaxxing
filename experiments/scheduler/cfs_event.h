@@ -29,6 +29,7 @@ struct tree_node
 	unsigned long long node;
 	unsigned long long left;
 	unsigned long long right;
+	unsigned int pid;
 	unsigned int color; /* CFS_RB_RED or CFS_RB_BLACK */
 	char comm[16];
 };

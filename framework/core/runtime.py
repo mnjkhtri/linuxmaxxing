@@ -839,6 +839,12 @@ class Session:
                 self.trace.filter(event, "common_pid == %d" % pid)
         proc.wait(self.cfg["timeouts"]["workload_s"], peers=[p for p, _ in self.observers])
         self.capture.lifecycle("workload_finished", {"exit_code": 0})
+        if self.name == "scheduler":
+            for observer, _ in self.observers:
+                observer.signal(signal.SIGUSR1)
+            for event in self.trace.enabled:
+                self.trace.filter(event, "0")
+            time.sleep(self.cfg.get("post_workload_grace_ms", 0) / 1000)
 
     def collect(self):
         for proc, label in self.observers:

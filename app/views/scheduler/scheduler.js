@@ -1,8 +1,7 @@
 import {
   mountView,
   observation,
-  relativeNs,
-  parseCapture as parseCaptureFile
+  relativeNs
 } from '../../common.js';
 /*
  * Scheduler capture lab: CFS per-CPU runqueues.
@@ -51,7 +50,8 @@ import {
   var lifecycle = {
     rows: [],
     start: 0,
-    end: 0
+    end: 0,
+    events: []
   };
 
   /* ------------------------------------------------------------------ */
@@ -109,6 +109,7 @@ import {
         address: node.address,
         left: valid(node.left) ? node.left : null,
         right: valid(node.right) ? node.right : null,
+        pid: Number(node.pid || 0),
         color: node.color === 'red' ? 'red' : 'black',
         comm: node.comm || '?'
       };
@@ -127,8 +128,8 @@ import {
       seq: Number(record.seq || 0),
       tid: ctx.tid == null ? 0 : +ctx.tid,
       comm: ctx.comm || '',
-      entity: valid(enqueued.address) ? enqueued.address : null,
-      runNode: valid(enqueued.rb_node) ? enqueued.rb_node : null,
+      entity: record.kind === 'enqueue_entity' && valid(enqueued.address) ? enqueued.address : null,
+      runNode: record.kind === 'enqueue_entity' && valid(enqueued.rb_node) ? enqueued.rb_node : null,
       focus: valid(enqueued.rb_node) && map[enqueued.rb_node] ? enqueued.rb_node : null,
       root: valid(rq.root) ? rq.root : null,
       leftmost: valid(rq.leftmost) ? rq.leftmost : null,
@@ -234,6 +235,10 @@ import {
     var rows = {};
     var start = Infinity;
     var end = 0;
+    var workloadEnd = null;
+    var firstSnapshot = null;
+    var lastSnapshot = null;
+    lifecycle.events = [];
 
     function row(pid, name, timeNs) {
       if (!pid) return null;
@@ -264,7 +269,10 @@ import {
         f = event.data.fields;
       if (type === 'sched_process_fork') {
         mark(row(f.child_pid, f.child_comm, timeNs), 'fork', timeNs);
-        row(f.pid, f.comm, timeNs);
+        if (rows[f.pid]) {
+          rows[f.pid].name = f.comm || rows[f.pid].name;
+          rows[f.pid].last = timeNs;
+        }
       } else if (type === 'sched_wakeup_new') {
         mark(row(f.pid, f.comm, timeNs), 'wake', timeNs);
       } else if (type === 'sched_switch') {
@@ -294,12 +302,37 @@ import {
         mark(row(f.pid, f.comm, timeNs), type.replace('sched_process_', ''), timeNs);
       }
 
-      if (type === 'sched_process_fork' || type === 'sched_wakeup_new' ||
-        type === 'sched_switch' || type === 'sched_process_wait' ||
-        type === 'sched_process_exit' || type === 'sched_process_free') {
-        start = Math.min(start, timeNs);
-        end = Math.max(end, timeNs);
-      }
+      start = Math.min(start, timeNs);
+      end = Math.max(end, timeNs);
+      lifecycle.events.push({
+        timeNs: timeNs,
+        kind: type,
+        cpu: cpu,
+        fields: f || {},
+        label: type.replace('sched_', '').replaceAll('_', ' ')
+      });
+    });
+
+    capture.events.filter(e => e.source.mechanism === 'ebpf' && e.kind === 'enqueue_entity').forEach(function(event) {
+      var timeNs = relativeNs(capture, event);
+      firstSnapshot = firstSnapshot == null ? timeNs : Math.min(firstSnapshot, timeNs);
+      lastSnapshot = lastSnapshot == null ? timeNs : Math.max(lastSnapshot, timeNs);
+    });
+
+    // Keep lifecycle observations available for the task rail. They are not
+    // synthetic scheduler playback frames.
+    capture.events.filter(e => ['capture_started', 'collector_ready', 'workload_started', 'workload_finished', 'collector_finished', 'capture_finished'].includes(e.kind)).forEach(function(event) {
+      var timeNs = relativeNs(capture, event);
+      if (event.kind === 'workload_finished') workloadEnd = timeNs;
+      lifecycle.events.push({
+        timeNs: timeNs,
+        kind: event.kind,
+        cpu: null,
+        fields: event.data || {},
+        label: event.kind.replaceAll('_', ' ')
+      });
+      start = Math.min(start, timeNs);
+      end = Math.max(end, timeNs);
     });
 
     Object.keys(rows).forEach(function(pid) {
@@ -307,7 +340,7 @@ import {
       if (r.running) {
         r.runs.push({
           from: r.running.timeNs,
-          to: end,
+          to: workloadEnd == null ? end : workloadEnd,
           cpu: r.running.cpu
         });
         r.running = null;
@@ -316,14 +349,34 @@ import {
       end = Math.max(end, r.last);
     });
 
+    // The scheduler visualization ends at the last real tree snapshot.
+    // Lifecycle records after that point are collector bookkeeping, not a
+    // tree state that playback can display.
+    if (lastSnapshot != null) end = lastSnapshot;
+    if (firstSnapshot != null) start = firstSnapshot;
+
+    var visibleRows = Object.keys(rows).map(function(id) {
+      return rows[id];
+    }).filter(function(r) {
+      var hasRun = r.runs.some(function(run) {
+        return Math.min(run.to, end) > Math.max(run.from, start);
+      });
+      var hasMark = r.marks.some(function(mark) {
+        return mark.timeNs >= start && mark.timeNs <= end;
+      });
+      return hasRun || hasMark;
+    });
+
     return {
-      rows: Object.keys(rows).map(function(id) {
-        return rows[id];
-      }).sort(function(a, b) {
+      rows: visibleRows.sort(function(a, b) {
         return a.first - b.first || a.pid - b.pid;
       }),
       start: start,
-      end: end
+      end: end,
+      workloadEnd: workloadEnd,
+      events: lifecycle.events.sort(function(a, b) {
+        return a.timeNs - b.timeNs;
+      })
     };
   }
 
@@ -461,16 +514,21 @@ import {
     var keys = Object.keys(target);
     var start = {};
     var old = panel.pos || {};
-    var t0 = performance.now();
+    var paintToken = (panel.paintToken || 0) + 1;
+    panel.paintToken = paintToken;
 
     keys.forEach(function(key) {
       start[key] = old[key] || target[key];
     });
     if (rafById[panel.key]) cancelAnimationFrame(rafById[panel.key]);
 
-    function animate(now) {
-      var t = playing ? 1 : Math.min(1, (now - t0) / 160);
-      var ease = t * t * (3 - 2 * t);
+    function animate() {
+      if (panel.paintToken !== paintToken) return;
+      // A snapshot must render deterministically every time it is selected.
+      // Playback changes the selected frame; it must not change the captured
+      // geometry based on the previously displayed frame.
+      var t = 1;
+      var ease = 1;
       var pos = {};
       keys.forEach(function(key) {
         pos[key] = {
@@ -506,7 +564,7 @@ import {
         group.setAttribute('class', 'tree-node');
         group.setAttribute('tabindex', '0');
         group.setAttribute('role', 'button');
-        group.setAttribute('aria-label', node.comm + ' ' + (isRed ? 'red' : 'black') + ' node');
+        group.setAttribute('aria-label', node.comm + ' [' + node.pid + '] ' + (isRed ? 'red' : 'black') + ' node');
 
         svgAdd(group, 'circle', {
           cx: p.x,
@@ -515,7 +573,7 @@ import {
           'class': circleClass
         });
 
-        var label = node.comm.length > 10 ? node.comm.slice(0, 9) + '\u2026' : node.comm;
+        var label = node.comm.length > 7 ? node.comm.slice(0, 6) + '\u2026' : node.comm;
         svgAdd(group, 'text', {
           x: p.x,
           y: p.y - 7,
@@ -525,7 +583,7 @@ import {
           x: p.x,
           y: p.y + 4,
           'class': 'node-text'
-        }, short(a));
+        }, 'pid ' + node.pid);
         svgAdd(group, 'text', {
             x: p.x,
             y: p.y + 15,
@@ -551,7 +609,7 @@ import {
       if (t < 1) rafById[panel.key] = requestAnimationFrame(animate);
     }
 
-    animate(t0);
+    animate();
   }
 
   function frameAtStream(stream, global) {
@@ -618,18 +676,33 @@ import {
     var text = byId('migration-text');
     if (frame.from) {
       box.className = 'migration show';
-      text.textContent = frameComm(frame) + ' \u00b7 CPU ' + frame.fromCpu + ' \u2192 CPU ' +
+      text.textContent = frameComm(frame) + '\nCPU ' + frame.fromCpu + ' \u2192 CPU ' +
         frame.cpu + ' \u00b7 event ' + frame.global;
     } else {
       box.className = 'migration';
       text.textContent = next ?
-        'Next: ' + frameComm(next) + ' \u00b7 event ' + next.global + ' \u00b7 CPU ' +
+        'Next: ' + frameComm(next) + '\nevent ' + next.global + ' \u00b7 CPU ' +
         next.fromCpu + ' \u2192 CPU ' + next.cpu :
         'No later cross-CPU event.';
     }
   }
 
   function renderNotebook(frame) {
+    if (frame.placeholder) {
+      byId('op').textContent = frame.label;
+      byId('layer').textContent = 'scheduler lifecycle';
+      byId('title').textContent = frame.fields && (frame.fields.next_comm || frame.fields.child_comm || frame.fields.comm) || 'Scheduler activity';
+      byId('copy').textContent = 'No runqueue snapshot has been sampled at this point. The lifecycle trace is active; the tree panels will populate at the first enqueue observation.';
+      byId('v-cpu').textContent = frame.cpu == null ? '—' : 'CPU ' + frame.cpu;
+      byId('v-rq').textContent = 'not sampled';
+      byId('v-tid').textContent = frame.fields && (frame.fields.next_pid || frame.fields.pid || frame.fields.prev_pid) || '—';
+      byId('v-se').textContent = 'not sampled';
+      byId('v-node').textContent = 'not sampled';
+      byId('v-left').textContent = 'not sampled';
+      byId('checks').innerHTML = '<div class="check"><i></i><span>Runqueue state unavailable before first eBPF snapshot</span></div>';
+      renderMigration(frame);
+      return;
+    }
     var checks = verifyFrame(frame);
     byId('op').textContent = frame.op;
     byId('layer').textContent = 'CPU ' + frame.cpu;
@@ -695,7 +768,7 @@ import {
 
     var span = Math.max(0.001, lifecycle.end - lifecycle.start);
     var available = Math.max(200, root.clientHeight - 16);
-    var rowHeight = Math.max(10, Math.min(16, available / lifecycle.rows.length));
+    var rowHeight = Math.max(16, available / lifecycle.rows.length);
 
     lifecycle.rows.forEach(function(r) {
       var row = document.createElement('div');
@@ -711,13 +784,17 @@ import {
       var track = document.createElement('div');
       track.className = 'life-track';
       r.runs.forEach(function(run) {
+        var from = Math.max(run.from, lifecycle.start);
+        var to = Math.min(run.to, lifecycle.end);
+        if (to <= from) return;
         var bar = document.createElement('i');
         bar.className = 'life-run cpu-' + run.cpu;
-        bar.style.left = (run.from - lifecycle.start) / span * 100 + '%';
-        bar.style.width = Math.max(0.6, (run.to - run.from) / span * 100) + '%';
+        bar.style.left = (from - lifecycle.start) / span * 100 + '%';
+        bar.style.width = Math.max(0.6, (to - from) / span * 100) + '%';
         track.appendChild(bar);
       });
       r.marks.forEach(function(ev) {
+        if (ev.timeNs < lifecycle.start || ev.timeNs > lifecycle.end) return;
         var mark = document.createElement('i');
         mark.className = 'life-mark ' + ev.type;
         mark.style.left = (ev.timeNs - lifecycle.start) / span * 100 + '%';
@@ -746,7 +823,7 @@ import {
     var playhead = byId('life-playhead');
     var root = byId('life-canvas');
     if (!playhead || !root || timeNs == null) return;
-    var trackStart = 95;
+    var trackStart = 87;
     var trackWidth = Math.max(0, root.clientWidth - trackStart);
     var span = Math.max(1, lifecycle.end - lifecycle.start);
     var progress = Math.max(0, Math.min(1, (timeNs - lifecycle.start) / span));
@@ -765,11 +842,24 @@ import {
       renderTreePanel(stream, frameAtStream(stream, current.global), stream.key === current.key);
     });
     renderNotebook(current);
-    updateLifecyclePlayhead(current.timeNs);
+    updateLifecyclePlayhead(currentIndex === frames.length - 1 ? lifecycle.end : current.timeNs);
     byId('scrub').value = String(currentIndex);
     byId('counter').textContent = (currentIndex + 1) + ' / ' + frames.length;
     byId('prev').disabled = currentIndex === 0;
     byId('next').disabled = currentIndex === frames.length - 1;
+  }
+
+  function mergeTimeline(snapshotFrames) {
+    // Playback is the sampled tree sequence. The lifetime rail carries the
+    // complete trace context separately, so blank pre-snapshot frames never
+    // interrupt the natural enqueue/tree progression.
+    frames = snapshotFrames;
+    frames.forEach(function(frame, index) {
+      frame.global = index + 1;
+    });
+    migrationFrames = frames.filter(function(frame) {
+      return frame.from;
+    });
   }
 
   function setPlaying(value) {
@@ -809,28 +899,11 @@ import {
   /* ------------------------------------------------------------------ */
 
   function build() {
-    var rail = byId('cpu-rail');
     var trees = byId('trees');
-    rail.innerHTML = '';
     trees.innerHTML = '';
     panels = {};
 
     streams.forEach(function(stream) {
-      var card = document.createElement('button');
-      card.className = 'cpu-card';
-      card.innerHTML =
-        '<strong>CPU ' + stream.cpu + '</strong>' +
-        '<span>' + stream.frames.length.toLocaleString() + ' frames \u00b7 max ' + stream.max + ' nodes</span>' +
-        '<code>cfs_rq ' + short(stream.rq) + '</code>';
-      card.addEventListener('click', function() {
-        var best = stream.frames.reduce(function(a, f) {
-          return f.count > a.count ? f : a;
-        }, stream.frames[0]);
-        render(best.global - 1);
-        updateLifecyclePlayhead(frames[currentIndex] ? frames[currentIndex].timeNs : null);
-      });
-      rail.appendChild(card);
-
       var el = document.createElement('section');
       el.className = 'panel tree-panel';
       el.innerHTML =
@@ -848,7 +921,8 @@ import {
         empty: el.querySelector('.empty'),
         meta: el.querySelector('.tree-meta'),
         pos: {},
-        lastGlobal: 0
+        lastGlobal: 0,
+        paintToken: 0
       };
     });
   }
@@ -859,7 +933,9 @@ import {
 
   function loadCapture(text) {
     var parsed = parseCapture(text);
-    frames = parsed.frames;
+    var recordCount = byId('record-count');
+    if (recordCount) recordCount.textContent = text.events.length.toLocaleString() + ' records';
+    mergeTimeline(parsed.frames);
     streams = parsed.streams;
     migrationFrames = frames.filter(function(frame) {
       return !!frame.from;
@@ -889,21 +965,6 @@ import {
     });
     byId('next-mig').addEventListener('click', function() {
       jumpMigration(1);
-    });
-    byId('load').addEventListener('click', function() {
-      byId('file').click();
-    });
-    byId('file').addEventListener('change', function() {
-      var file = this.files[0];
-      if (!file) return;
-      var reader = new FileReader();
-      reader.onload = function(event) {
-        const capture = parseCaptureFile(event.target.result, 'scheduler');
-        loadLifecycle(capture);
-        loadCapture(capture);
-      };
-      reader.readAsText(file);
-      this.value = '';
     });
     byId('prev').addEventListener('click', function() {
       setPlaying(false);

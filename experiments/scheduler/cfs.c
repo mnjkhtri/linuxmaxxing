@@ -3,6 +3,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <bpf/bpf.h>
 #include <bpf/libbpf.h>
 #include "cfs_event.h"
 #include "json_writer.h"
@@ -29,11 +30,14 @@ static unsigned int record_count;
 static unsigned int seq_counter;
 
 static volatile sig_atomic_t exiting;
+static volatile sig_atomic_t drain_requested;
 
 static void on_signal(int signo)
 {
-	(void)signo;
-	exiting = 1;
+	if (signo == SIGUSR1)
+		drain_requested = 1;
+	else
+		exiting = 1;
 }
 
 /*
@@ -81,6 +85,7 @@ static void write_node(struct json_writer *jw, const struct tree_node *node)
 	json_ptr(jw, "address", node->node);
 	json_ptr(jw, "left", node->left);
 	json_ptr(jw, "right", node->right);
+	json_u32(jw, "pid", node->pid);
 	json_string(jw, "color", node->color == CFS_RB_RED ? "red" : "black");
 	json_string_n(jw, "comm", node->comm, sizeof(node->comm));
 	json_object_end(jw);
@@ -115,7 +120,7 @@ static void write_snapshot(struct json_writer *jw, const struct cfs_event *event
 	json_object_begin(jw);
 
 	json_string(jw, "experiment", "scheduler");
-	json_string(jw, "kind", "snapshot");
+	json_string(jw, "kind", "enqueue_entity");
 	json_string(jw, "source", "ebpf");
 	json_u32(jw, "seq", seq);
 	json_u64(jw, "time_ns", event->time_ns);
@@ -163,6 +168,7 @@ int main(void)
 {
 	signal(SIGINT, on_signal);
 	signal(SIGTERM, on_signal);
+	signal(SIGUSR1, on_signal);
 
 	/* Stdout is NDJSON; line-buffer so records reach the capture promptly. */
 	setvbuf(stdout, NULL, _IOLBF, 0);
@@ -196,7 +202,45 @@ int main(void)
 
 	lab_control("LX_READY experiment=scheduler observer=cfs\n");
 
-	err = lab_poll(ringbuf, &exiting);
+	err = 0;
+	while (!exiting)
+	{
+		if (drain_requested)
+		{
+			unsigned int key = 0;
+			unsigned int enabled = 1;
+			if (bpf_map_update_elem(bpf_map__fd(skel->maps.capture_mode), &key,
+				&enabled, BPF_ANY))
+			{
+				err = -errno;
+				break;
+			}
+			drain_requested = 0;
+		}
+
+		int poll_result = ring_buffer__poll(ringbuf, 100);
+		if (poll_result < 0 && poll_result != -EINTR)
+		{
+			err = poll_result;
+			break;
+		}
+	}
+	if (!err)
+	{
+		unsigned int drains = 0;
+		int consume_result;
+		do
+		{
+			consume_result = ring_buffer__consume(ringbuf);
+			if (++drains > 10000)
+			{
+				err = -ETIMEDOUT;
+				break;
+			}
+		} while (consume_result > 0);
+		if (consume_result < 0)
+			err = consume_result;
+	}
 
 	if (skel && skel->bss && lab_health(skel->bss->lab_dropped, skel->bss->lab_failures))
 		err = -EIO;

@@ -87,6 +87,9 @@
           "type": "hex",
           "nullable": true
         },
+        "pid": {
+          "type": "integer64"
+        },
         "color": {
           "type": "string"
         },
@@ -99,7 +102,8 @@
         "color",
         "comm",
         "left",
-        "right"
+        "right",
+        "pid"
       ]
     },
     "shape_4": {
@@ -118,10 +122,12 @@
           "type": "integer64"
         },
         "root": {
-          "type": "hex"
+          "type": "hex",
+          "nullable": true
         },
         "leftmost": {
-          "type": "hex"
+          "type": "hex",
+          "nullable": true
         },
         "enqueued_entity": {
           "$ref": "shape_2"

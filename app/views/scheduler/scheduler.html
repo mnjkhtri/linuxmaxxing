@@ -14,16 +14,13 @@
 
     <header class="head">
       <div>
-        <div class="eyebrow">SCHED / FAIR CLASS / PER-CPU</div>
-        <h1><span>CFS</span> runqueue laboratory</h1>
-        <p>Per-CPU cfs_rq state · the active dot marks which CPU changed</p>
+        <h1>CFS runqueue</h1>
+        <p>Per-CPU cfs_rq state</p>
       </div>
       <div id="status" role="status">
         <i class="trace-dot"></i><span>following scheduler evolution…</span>
       </div>
     </header>
-
-    <section class="cpu-rail" id="cpu-rail" aria-label="Detected runqueues"></section>
 
     <section class="workbench">
 
@@ -79,22 +76,20 @@
     </section>
 
     <nav class="panel toolbar playback-bar cfs-player" aria-label="Global capture playback">
-      <button id="prev">Prev</button>
-      <button id="play">Play</button>
-      <button id="next">Next</button>
-      <input id="scrub" class="playback-scrub" type="range" min="0" max="0" value="0" aria-label="Global capture frame">
-      <span id="counter" class="playback-counter">— / —</span>
-      <span class="sep playback-sep"></span>
-      <select id="speed" class="playback-speed" aria-label="Playback speed">
-        <option value="1">1 event/s</option>
-        <option value="25">25 events/s</option>
-        <option value="100">100 events/s</option>
-        <option value="1000" selected>1000 events/s</option>
-      </select>
-      <span class="badge playback-badge">global capture order</span>
-      <span class="sep playback-sep"></span>
-      <button id="load">Open capture</button>
-      <input id="file" type="file" accept=".ndjson,.json,.log,.txt" hidden>
+      <span id="record-count" class="playback-records">— records</span>
+      <div class="playback-controls">
+        <button id="prev">Prev</button>
+        <button id="play">Play</button>
+        <button id="next">Next</button>
+        <input id="scrub" class="playback-scrub" type="range" min="0" max="0" value="0" aria-label="Global capture frame">
+        <span id="counter" class="playback-counter">— / —</span>
+        <span class="sep playback-sep"></span>
+        <select id="speed" class="playback-speed" aria-label="Playback speed">
+          <option value="1">1 event/s</option>
+          <option value="25">25 events/s</option>
+          <option value="100">100 events/s</option>
+        </select>
+      </div>
     </nav>
 
   </main>
