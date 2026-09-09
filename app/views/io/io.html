@@ -9,13 +9,12 @@
 </head>
 <body>
 <main class="io-flow">
-<header class="hero">
+<header class="hero page-head">
 <div>
-<div class="eyebrow">WRITE(2) → DRIVER DISPATCH → MMIO / DMA → INTx → COMPLETION</div>
-<h1>PCI <span>I/O</span></h1>
-<p>Follow the exact trigger, execution context, ownership, and completion path of each captured job.</p>
+<h1>PCI I/O</h1>
+<p>Trigger, driver dispatch, MMIO/DMA, interrupts, and completion</p>
 </div>
-<div class="capture-status" id="capture-status"><i></i><span>loading validated capture…</span></div>
+<div id="io-summary" role="status" aria-label="IO capture summary"><i class="trace-dot"></i><span id="io-summary-text">building IO model…</span></div>
 </header>
 
 
@@ -23,14 +22,13 @@
 <div class="flow-column">
 <section class="panel journey-panel">
 <header class="journey-head">
-<div class="journey-copy"><small id="journey-kicker">CAPTURED FLOW</small><h2 id="journey-title">—</h2><p id="journey-caption">—</p></div>
-<div class="flow-key"><span><i class="active-key"></i>active in this stage</span><span><i class="inferred-key"></i>configured / inferred</span><button type="button" id="prev-stage" title="Previous stage">←</button><b id="step-position">—</b><button type="button" id="next-stage" title="Next stage">→</button></div>
+<div class="journey-resources" id="journey-resources" aria-label="Captured resources"></div>
 </header>
 
-<nav class="step-roadmap" id="step-roadmap" aria-label="Mechanism steps"></nav>
+<nav class="step-roadmap experiment-selector" id="step-roadmap" aria-label="IO phases"></nav>
 
 <div class="active-flow">
-<div class="sequence-diagram" id="sequence-diagram">
+<div class="sequence-diagram">
 <div class="sequence-head" id="sequence-head"></div>
 <div class="sequence-body" id="sequence-body"></div>
 </div>
@@ -40,28 +38,17 @@
 
 </div>
 
-<aside class="panel inspector">
-<header class="inspect-head">
-<span class="evidence-badge" id="inspect-evidence">observed</span>
-<small id="inspect-index">select a record</small>
-<h2 id="inspect-title">Tracepoint evidence</h2>
-<code id="inspect-tracepoint">—</code>
-</header>
-<section class="proof">
-<p id="inspect-proof">Select a step or evidence record.</p>
-</section>
-<section class="resource-card">
-<h3>Resources</h3>
-<div id="resource-facts"></div>
-</section>
-<section class="context-card">
-<h3>Execution context</h3>
-<div class="context-grid" id="inspect-context"></div>
+<aside class="panel inspector inspector-pane">
+<div class="inspector-body">
+<section class="origin-card inspector-section">
+<h3>Origin</h3>
+<div class="origin-grid" id="inspect-origin"></div>
 </section>
 <section class="field-card">
-<h3>Trace fields</h3>
-<dl id="inspect-fields"></dl>
+<h3>Fields</h3>
+<div class="origin-grid" id="inspect-fields"></div>
 </section>
+</div>
 </aside>
 </section>
 </main>

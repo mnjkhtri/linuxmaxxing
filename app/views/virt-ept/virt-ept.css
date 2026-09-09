@@ -67,7 +67,7 @@ code {
 
 .eyebrow {
   color: var(--cyan);
-  font: 700 11px/1.2 var(--mono);
+  font: 700 10px/1.2 var(--mono);
   letter-spacing: .14em
 }
 
@@ -84,7 +84,7 @@ code {
 .hero p {
   margin: 5px 0 0;
   color: var(--muted);
-  font: 11px/1.45 var(--mono)
+  font: 10px/1.45 var(--mono)
 }
 
 #status {
@@ -93,7 +93,7 @@ code {
   align-items: center;
   gap: 8px;
   color: var(--muted);
-  font: 11px var(--mono);
+  font: 10px var(--mono);
   white-space: nowrap
 }
 
@@ -153,13 +153,13 @@ code {
 }
 
 .phase-button b {
-  font: 750 11px var(--mono)
+  font: 750 8px var(--mono)
 }
 
 .phase-button span {
   margin-top: 4px;
   color: inherit;
-  font: 650 11px var(--mono);
+  font: 650 8px var(--mono);
   letter-spacing: .03em;
   text-transform: uppercase
 }
@@ -192,7 +192,7 @@ code {
 
 .panel-head h2 {
   margin: 0;
-  font: 700 11px var(--mono);
+  font: 700 10px var(--mono);
   letter-spacing: .06em;
   text-transform: uppercase
 }
@@ -201,13 +201,13 @@ code {
   display: block;
   margin-top: 3px;
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .panel-head code {
   margin-left: auto;
   color: var(--cyan);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   white-space: nowrap
 }
 
@@ -242,7 +242,7 @@ code {
 
 .region-title b {
   display: block;
-  font: 700 11px var(--mono);
+  font: 700 10px var(--mono);
   letter-spacing: .05em
 }
 
@@ -250,13 +250,13 @@ code {
   display: block;
   margin-top: 3px;
   color: var(--faint);
-  font: 11px/1.3 var(--mono)
+  font: 8px/1.3 var(--mono)
 }
 
 .region-title code {
   margin-left: auto;
   color: var(--cyan);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   white-space: nowrap
 }
 
@@ -269,13 +269,13 @@ code {
   gap: 7px;
   border-top: 1px solid rgba(74, 92, 106, .34);
   color: var(--muted);
-  font: 11px/1.35 var(--mono)
+  font: 8px/1.35 var(--mono)
 }
 
 .region-foot b {
   flex: none;
   color: var(--yellow);
-  font-size: 11px
+  font-size: 8px
 }
 
 .region-foot span {
@@ -319,19 +319,19 @@ code {
 
 .actor-head small {
   color: var(--faint);
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   letter-spacing: .04em
 }
 
 .actor-head b {
   margin-top: 3px;
-  font: 750 11px var(--mono)
+  font: 750 8px var(--mono)
 }
 
 .actor-head em {
   margin-top: 3px;
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .actor-head article.active {
@@ -481,7 +481,7 @@ code {
   border-radius: 2px;
   background: rgba(7, 12, 18, .94);
   color: var(--text);
-  font: 650 11px var(--mono);
+  font: 650 8px var(--mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis
@@ -497,7 +497,7 @@ code {
   right: 5px;
   bottom: 3px;
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .state-region {
@@ -537,13 +537,13 @@ code {
 
 .state-ledger small {
   color: var(--faint);
-  font: 700 11px var(--mono)
+  font: 700 8px var(--mono)
 }
 
 .state-ledger b {
   margin-top: 5px;
   color: var(--text);
-  font: 750 11px var(--mono)
+  font: 750 8.3px var(--mono)
 }
 
 .translation-lifecycle {
@@ -579,13 +579,13 @@ code {
 
 .translation-lifecycle small {
   color: var(--faint);
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   letter-spacing: .035em
 }
 
 .translation-lifecycle b {
   color: var(--muted);
-  font: 650 11px var(--mono)
+  font: 650 8px var(--mono)
 }
 
 .translation-lifecycle article.active {
@@ -619,7 +619,7 @@ code {
 
 .walk-section header b,
 .map-section header b {
-  font: 750 11px var(--mono);
+  font: 750 8px var(--mono);
   letter-spacing: .04em
 }
 
@@ -627,7 +627,7 @@ code {
 .map-section header span {
   margin-left: auto;
   color: var(--faint);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   white-space: nowrap
 }
 
@@ -686,26 +686,26 @@ code {
 
 .walk-node small {
   color: var(--faint);
-  font: 700 11px var(--mono)
+  font: 700 8px var(--mono)
 }
 
 .walk-node b {
   margin-top: 4px;
   color: var(--text);
-  font: 750 11px var(--mono)
+  font: 750 8px var(--mono)
 }
 
 .walk-node em {
   margin-top: 3px;
   color: var(--muted);
-  font: 650 11px var(--mono);
+  font: 650 8px var(--mono);
   font-style: normal
 }
 
 .walk-node code {
   margin-top: 3px;
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .walk-node.ram,
@@ -763,7 +763,7 @@ code {
   border-radius: 3px;
   background: rgba(7, 12, 18, .9);
   color: var(--faint);
-  font: 650 11px var(--mono)
+  font: 650 8px var(--mono)
 }
 
 .gfn-cell:hover {
@@ -812,7 +812,7 @@ code {
   align-items: center;
   gap: 7px;
   color: var(--cyan);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   letter-spacing: .05em;
   text-transform: uppercase
 }
@@ -837,7 +837,7 @@ code {
   margin: 0;
   padding: 6px;
   border-bottom: 1px solid var(--line);
-  font: 11px/1.35 var(--mono)
+  font: 8px/1.35 var(--mono)
 }
 
 .fields dt {
@@ -881,7 +881,7 @@ code {
 
 #counter {
   color: var(--text);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   text-align: center;
   white-space: nowrap
 }

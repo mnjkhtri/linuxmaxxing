@@ -61,14 +61,13 @@ static irqreturn_t qedu_irq_handler(int irq, void *dev_id)
 	iowrite32(status, qdev->bar0 + QEDU_REG_IRQ_ACK);
 	engine = READ_ONCE(qdev->active_engine);
 	io_id = engine == QEDU_ENGINE_NONE ? 0 : READ_ONCE(qdev->active_io_id);
-	Trace_qedu_irq_ack(device, io_id, engine, irq, status, status,
+	trace_qedu_irq_ack(device, io_id, engine, irq, status, status,
 					   atomic_read(&qdev->dma_stage));
 
-	if (status & QEDU_IRQ_FACTORIAL)
-	{
+	if (status & QEDU_IRQ_FACTORIAL) {
 		bits_before = READ_ONCE(qdev->completed_events);
 		set_bit(QEDU_EVENT_FACTORIAL, &qdev->completed_events);
-		Trace_qedu_completion_publish(device, io_id,
+		trace_qedu_completion_publish(device, io_id,
 									  QEDU_ENGINE_FACTORIAL,
 									  QEDU_EVENT_FACTORIAL,
 									  bits_before,
@@ -97,13 +96,12 @@ int qedu_irq_init(struct qedu_dev *qdev)
 	int ret;
 
 	ret = request_irq(pdev->irq, qedu_irq_handler, IRQF_SHARED, "qedu", qdev);
-	if (ret)
-	{
+	if (ret) {
 		pr_err("qedu: request_irq failed: %d\n", ret);
 		return ret;
 	}
 
-	Trace_qedu_probe_stage(pci_name(pdev), QEDU_IRQ_REGISTERED, "request_irq",
+	trace_qedu_probe_api(pci_name(pdev), "request_irq",
 						   "shared_intx_action", pdev->irq, IRQF_SHARED, 0);
 	pr_info("qedu: IRQ %d requested\n", pdev->irq);
 	return 0;

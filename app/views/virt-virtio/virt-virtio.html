@@ -10,17 +10,16 @@
 </head>
     <body>
         <main class="virt-virtio">
-            <header class="hero">
+            <header class="hero page-head">
                 <div>
-                    <div class="eyebrow">TRACE → eBPF SNAPSHOT → VIRTQUEUE STATE</div>
-                    <h1>Virtio <span>I/O</span></h1>
-                    <p>Descriptor rings, MMIO doorbells, and irqfd completions from one virtqueue run.</p>
+                    <h1>Virtio I/O</h1>
+                    <p>Descriptor rings, MMIO doorbells, and irqfd completions</p>
                 </div>
                 <div id="status" role="status"><i class="trace-dot"></i><span>loading virtio capture…</span></div>
             </header>
 
             <section class="laboratory">
-                <nav id="roadmap" class="roadmap panel" aria-label="Virtio phases"></nav>
+                <nav id="roadmap" class="roadmap panel experiment-selector" aria-label="Virtio phases"></nav>
 
                 <section class="workbench">
                     <section class="machine panel">

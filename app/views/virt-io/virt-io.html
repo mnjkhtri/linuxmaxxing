@@ -9,16 +9,15 @@
 </head>
 <body>
 <main class="io">
-  <header class="head">
+  <header class="head page-head">
     <div>
-      <div class="eyebrow">TRACE → eBPF SNAPSHOT → I/O STATE</div>
-      <h1>KVM <span>virt-I/O</span></h1>
-      <p>Control flow, interrupt routing, and DMA state from one toy-VMM run.</p>
+      <h1>KVM virt-I/O</h1>
+      <p>Control flow, interrupt routing, and DMA state</p>
     </div>
     <div id="status" role="status"><i class="trace-dot"></i><span>loading virt-io capture…</span></div>
   </header>
 
-  <nav id="roadmap" class="roadmap panel" aria-label="Derived execution episodes"></nav>
+  <nav id="roadmap" class="roadmap panel experiment-selector" aria-label="Derived execution episodes"></nav>
 
   <section class="workbench">
     <section class="topology panel">
@@ -122,14 +121,18 @@
       </div>
     </section>
 
-    <aside class="notebook panel">
-      <header class="panel-head"><h2>Transition internals</h2><span id="source-badge">trace + eBPF</span></header>
-      <div class="note-body">
-        <div class="type"><i class="trace-dot"></i><span id="detail-type">VM entry</span></div>
+    <aside class="notebook inspector-pane panel">
+      <header class="panel-head inspector-head"><div><h2>Transition internals</h2><span>selected capture boundary</span></div><code id="source-badge">trace + eBPF</code></header>
+      <div class="note-body inspector-body">
+        <div class="type selected-kind"><i class="trace-dot"></i><span id="detail-type">VM entry</span></div>
         <h2 id="detail-title">kvm_entry</h2>
+        <section class="origin-card inspector-section">
+          <h3>Origin</h3>
+          <div class="origin-grid" id="event-origin"></div>
+        </section>
         <dl class="fields" id="fields"></dl>
       </div>
-      <section class="toolbar">
+      <section class="inspector-footer toolbar">
         <button id="next" title="next observation">→</button>
         <button id="prev" title="previous">←</button>
         <button id="play" title="play/pause">▶</button>

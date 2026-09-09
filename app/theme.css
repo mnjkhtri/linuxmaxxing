@@ -21,8 +21,7 @@
   --orange: #f0a45d;
   --yellow: #e8cf68;
   --violet: #b39bf2;
-  --cpu-0: #3f94b8;
-  --cpu-1: var(--cpu-0);
+  --cpu-0: #ffffff;
   --mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
   --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
@@ -42,6 +41,25 @@ body {
   font-family: var(--sans)
 }
 
+body .page-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  min-width: 0
+}
+
+body .page-head h1 {
+  margin: 4px 0 0;
+  font: 650 24px/1 var(--mono);
+  letter-spacing: -.045em
+}
+
+body .page-head p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font: 10px/1.45 var(--mono)
+}
+
 button,
 input,
 select {
@@ -50,7 +68,7 @@ select {
 
 button,
 select {
-  min-height: 34px;
+  min-height: 26px;
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -363,12 +381,12 @@ summary:focus-visible,
 
 .playback-bar .playback-sep {
   width: 1px;
-  height: 20px;
+  height: 8px;
   background: var(--line)
 }
 
 .playback-bar .playback-speed {
-  min-height: 34px;
+  min-height: 26px;
   font-size: 9px
 }
 
@@ -411,24 +429,25 @@ summary:focus-visible,
 /* Shared chrome and responsive layout; view CSS owns diagram geometry. */
 /* Phase markers are diagram targets, not toolbar buttons. */
 body[data-experiment="memory"] .spaces {
-  min-height: 760px;
-  min-width: 1080px;
+  min-height: 0;
+  min-width: 0;
+  grid-template-columns: minmax(0, .9fr) minmax(0, .85fr) minmax(0, 1.25fr);
 }
 
 body[data-experiment="memory"] .zone {
-  grid-template-columns: minmax(0, 1fr) 20px;
+  grid-template-columns: minmax(0, 1fr) 10px;
   flex-shrink: 0;
 }
 
 body[data-experiment="memory"] .zone-dots {
-  width: 20px;
+  width: 8px;
   gap: 3px;
 }
 
 body[data-experiment="memory"] button.phase-dot {
-  width: 20px;
-  height: 20px;
-  min-height: 20px;
+  width: 8px;
+  height: 8px;
+  min-height: 8px;
   padding: 0;
   flex-shrink: 0;
   border-radius: 50%;
@@ -441,7 +460,7 @@ body[data-experiment="memory"] button.phase-dot {
 }
 
 html {
-  font-size: 13px;
+  font-size: 11px;
 }
 
 #app-header {
@@ -463,7 +482,7 @@ html {
 }
 
 #brand h1 {
-  font-size: 13px;
+  font-size: 11px;
 }
 
 .view-tab {
@@ -478,7 +497,7 @@ body[data-experiment] {
   grid-template-rows: minmax(0, 1fr) auto;
   color: var(--text);
   background: var(--bg);
-  font: 13px/1.45 var(--sans);
+  font: 11px/1.35 var(--sans);
 }
 
 body[data-experiment]> :is(main, .module-lab) {
@@ -497,19 +516,19 @@ body[data-experiment] :is(.head, .hero) {
 }
 
 body[data-experiment] :is(.head, .hero) h1 {
-  font: 600 22px/1.2 var(--sans);
+  font: 600 16px/1.2 var(--sans);
   margin: 0;
 }
 
 body[data-experiment] :is(.head, .hero) p {
-  font: 12px/1.4 var(--sans);
+  font: 10px/1.4 var(--sans);
   margin: 4px 0 0;
 }
 
-body[data-experiment] :is(button, select) {
-  min-height: 34px;
-  padding: 6px 10px;
-  font: 12px/1.3 var(--sans);
+body[data-experiment] .view-controls :is(button, select) {
+  min-height: 26px;
+  padding: 4px 7px;
+  font: 10px/1.3 var(--mono);
   border-radius: 6px;
 }
 
@@ -520,7 +539,7 @@ body[data-experiment] .panel {
 }
 
 body[data-experiment] :is(.panel-head h2, .region-title b) {
-  font: 600 12px/1.4 var(--sans);
+  font: 600 10px/1.3 var(--mono);
 }
 
 body[data-experiment] :is(.stage, .stage-wrap, .topology-stage, .state-body, .interaction-canvas) {
@@ -540,12 +559,377 @@ body[data-experiment] :is(.notebook, .inspector) {
   min-height: 0;
 }
 
+/* Every flow view uses the same right-hand evidence inspector. The content
+ * differs by experiment; its hierarchy and density do not. */
+body[data-experiment] .inspector-pane {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--mono);
+}
+
+body[data-experiment] .inspector-pane > .inspector-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+body[data-experiment] .inspector-pane > .inspector-head > div {
+  min-width: 0;
+}
+
+body[data-experiment] .inspector-pane > .inspector-head h2 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-experiment] .inspector-pane > .inspector-head span,
+body[data-experiment] .inspector-pane > .inspector-head code {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--faint);
+  font: 8px/1.3 var(--mono);
+}
+
+body[data-experiment] .inspector-pane > .inspector-head code {
+  margin-left: auto;
+  max-width: 45%;
+  color: var(--cyan);
+}
+
+body[data-experiment] .inspector-pane > .inspector-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 9px;
+}
+
+body[data-experiment] .inspector-pane > .inspector-body > :is(.proof, .context-card, .field-card) {
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+body[data-experiment] .inspector-pane > .inspector-body > :last-child {
+  border-bottom: 0;
+}
+
+body[data-experiment] .inspector-pane .origin-card {
+  margin: 0 0 8px;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+body[data-experiment] .inspector-pane .origin-card h3 {
+  margin: 0 0 6px;
+  color: var(--faint);
+  font: 700 8px/1.2 var(--mono);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+body[data-experiment] .inspector-pane .origin-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+body[data-experiment] .inspector-pane .origin-grid > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+body[data-experiment] .inspector-pane .origin-grid > div:last-child {
+  border-bottom: 0;
+}
+
+body[data-experiment] .inspector-pane .origin-grid small,
+body[data-experiment] .inspector-pane .origin-grid b {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-experiment] .inspector-pane .origin-grid small {
+  color: var(--faint);
+  font: 700 7px/1.2 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+body[data-experiment] .inspector-pane .origin-grid b {
+  color: var(--text);
+  font: 650 8px/1.25 var(--mono);
+}
+
+body[data-experiment] .inspector-pane :is(.inspector-footer, .toolbar) {
+  flex: 0 0 auto;
+}
+
+body[data-experiment="io"] .workspace,
+body[data-experiment="virt-ept"] .workbench,
+body[data-experiment="virt-io"] .workbench {
+  grid-template-columns: minmax(0, 1fr) 298px;
+}
+
 body[data-experiment] .fields {
   grid-template-columns: minmax(110px, .8fr) minmax(0, 1fr);
 }
 
 body[data-experiment] .fields :is(dt, dd) {
-  font: 12px/1.5 var(--mono);
+  font: 10px/1.4 var(--mono);
+}
+
+/* Every experiment uses the same phase selector: a quiet rail of selectable
+ * boundaries, with cyan reserved for the current boundary. */
+body[data-experiment] .experiment-selector {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  overflow: auto;
+  scrollbar-width: thin;
+  background: var(--panel);
+}
+
+body[data-experiment] .experiment-selector > .selector-option {
+  position: relative;
+  min-width: 0;
+  min-height: 44px;
+  flex: 0 0 auto;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--muted);
+  text-align: left;
+  box-shadow: none;
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease, color .15s ease;
+}
+
+body[data-experiment] .experiment-selector > .selector-option {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+body[data-experiment] .experiment-selector .selector-kicker,
+body[data-experiment] .experiment-selector .selector-label {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-experiment] .experiment-selector .selector-kicker {
+  color: var(--faint);
+  font: 750 8px/1.2 var(--mono);
+  letter-spacing: .07em;
+}
+
+body[data-experiment] .experiment-selector .selector-label {
+  color: var(--muted);
+  font: 650 9px/1.25 var(--mono);
+}
+
+body[data-experiment] .experiment-selector > .selector-option:hover:not(:disabled):not(.future) {
+  border-color: var(--line-hot);
+  background: var(--soft);
+  color: var(--text);
+}
+
+body[data-experiment] .experiment-selector > .selector-option.active {
+  border-color: var(--cyan);
+  background: rgba(103, 232, 209, .055);
+  color: var(--text);
+  box-shadow: inset 2px 0 var(--cyan);
+}
+
+body[data-experiment] .experiment-selector > .selector-option.active :is(b, em, .zone-label, .phase-label, .selector-kicker, .selector-label) {
+  color: var(--cyan);
+}
+
+body[data-experiment] .experiment-selector > .selector-option:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+}
+
+body[data-experiment] .experiment-selector > .selector-option.future,
+body[data-experiment] .experiment-selector > .selector-option:disabled {
+  opacity: .4;
+  cursor: default;
+}
+
+body[data-experiment] .experiment-selector > .selector-option > header {
+  margin: 0;
+  padding: 9px 8px;
+  border: 0;
+  background: transparent;
+}
+
+body[data-experiment="io"] .journey-panel {
+  grid-template-columns: 156px minmax(0, 1fr);
+}
+
+body[data-experiment="memory"] .mm,
+body[data-experiment="virt-ept"] .ept,
+body[data-experiment="virt-io"] .io {
+  grid-template-columns: 156px minmax(0, 1fr);
+}
+
+body[data-experiment="virt-virtio"] .laboratory,
+body[data-experiment="virt-vtd"] .laboratory {
+  grid-template-columns: 156px minmax(0, 1fr) 300px;
+}
+
+/* Lifelines share the VIRT visual grammar across the flow-based views. */
+body[data-experiment] :is(.actor-head article, .sequence-actor, .component-actor) {
+  min-width: 0;
+  margin: 0 2px;
+  padding: 6px 3px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: rgba(10, 17, 24, .96);
+  opacity: .34;
+  text-align: center;
+  transition: opacity .12s, border-color .12s, background .12s;
+}
+
+body[data-experiment] :is(.actor-head small, .actor-head b, .actor-head em,
+  .sequence-actor small, .sequence-actor b, .sequence-actor em,
+  .component-actor small, .component-actor b, .component-actor em) {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-experiment] :is(.actor-head small, .sequence-actor small, .component-actor small) {
+  color: var(--faint);
+  font: 700 8px var(--mono);
+  letter-spacing: .04em;
+}
+
+body[data-experiment] :is(.actor-head b, .sequence-actor b, .component-actor b) {
+  margin-top: 3px;
+  color: var(--text);
+  font: 750 8px var(--mono);
+}
+
+body[data-experiment] :is(.actor-head em, .sequence-actor em, .component-actor em) {
+  margin-top: 3px;
+  color: var(--faint);
+  font: 8px var(--mono);
+}
+
+body[data-experiment] :is(.actor-head article.active, .sequence-actor.active, .component-actor.active) {
+  opacity: 1;
+  border-color: rgba(95, 191, 174, .58);
+  background: rgba(14, 27, 33, .92);
+}
+
+body[data-experiment] :is(.actor-head article.active small, .actor-head article.active em,
+  .sequence-actor.active small, .sequence-actor.active em,
+  .component-actor.active small, .component-actor.active em) {
+  color: var(--cyan);
+}
+
+body[data-experiment] :is(.lifelines i, .sequence-lifelines i, .component-lifelines i) {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(139, 145, 151, .20);
+  transition: background .12s;
+}
+
+body[data-experiment] :is(.lifelines i.active, .sequence-lifelines i.active, .component-lifelines i.active) {
+  background: rgba(95, 191, 174, .36);
+}
+
+body[data-experiment] :is(.timeline-body, .sequence-body, .component-body) {
+  min-height: max(100%, calc(var(--rows) * 44px));
+  grid-template-rows: repeat(var(--rows), 44px);
+}
+
+body[data-experiment] .sequence-diagram {
+  display: block;
+}
+
+body[data-experiment] :is(.message-row, .sequence-row, .component-row) {
+  min-height: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(74, 92, 106, .18);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+body[data-experiment] :is(.message-row:hover, .sequence-row:hover:not(:disabled), .component-row:hover) {
+  border-color: transparent;
+  background: rgba(95, 191, 174, .025);
+  color: inherit;
+}
+
+body[data-experiment] :is(.message-row.current, .sequence-row.selected, .component-row.current) {
+  background: rgba(169, 159, 104, .05);
+  box-shadow: inset 0 0 0 1px rgba(169, 159, 104, .21);
+}
+
+body[data-experiment] :is(.message-arrow, .sequence-arrow, .component-arrow) {
+  height: 1px;
+  color: var(--line-hot);
+  background: currentColor;
+  opacity: .76;
+}
+
+body[data-experiment] :is(.message-row code, .sequence-label, .component-row code) {
+  max-width: 31%;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(7, 12, 18, .94);
+  color: var(--text);
+  font: 650 8px/1.2 var(--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+body[data-experiment] :is(.message-row.local code, .sequence-row.local .sequence-label,
+  .component-row.local code, .sequence-label.endpoint-right, .sequence-label.endpoint-left) {
+  max-width: 24%;
+}
+
+body[data-experiment] :is(.message-row.current .message-arrow, .component-row.current .component-arrow) {
+  opacity: 1;
 }
 
 .view-controls {
@@ -553,7 +937,7 @@ body[data-experiment] .fields :is(dt, dd) {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 5px 8px;
   background: var(--panel);
   border-top: 1px solid var(--line);
   z-index: 25;
@@ -562,7 +946,7 @@ body[data-experiment] .fields :is(dt, dd) {
 
 #capture-message {
   flex: 1 1 180px;
-  font: 11px/1.4 var(--sans);
+  font: 10px/1.4 var(--sans);
   color: var(--muted);
   overflow-wrap: anywhere;
 }
@@ -592,7 +976,7 @@ body[data-experiment] .shared-playback input[type="range"] {
 
 body[data-experiment] .shared-playback button {
   width: auto;
-  min-width: 34px;
+  min-width: 26px;
   flex-shrink: 0;
 }
 
@@ -632,23 +1016,23 @@ body[data-experiment="virt-io"] .workbench {
 }
 
 body[data-experiment="virt-ept"] .stage {
-  grid-template-columns: minmax(500px, 1.5fr) minmax(340px, 1fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
 }
 
 body[data-experiment="virt-ept"] .walk {
-  min-width: 540px;
+  min-width: 0;
 }
 
 body[data-experiment="virt-ept"] .actor-head {
-  min-width: 500px;
+  min-width: 0;
 }
 
 body[data-experiment="virt-ept"] .state-body {
-  grid-template-rows: auto auto minmax(180px, 1fr) minmax(120px, 1fr);
+  grid-template-rows: auto auto minmax(100px, 1fr) minmax(72px, .7fr);
 }
 
 body[data-experiment="virt-io"] .stage {
-  grid-template-columns: minmax(600px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   overflow: auto;
 }
 
@@ -695,7 +1079,7 @@ body[data-experiment="virt-vtd"] .laboratory {
   }
 
   body[data-experiment="scheduler"] .workbench {
-    grid-template-columns: minmax(240px, .65fr) minmax(0, 1.35fr);
+    grid-template-columns: minmax(280px, .9fr) minmax(0, 1.1fr);
   }
 
   body[data-experiment="virt-ept"] .workbench,
@@ -710,24 +1094,11 @@ body[data-experiment="virt-vtd"] .laboratory {
     grid-template-columns: 130px minmax(0, 1fr);
   }
 
+}
+
+@media (max-width:1599px) {
   body[data-experiment="kapi"] .stage-wrap {
-    grid-template-columns: minmax(200px, .5fr) minmax(0, 1fr);
-    align-content: start;
-  }
-
-  body[data-experiment="kapi"] .allocator-links {
-    grid-column: 1 / -1;
-    min-height: 380px;
-  }
-
-  body[data-experiment="kapi"] .task-stage {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  body[data-experiment="kapi"] .vas-map {
-    grid-column: 1;
-    grid-row: 1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -797,7 +1168,7 @@ body[data-experiment="virt-vtd"] .laboratory {
 
 @media (max-height:799px) {
   body[data-experiment] :is(.hero, .head) h1 {
-    font-size: 19px;
+    font-size: 16px;
   }
 
   body[data-experiment]> :is(main, .module-lab) {

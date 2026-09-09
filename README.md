@@ -137,6 +137,22 @@ Open `http://localhost:8000/app/`. Each view reads the latest `captures/<experim
 
 Each experiment has exactly three files in `app/views/<experiment>/`: its HTML, CSS, and JavaScript. `app/theme.css` owns shared colors, typography, controls, and responsive layout. `app/common.js` owns capture loading, status, accessible details panels, and playback utilities; `app/app.js` owns navigation. Keep experiment-specific diagrams and evidence interpretation in the experiment's JavaScript and geometry in its CSS.
 
+### Flow diagram contract
+
+Flow-oriented views use one arrow grammar. An arrow means a directional transfer or handoff between two named actors; it does not mean that every tracepoint must become an arrow. A same-actor observation is a point or short tick, never a zero-length arrow or loop.
+
+Every rendered relation carries this shape:
+
+```text
+time · source · target · verb · detail · kind · evidence · step · record
+```
+
+`source` and `target` define direction. `kind` describes the operation (`control`, `data`, `interrupt`, `state`, and so on) but does not change arrow geometry. `evidence` describes how the relation is known: `observed` uses a solid line, `inferred` uses a dashed line, and architectural/context-only relations use a faint dotted line. Selection is the only strong accent color. Return and acknowledgement messages use the same arrow reversed.
+
+Labels stay in their own collision-safe layer above the line. Long details belong in the selected-event inspector. A compound record may produce several ordered steps, but each step must carry its `step` number and remain in the same event group; uncontrolled fan-out is not allowed. Inferred paths must be visibly distinct from tracepoint-backed observations.
+
+The rendering pipeline is: normalize records → derive relations → order actors → assign event rows → route endpoints → place labels → apply selection. The visual grammar is intentionally self-explanatory, so the diagram does not need a legend. IO is the reference implementation for this contract. EPT, VirtIO, Virt·IO, and VT-d should use the same relation fields, local-observation marker, evidence styles, endpoint dots, label behavior, and click-to-inspect interaction. Hover-only explanations are not part of the interaction model.
+
 Laptop layouts keep controls visible and open the inspector with **Details**. Wide screens show the inspector beside the diagram. Narrow screens stack panels and scroll complex diagrams without shrinking their labels. Motion respects the operating-system reduced-motion preference.
 
 GitHub Pages publishes the client only, not private capture data. It displays unavailable states until captures are supplied. A `captureBase` URL query parameter can point a view at an explicitly hosted capture directory (cross-origin hosting requires CORS). The shell propagates its `data-capture-base` HTML attribute to its views.

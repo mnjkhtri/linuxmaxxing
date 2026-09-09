@@ -938,12 +938,12 @@ import {
       items: phaseAItems()
     }];
 
-    byId("roadmap").innerHTML = '<header class="roadmap-head"><b>EXECUTION</b><span>FLOW</span></header>' + groups.map(function(group) {
+    byId("roadmap").innerHTML = groups.map(function(group) {
       var active = group.phase === selectedPhase;
       var current = active && group.items[selectedIndex];
 
-      return '<section class="roadmap-zone' + (active ? " active" : "") + '" data-phase-zone="' + group.phase + '"><div class="zone-copy"><b><em>' + group.phaseLabel + '</em></b><span>' + group.label + '</span>' + (current ? '<small>' + escapeHtml(current.label) + '</small>' : "") + '</div></section>';
-    }).join("") + '<section class="roadmap-zone future"><div class="zone-copy"><b><em>PHASE B</em></b><span>DMA PROTECTION</span><small>future</small></div></section>';
+      return '<section class="roadmap-zone selector-option' + (active ? " active" : "") + '" data-phase-zone="' + group.phase + '"><div class="zone-copy"><b><em>' + group.phaseLabel + '</em></b><span>' + group.label + '</span>' + (current ? '<small>' + escapeHtml(current.label) + '</small>' : "") + '</div></section>';
+    }).join("") + '<section class="roadmap-zone selector-option future"><div class="zone-copy"><b><em>PHASE B</em></b><span>DMA PROTECTION</span><small>future</small></div></section>';
 
     byId("roadmap").querySelectorAll("[data-phase-zone]").forEach(function(zone) {
       zone.onclick = function() {

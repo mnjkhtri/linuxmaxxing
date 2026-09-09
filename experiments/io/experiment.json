@@ -7,9 +7,14 @@
     "./workload_qedu",
     "--trace-wait"
   ],
+  "phases": [
+    {"id": "driver_initialization", "label": "Driver initialization"},
+    {"id": "factorial", "label": "Factorial through MMIO"},
+    {"id": "two_way_dma", "label": "Two-way DMA"}
+  ],
   "required": [
     "phase",
-    "qedu_probe_stage",
+    "qedu_probe_api",
     "qedu_dma_submit",
     "qedu_irq_ack",
     "qedu_dma_work_queue"
@@ -17,7 +22,7 @@
   "trace": {
     "required": [
       "dma/dma_alloc",
-      "qedu/qedu_probe_stage",
+      "qedu/qedu_probe_api",
       "qedu/qedu_file_op",
       "qedu/qedu_cpu_buffer_io",
       "qedu/qedu_dma_stage",
@@ -43,8 +48,7 @@
       "syscalls/sys_enter_close",
       "syscalls/sys_exit_close",
       "sched/sched_switch",
-      "sched/sched_wakeup",
-      "sched/sched_waking"
+      "sched/sched_wakeup"
     ],
     "optional": [
       "irq_vectors/vector_config",

@@ -260,10 +260,40 @@ export function mountView(experiment, renderCapture) {
     }
   }
   bar.querySelector('#capture-refresh').onclick = refresh;
+  function removeHoverTooltips(root) {
+    const elements = [];
+    if (root.nodeType === Node.ELEMENT_NODE && root.matches('[title]')) elements.push(root);
+    if (root.querySelectorAll) elements.push(...root.querySelectorAll('[title]'));
+    elements.forEach(element => {
+      const title = element.getAttribute('title');
+      if (title && !element.hasAttribute('aria-label') && /^(A|BUTTON|INPUT|SELECT|TEXTAREA)$/.test(element.tagName)) {
+        element.setAttribute('aria-label', title);
+      }
+      element.removeAttribute('title');
+    });
+  }
+  removeHoverTooltips(document);
+  const tooltipObserver = new MutationObserver(records => {
+    records.forEach(record => {
+      record.addedNodes.forEach(node => {
+        if (node.nodeType === Node.ELEMENT_NODE) removeHoverTooltips(node);
+      });
+      if (record.type === 'attributes') removeHoverTooltips(record.target.parentElement || document);
+    });
+  });
+  tooltipObserver.observe(document.body, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['title']
+  });
   const resize = new ResizeObserver(() => requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))));
   const stage = document.querySelector('.stage, .stage-wrap, .active-flow, .machine');
   if (stage) resize.observe(stage);
-  window.addEventListener('pagehide', () => resize.disconnect(), {
+  window.addEventListener('pagehide', () => {
+    resize.disconnect();
+    tooltipObserver.disconnect();
+  }, {
     once: true
   });
   refresh();

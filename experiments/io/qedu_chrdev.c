@@ -17,9 +17,9 @@ static int qedu_open(struct inode *inode, struct file *file)
 	struct qedu_dev *qdev;
 
 	qdev = container_of(miscdev, struct qedu_dev, miscdev);
-	Trace_qedu_file_op(pci_name(qdev->pdev), 0, QEDU_FILE_OPEN, QEDU_FILE_ENTER, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
+	trace_qedu_file_op(pci_name(qdev->pdev), 0, QEDU_FILE_OPEN, QEDU_FILE_ENTER, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
 	file->private_data = qdev;
-	Trace_qedu_file_op(pci_name(qdev->pdev), 0, QEDU_FILE_OPEN, QEDU_FILE_EXIT, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
+	trace_qedu_file_op(pci_name(qdev->pdev), 0, QEDU_FILE_OPEN, QEDU_FILE_EXIT, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
 
 	pr_info("qedu: open called\n");
 	return 0;
@@ -33,9 +33,9 @@ static int qedu_release(struct inode *inode, struct file *file)
 	struct qedu_dev *qdev = file->private_data;
 	u64 io_id = READ_ONCE(qdev->result_io_id);
 
-	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_RELEASE, QEDU_FILE_ENTER, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
+	trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_RELEASE, QEDU_FILE_ENTER, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
 	pr_info("qedu: release called\n");
-	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_RELEASE, QEDU_FILE_EXIT, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
+	trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_RELEASE, QEDU_FILE_EXIT, (unsigned long)file, 0, 0, 0, QEDU_ENGINE_NONE);
 	return 0;
 }
 
@@ -50,23 +50,22 @@ static ssize_t qedu_read(struct file *file, char __user *user_buf, size_t count,
 	loff_t offset = *ppos;
 	u64 io_id = READ_ONCE(qdev->result_io_id);
 
-	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_READ, QEDU_FILE_ENTER, (unsigned long)file, count, offset, 0, QEDU_ENGINE_NONE);
-	if (mutex_lock_interruptible(&qdev->lock))
-	{
+	trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_READ, QEDU_FILE_ENTER, (unsigned long)file, count, offset, 0, QEDU_ENGINE_NONE);
+	if (mutex_lock_interruptible(&qdev->lock)) {
 		ret = -ERESTARTSYS;
 		goto out_trace;
 	}
 
 	io_id = qdev->result_io_id;
 	ret = simple_read_from_buffer(user_buf, count, ppos, qdev->dma_cpu_addr, qdev->result_size);
-	Trace_qedu_cpu_buffer_io(pci_name(qdev->pdev), io_id, QEDU_BUFFER_COPY_TO_USER, offset, count, ret);
+	trace_qedu_cpu_buffer_io(pci_name(qdev->pdev), io_id, QEDU_BUFFER_COPY_TO_USER, offset, count, ret);
 	if (ret > 0)
 		qdev->tx += ret;
 
 	mutex_unlock(&qdev->lock);
 
 out_trace:
-	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_READ, QEDU_FILE_EXIT, (unsigned long)file, count, offset, ret, QEDU_ENGINE_NONE);
+	trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_READ, QEDU_FILE_EXIT, (unsigned long)file, count, offset, ret, QEDU_ENGINE_NONE);
 	return ret;
 }
 
@@ -99,21 +98,18 @@ static ssize_t qedu_write(struct file *file, const char __user *user_buf, size_t
 	loff_t offset = *ppos;
 	int ret;
 
-	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_WRITE, QEDU_FILE_ENTER, (unsigned long)file, count, offset, 0, QEDU_ENGINE_NONE);
-	if (!count)
-	{
+	trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_WRITE, QEDU_FILE_ENTER, (unsigned long)file, count, offset, 0, QEDU_ENGINE_NONE);
+	if (!count) {
 		ret = 0;
 		goto out_trace;
 	}
 
-	if (count >= QEDU_DMA_SIZE)
-	{
+	if (count >= QEDU_DMA_SIZE) {
 		ret = -EMSGSIZE;
 		goto out_trace;
 	}
 
-	if (mutex_lock_interruptible(&qdev->lock))
-	{
+	if (mutex_lock_interruptible(&qdev->lock)) {
 		ret = -ERESTARTSYS;
 		goto out_trace;
 	}
@@ -123,9 +119,8 @@ static ssize_t qedu_write(struct file *file, const char __user *user_buf, size_t
 	qdev->result_size = 0;
 
 	not_copied = copy_from_user(qdev->dma_cpu_addr, user_buf, count);
-	Trace_qedu_cpu_buffer_io(pci_name(qdev->pdev), io_id, QEDU_BUFFER_COPY_FROM_USER, 0, count, count - not_copied);
-	if (not_copied)
-	{
+	trace_qedu_cpu_buffer_io(pci_name(qdev->pdev), io_id, QEDU_BUFFER_COPY_FROM_USER, 0, count, count - not_copied);
+	if (not_copied) {
 		ret = -EFAULT;
 		goto out_unlock;
 	}
@@ -133,17 +128,14 @@ static ssize_t qedu_write(struct file *file, const char __user *user_buf, size_t
 	((char *)qdev->dma_cpu_addr)[count] = '\0';
 
 	ret = kstrtou32(qdev->dma_cpu_addr, 0, &factorial_input);
-	if (!ret)
-	{
+	if (!ret) {
 		ret = qedu_factorial_job(qdev, factorial_input, &factorial_result, io_id);
 		if (ret)
 			goto out_unlock;
 
 		qdev->result_size = scnprintf(qdev->dma_cpu_addr, QEDU_DMA_SIZE, "%u\n", factorial_result);
 		pr_info("qedu: factorial %u submitted, result=%u\n", factorial_input, factorial_result);
-	}
-	else
-	{
+	} else {
 		ret = qedu_dma_echo_job(qdev, count, io_id);
 		if (ret)
 			goto out_unlock;
@@ -162,7 +154,7 @@ out_unlock:
 	mutex_unlock(&qdev->lock);
 
 out_trace:
-	Trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_WRITE, QEDU_FILE_EXIT, (unsigned long)file, count, offset, ret, selected_engine);
+	trace_qedu_file_op(pci_name(qdev->pdev), io_id, QEDU_FILE_WRITE, QEDU_FILE_EXIT, (unsigned long)file, count, offset, ret, selected_engine);
 	return ret;
 }
 
@@ -198,16 +190,13 @@ int qedu_chrdev_init(struct qedu_dev *qdev)
 	 */
 	qdev->miscdev.groups = qedu_sysfs_groups();
 	ret = misc_register(&qdev->miscdev);
-	if (ret)
-	{
+	if (ret) {
 		pr_err("qedu: misc_register failed: %d\n", ret);
 		return ret;
 	}
 
-	Trace_qedu_probe_stage(pci_name(pdev), QEDU_CHARDEV_PUBLISHED, "misc_register",
-						   "/dev/qedu", qdev->miscdev.minor, 0, 0);
-	Trace_qedu_probe_stage(pci_name(pdev), QEDU_SYSFS_PUBLISHED, "misc_register",
-						   "/sys/class/misc/qedu", qdev->miscdev.minor, 0, 0);
+	trace_qedu_probe_api(pci_name(pdev), "misc_register",
+				       "/dev/qedu", qdev->miscdev.minor, 0, 0);
 	pr_info("qedu: /dev/qedu created\n");
 	return 0;
 }

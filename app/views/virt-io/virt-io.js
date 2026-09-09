@@ -60,6 +60,12 @@ import {
         cmd = st.command || {};
       out.push({
         bpf_seq: Number(r.seq),
+        canonical: event,
+        origin: {
+          mechanism: event.source.mechanism,
+          hook: event.source.hook || event.kind,
+          domain: event.source.domain
+        },
         time_ns: Number(r.time_ns),
         name: ei.event_name,
         event: ei.event,
@@ -132,6 +138,12 @@ import {
         ...f,
         ...e.context,
         line: e.sequence,
+        canonical: e,
+        origin: {
+          mechanism: e.source.mechanism,
+          hook: e.source.hook || e.kind,
+          domain: e.source.domain
+        },
         time: t / 1e9,
         time_ns: t,
         type: e.kind,
@@ -188,6 +200,7 @@ import {
 
   function applyTrace(e, t) {
     if (!t) return e;
+    var wasEbpf = e.source === 'ebpf';
     e.trace_line = t.line;
     e.trace_time_ns = t.time_ns;
     e.raw = t.raw;
@@ -196,7 +209,13 @@ import {
     e.pid = t.pid;
     e.tid = t.tid;
     e.comm = t.comm;
-    e.source = e.source === 'ebpf' ? 'trace + eBPF' : 'tracefs';
+    e.source = wasEbpf ? 'trace + eBPF' : 'tracefs';
+    if (wasEbpf && e.origin && t.origin) e.origin = {
+      mechanism: 'tracefs + eBPF',
+      hook: t.origin.hook || e.origin.hook,
+      domain: t.origin.domain || e.origin.domain
+    };
+    else e.origin = t.origin;
     ['rip', 'reason', 'info1', 'info2', 'intr_info', 'error_code', 'userspace_reason', 'fault_gpa', 'fault_error',
       'mmio_type', 'mmio_len', 'mmio_gpa', 'mmio_val', 'pio_dir', 'pio_port', 'pio_size', 'pio_count', 'pio_val',
       'gsi', 'level', 'irq_source', 'irqchip', 'pin', 'dst', 'vec', 'mode', 'apicid', 'apic_access', 'reg', 'val'
@@ -212,6 +231,8 @@ import {
   function eventFromBpf(f) {
     var e = {
       bpf_seq: f.bpf_seq,
+      canonical: f.canonical,
+      origin: f.origin,
       name: f.name,
       time_ns: f.time_ns,
       source: 'ebpf',
@@ -312,6 +333,8 @@ import {
       flags: t.flags,
       raw: t.raw
     };
+    e.canonical = t.canonical;
+    e.origin = t.origin;
     return applyTrace(e, t);
   }
 
@@ -719,9 +742,9 @@ import {
   function renderRoadmap() {
     var active = episodeFor(cursor);
     $('roadmap').innerHTML = D.episodes.map(function(ep, ei) {
-      return '<div class="zone ' + (ei === active ? 'active' : '') + '" data-ep="' + ei + '"><div class="zone-label">' + esc(ep.name.toUpperCase()) + '</div></div>';
+      return '<button type="button" class="zone selector-option ' + (ei === active ? 'active' : '') + '" data-ep="' + ei + '"><span class="selector-kicker">PHASE ' + (ei + 1) + '</span><span class="selector-label">' + esc(ep.name) + '</span></button>';
     }).join('');
-    $('roadmap').querySelectorAll('.zone').forEach(function(z) {
+    $('roadmap').querySelectorAll('[data-ep]').forEach(function(z) {
       z.addEventListener('click', function() {
         select(D.episodes[+z.dataset.ep].start - 1)
       });
@@ -1333,69 +1356,53 @@ import {
     $('source-badge').textContent = e.source;
     $('detail-type').textContent = detailType(e);
     $('detail-title').textContent = e.name;
-    var source = e.source;
-    if (e.trace_line) source += ' · capture record ' + e.trace_line;
-    if (e.bpf_seq) source += ' · eBPF seq ' + e.bpf_seq;
-    var rows = [
-      ['sequence', e.seq],
-      ['time', e.time_us.toFixed(3) + ' µs from capture start'],
-      ['source', source],
-      ['CPU / task', e.cpu + ' / ' + e.comm + '-' + e.pid + (e.tid ? ' (tid ' + e.tid + ')' : '')],
-      ['flags', e.flags || '—']
-    ];
-    if (e.vmexit_id) rows.push(['VM-exit id', e.vmexit_id]);
-    if (e.operation_id) rows.push(['device operation', e.operation_id]);
-    if (e.call_id) rows.push(['ioctl call', e.call_id]);
-    if (e.rip) rows.push(['guest RIP', e.rip]);
-    if (e.reason) rows.push(['VM-exit reason', e.reason]);
-    if (e.userspace_reason) rows.push(['userspace reason', e.userspace_reason]);
-    if (e.info1) rows.push(['exit info1', e.info1]);
-    if (e.info2) rows.push(['exit info2', e.info2]);
-    if (e.intr_info) rows.push(['interrupt info', e.intr_info]);
-    if (e.error_code) rows.push(['error code', e.error_code]);
-    if (e.fault_gpa) rows.push(['fault GPA', e.fault_gpa], ['fault access', e.fault_error]);
-    if (e.mmio_gpa) rows.push(['KVM MMIO', (e.mmio_type || '') + ' · ' + e.mmio_gpa + ' · ' + e.mmio_len + ' B · ' + e.mmio_val]);
-    if (e.pio_port) rows.push(['KVM PIO', (e.pio_dir || '') + ' · ' + e.pio_port + ' · ' + e.pio_size + ' B · ' + e.pio_val]);
-    if (e.handler_text) rows.push(['KVM handler', e.handler_text]);
-    if (e.disposition_present) rows.push(['disposition', e.disposition_meaning + ' · ret ' + e.disposition_result]);
-    if (e.ioctl_present) {
-      rows.push(['request', e.ioctl_name + ' · fd ' + e.ioctl_fd]);
-      if (e.ioctl_completed) rows.push(['ioctl result', e.ioctl_result + ' · ' + e.ioctl_duration_ns + ' ns']);
-    }
-    if (e.mmio_present) rows.push(['device register', e.mmio_register + ' +0x' + Number(e.mmio_offset).toString(16) + ' · ' + e.mmio_value]);
-    if (e.command_present) {
-      rows.push(['command', e.command_name + ' · GPA ' + e.command_dma_gpa]);
-      rows.push(['device state', e.command_status + ' · result ' + e.command_result + (e.command_completed ? ' · ' + e.command_duration_ns + ' ns' : '')]);
-    }
-    if (e.apicid != null) rows.push(['APIC id', e.apicid]);
-    if (e.vec != null) rows.push(['vector', vecHex(e.vec)]);
-    if (e.apic_text) rows.push(['APIC access', e.apic_text]);
-    if (e.irq_text) rows.push(['IRQ trace', e.irq_text]);
-    if (e.paired_handoff) rows.push(['userspace handoff', e.paired_handoff]);
-    var irrTxt = vecList(lapicWindow(e.irr)),
-      isrTxt = vecList(lapicWindow(e.isr));
-    var lapicOk = D.meta && D.meta.lapic_available !== false,
-      ioOk = D.meta && D.meta.ioapic_available !== false;
-    rows.push(['IRR / ISR', irrTxt + ' / ' + isrTxt]);
-    rows.push(['LAPIC TPR', lapicOk ? (e.tpr != null && e.tpr !== '' ? e.tpr : '0x0') : 'n/a']);
-    rows.push(['LAPIC SVR', lapicOk ? (e.svr != null && e.svr !== '' ? e.svr : '0x0') : 'n/a']);
-    rows.push(['IOAPIC RTE', ioOk ? (e.rte != null && e.rte !== '' ? e.rte : '0x0') : 'n/a']);
-    rows.push(['vCPU *', e.vcpu_ptr || 'NULL'], ['KVM *', e.kvm_ptr || 'NULL'], ['LAPIC *', e.apic_ptr || 'NULL'], ['IOAPIC *', e.ioapic_ptr || 'NULL']);
-    if (e.msi_present) {
-      rows.push(['MSI address', hexValue(e.msi_addr)]);
-      rows.push(['MSI data', hexValue(e.msi_data) + ' · vec ' + vecHex(e.msi_vector)]);
-      rows.push(['MSI decode', 'dest ' + (e.msi_dest != null ? e.msi_dest : '0') + ' · ' + (e.msi_logical ? 'logical' : 'physical') + ' · ' + (e.msi_delivery === 0 || e.msi_delivery == null ? 'fixed' : 'dm ' + e.msi_delivery) + ' · ' + (e.msi_level ? 'level' : 'edge')]);
-    }
-    if (e.dma_present) {
-      rows.push(['DMA', e.dma_dir + ' · ' + e.dma_gpa + ' · ' + e.dma_len + ' B']);
-      rows.push(['guest HVA', e.dma_hva || 'NULL']);
-      if (e.dma_completed) rows.push(['DMA result', e.dma_result + ' · checksum ' + e.dma_checksum + ' · ' + e.dma_duration_ns + ' ns']);
-    }
-    if (e.dt_prev_us != null) rows.push(['Δ previous', e.dt_prev_us + ' µs']);
-    if (e.dt_next_us != null) rows.push(['Δ next', e.dt_next_us + ' µs']);
+    renderOrigin(e);
+    var rows = rawFieldRows(e);
     $('fields').innerHTML = rows.map(function(r) {
       return '<dt>' + esc(r[0]) + '</dt><dd title="' + esc(r[1]) + '">' + esc(r[1]) + '</dd>'
     }).join('');
+  }
+
+  function rawFieldRows(event) {
+    var data = event.canonical && event.canonical.data || {},
+      fields = data.fields || data.event_info || {},
+      rows = [];
+    function append(value, prefix) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        Object.keys(value).forEach(function(key) {
+          append(value[key], prefix ? prefix + '.' + key : key);
+        });
+      } else rows.push([prefix, Array.isArray(value) ? JSON.stringify(value) : value]);
+    }
+    Object.keys(fields).forEach(function(key) {
+      append(fields[key], key);
+    });
+    return rows.filter(function(row) {
+      return row[1] !== null && row[1] !== undefined && row[1] !== '';
+    });
+  }
+
+  function originContext(event) {
+    var task = event.comm || '—',
+      pid = event.pid != null ? 'PID ' + event.pid : event.tid != null ? 'TID ' + event.tid : '';
+    if (pid) task += ' · ' + pid;
+    return (event.cpu != null ? 'CPU ' + event.cpu + ' · ' : '') + task;
+  }
+
+  function renderOrigin(event) {
+    var origin = event.origin || {},
+      rows = [
+        ['mechanism', mechanismLabel(origin.mechanism), ''],
+        ['hook', origin.hook || event.name || '—', ''],
+        ['CPU / task', originContext(event), '']
+      ];
+    $('event-origin').innerHTML = rows.map(function(row) {
+      return '<div class="' + row[2] + '"><small>' + esc(row[0]) + '</small><b title="' + esc(row[1]) + '">' + esc(row[1]) + '</b></div>';
+    }).join('');
+  }
+
+  function mechanismLabel(value) {
+    return value === 'ebpf' ? 'eBPF' : value || '—';
   }
 
   function select(index) {

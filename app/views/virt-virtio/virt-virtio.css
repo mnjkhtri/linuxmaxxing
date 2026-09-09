@@ -21,7 +21,7 @@ body {
 
 button,
 input {
-  font: 11px var(--mono)
+  font: 10px var(--mono)
 }
 
 button {
@@ -74,7 +74,7 @@ code {
 
 .eyebrow {
   color: var(--cyan);
-  font: 700 11px var(--mono);
+  font: 700 10px var(--mono);
   letter-spacing: .13em
 }
 
@@ -91,7 +91,7 @@ code {
 .hero p {
   margin: 5px 0 0;
   color: var(--muted);
-  font: 11px/1.45 var(--mono)
+  font: 10px/1.45 var(--mono)
 }
 
 #status {
@@ -100,7 +100,7 @@ code {
   align-items: center;
   gap: 7px;
   color: var(--muted);
-  font: 11px var(--mono);
+  font: 10px var(--mono);
   white-space: nowrap
 }
 
@@ -160,7 +160,7 @@ code {
   display: block;
   min-width: 0;
   overflow: hidden;
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   text-overflow: ellipsis;
   white-space: nowrap
 }
@@ -190,7 +190,7 @@ code {
 
 .panel-head h2 {
   margin: 0;
-  font: 750 11px var(--mono);
+  font: 750 10px var(--mono);
   letter-spacing: .07em;
   text-transform: uppercase
 }
@@ -199,13 +199,13 @@ code {
   display: block;
   margin-top: 2px;
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .panel-head>code {
   margin-left: auto;
   color: var(--cyan);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .topology-stage {
@@ -238,7 +238,7 @@ code {
 
 .region-title b {
   display: block;
-  font: 750 11px var(--mono);
+  font: 750 9px var(--mono);
   letter-spacing: .06em
 }
 
@@ -246,13 +246,13 @@ code {
   display: block;
   margin-top: 2px;
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .region-title code {
   margin-left: auto;
   color: var(--blue);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .region-foot {
@@ -262,7 +262,7 @@ code {
   gap: 8px;
   border-top: 1px solid var(--line);
   background: rgba(17, 26, 36, .7);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .region-foot b {
@@ -320,20 +320,20 @@ code {
 
 .component-actor small {
   color: var(--faint);
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   letter-spacing: .04em
 }
 
 .component-actor b {
   margin-top: 2px;
   color: var(--text);
-  font: 750 11px var(--mono)
+  font: 750 8px var(--mono)
 }
 
 .component-actor em {
   margin-top: 2px;
   color: var(--faint);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   font-style: normal
 }
 
@@ -504,7 +504,7 @@ code {
   border-radius: 2px;
   background: rgba(7, 12, 18, .94);
   color: var(--text);
-  font: 650 11px var(--mono);
+  font: 650 8px var(--mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -523,7 +523,7 @@ code {
   bottom: 3px;
   z-index: 7;
   color: var(--faint);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   white-space: nowrap
 }
 
@@ -574,7 +574,7 @@ code {
 .queue-ledger small {
   grid-column: 1/3;
   color: var(--faint);
-  font: 650 11px var(--mono);
+  font: 650 8px var(--mono);
   letter-spacing: .035em;
   white-space: nowrap;
   overflow: hidden;
@@ -584,7 +584,7 @@ code {
 .queue-ledger b {
   align-self: end;
   color: var(--muted);
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis
@@ -626,7 +626,7 @@ code {
 .queue-region .guest-memory>header b {
   display: block;
   color: var(--blue);
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   letter-spacing: .04em
 }
 
@@ -634,13 +634,13 @@ code {
   display: block;
   margin-top: 2px;
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .queue-region .guest-memory>header small {
   margin-left: auto;
   color: var(--muted);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   white-space: nowrap
 }
 
@@ -670,7 +670,7 @@ code {
 
 .queue-region .memory-context b {
   min-width: 0;
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap
@@ -679,7 +679,7 @@ code {
 .queue-region .memory-context code {
   margin-left: auto;
   color: var(--blue);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   white-space: nowrap
 }
 
@@ -698,10 +698,10 @@ code {
 
 .queue-region .memory-map .memory-node {
   flex: 1 1 0;
-  min-height: 52px;
+  min-height: 68px;
   padding: 3px 4px;
   display: grid;
-  grid-template-columns: minmax(0, 20%) minmax(0, 80%);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 4fr);
   grid-template-rows: 1fr;
   column-gap: 5px;
 }
@@ -737,13 +737,13 @@ code {
 
 .queue-region .memory-map .memory-node header b {
   color: var(--muted);
-  font: 700 11px var(--mono)
+  font: 700 8px var(--mono)
 }
 
 .queue-region .memory-map .memory-node header code {
   margin-left: auto;
   color: var(--blue);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .queue-region .memory-map .memory-node .slot-grid {
@@ -780,19 +780,19 @@ code {
 
 .queue-slot b {
   color: var(--muted);
-  font: 700 11px var(--mono)
+  font: 700 8px var(--mono)
 }
 
 .queue-slot code {
   margin-top: 2px;
   color: var(--blue);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .queue-slot span {
   margin-top: 2px;
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .queue-slot.populated {
@@ -850,7 +850,7 @@ code {
   align-items: center;
   gap: 6px;
   color: var(--cyan);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   letter-spacing: .06em;
   text-transform: uppercase
 }
@@ -867,7 +867,7 @@ code {
 .inspector h3 {
   margin: 0 0 3px;
   color: var(--cyan);
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   letter-spacing: .08em
 }
 
@@ -880,7 +880,7 @@ code {
 .inspector dt,
 .inspector dd {
   padding: 3px 4px;
-  font-size: 11px
+  font-size: 8px
 }
 
 .inspector dt {
@@ -920,7 +920,7 @@ code {
 
 #counter {
   text-align: center;
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .not-sampled {

@@ -4,7 +4,7 @@
 #define CREATE_TRACE_POINTS
 #include "qedu_trace.h"
 
-EXPORT_TRACEPOINT_SYMBOL_GPL(qedu_probe_stage);
+EXPORT_TRACEPOINT_SYMBOL_GPL(qedu_probe_api);
 EXPORT_TRACEPOINT_SYMBOL_GPL(qedu_file_op);
 EXPORT_TRACEPOINT_SYMBOL_GPL(qedu_cpu_buffer_io);
 EXPORT_TRACEPOINT_SYMBOL_GPL(qedu_dma_stage);

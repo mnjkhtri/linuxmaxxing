@@ -113,6 +113,42 @@ class BrowserTests(unittest.TestCase):
         self.assertTrue(all(result), result)
         page.close()
 
+    def test_laptop_component_bounds(self):
+        # A hidden body can mask overflowing children. Check the actual panels.
+        panels = {
+            'kapi': '.vas-map, .allocator-links, .task-stage',
+            'memory': '.spaces, .vas, .residency, .page-tables',
+            'virt-ept': '.stage, .state-body, .walk',
+            'virt-virtio': '.topology-stage, .queue-region',
+        }
+        for name, selector in panels.items():
+            page = self.browser.new_page()
+            self.open_view(page, name)
+            for width, height in ((1280, 720), (1366, 768), (1440, 900)):
+                with self.subTest(name=name, size=(width, height)):
+                    page.set_viewport_size({'width': width, 'height': height - 48})
+                    page.wait_for_timeout(150)
+                    failures = page.locator(selector).evaluate_all('''nodes => {
+                        const bottom = document.querySelector('.view-controls').getBoundingClientRect().top;
+                        return nodes.flatMap(node => {
+                            const r = node.getBoundingClientRect();
+                            return r.x < 0 || r.right > innerWidth + 1 || r.bottom > bottom + 1 || r.height < 40
+                                ? [node.className] : [];
+                        });
+                    }''')
+                    self.assertEqual(failures, [])
+                    heading = page.locator('h1').first
+                    self.assertLessEqual(heading.evaluate('(el) => parseFloat(getComputedStyle(el).fontSize)'), 16)
+            page.close()
+
+    def test_scheduler_starts_at_first_snapshot(self):
+        page = self.browser.new_page()
+        self.open_view(page, 'scheduler')
+        self.assertEqual(page.locator('#counter').inner_text().split('/')[0].strip(), '1')
+        self.assertEqual(page.locator('#op').inner_text(), 'enqueue_entity')
+        self.assertLess(page.locator('.tree-panel .empty:visible').count(), page.locator('.tree-panel .empty').count())
+        page.close()
+
     def test_refresh_failure_and_navigation(self):
         page = self.browser.new_page(viewport={'width': 1280, 'height': 720})
         self.open_view(page, 'kapi')

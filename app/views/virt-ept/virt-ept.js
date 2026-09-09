@@ -157,6 +157,12 @@ import {
       return {
         source: 'ebpf',
         name: e.kind,
+        canonical: e,
+        origin: {
+          mechanism: e.source.mechanism,
+          hook: e.source.hook || e.kind,
+          domain: e.source.domain
+        },
         timeNs: r.time_ns,
         record: r,
         context: e.context,
@@ -204,6 +210,12 @@ import {
     const events = capture.events.filter(e => e.source.mechanism === 'tracefs').map(e => ({
       source: 'tracefs',
       name: e.kind,
+      canonical: e,
+      origin: {
+        mechanism: e.source.mechanism,
+        hook: e.source.hook || e.kind,
+        domain: e.source.domain
+      },
       timeNs: relativeNs(capture, e),
       line: e.sequence,
       context: e.context,
@@ -302,6 +314,12 @@ import {
       output.push({
         source: "tracefs",
         name: "tdp_spte_batch",
+        canonical: event.canonical,
+        origin: {
+          mechanism: event.origin.mechanism,
+          hook: event.origin.hook + ' · batch',
+          domain: event.origin.domain
+        },
         timeNs: event.timeNs,
         timeEndNs: previous.timeNs,
         phase: event.phase,
@@ -591,7 +609,7 @@ import {
 
   function renderRoadmap() {
     $("roadmap").innerHTML = Object.keys(PHASES).map(function(phase) {
-      return '<button class="phase-button' + (phase === M.phase ? " active" : "") + '" data-phase="' + phase + '"><b>Phase ' + phase + "</b><span>" + esc(PHASES[phase].short) + "</span></button>";
+      return '<button type="button" class="phase-button selector-option' + (phase === M.phase ? " active" : "") + '" data-phase="' + phase + '"><span class="selector-kicker">PHASE ' + phase + '</span><span class="selector-label">' + esc(PHASES[phase].short) + '</span></button>';
     }).join("");
     $("roadmap").querySelectorAll("[data-phase]").forEach(function(button) {
       button.addEventListener("click", function() {
@@ -953,15 +971,60 @@ import {
       $("event-kind").textContent = "NO RECORD";
       $("event-title").textContent = "No captured boundary";
       $("source-badge").textContent = "—";
+      $("event-origin").innerHTML = "";
       $("fields").innerHTML = "";
       return;
     }
     $("event-kind").textContent = eventKind(event);
     $("event-title").textContent = eventTitle(event);
     $("source-badge").textContent = event.source === "tracefs" ? "tracefs" : "eBPF";
-    $("fields").innerHTML = fieldRows(event).map(function(row) {
+    renderOrigin("event-origin", event);
+    $("fields").innerHTML = rawFieldRows(event).map(function(row) {
       return "<dt>" + esc(row[0]) + "</dt><dd>" + esc(row[1]) + "</dd>";
     }).join("");
+  }
+
+  function rawFieldRows(event) {
+    var data = event.canonical && event.canonical.data || {},
+      fields = data.fields || data.event_info || {},
+      rows = [];
+    function append(value, prefix) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        Object.keys(value).forEach(function(key) {
+          append(value[key], prefix ? prefix + "." + key : key);
+        });
+      } else rows.push([prefix, Array.isArray(value) ? JSON.stringify(value) : value]);
+    }
+    Object.keys(fields).forEach(function(key) {
+      append(fields[key], key);
+    });
+    return rows.filter(function(row) {
+      return row[1] !== null && row[1] !== undefined && row[1] !== "";
+    });
+  }
+
+  function originContext(context) {
+    context = context || {};
+    var task = context.comm || "—",
+      pid = context.pid != null ? "PID " + context.pid : context.tid != null ? "TID " + context.tid : "";
+    if (pid) task += " · " + pid;
+    return (context.cpu != null ? "CPU " + context.cpu + " · " : "") + task;
+  }
+
+  function renderOrigin(id, event) {
+    var origin = event.origin || {},
+      rows = [
+        ["mechanism", mechanismLabel(origin.mechanism), ""],
+        ["hook", origin.hook || event.name || "—", ""],
+        ["CPU / task", originContext(event.context), ""]
+      ];
+    $(id).innerHTML = rows.map(function(row) {
+      return '<div class="' + row[2] + '"><small>' + esc(row[0]) + '</small><b title="' + esc(row[1]) + '">' + esc(row[1]) + '</b></div>';
+    }).join("");
+  }
+
+  function mechanismLabel(value) {
+    return value === "ebpf" ? "eBPF" : value || "—";
   }
 
   function renderToolbar() {

@@ -421,11 +421,19 @@ def validate_evidence(name, events):
             require(times == sorted(times), "memory producer clock went backwards")
     elif name == "io":
         phases = selected("phase", "workload")
-        require([event["context"]["phase"] for event in phases] == list(map(str, range(1, 11))), "EDU requires ten ordered workload phases")
+        phase_names = [event["data"]["event_info"].get("phase") for event in phases]
+        phase_actions = [event["data"]["event_info"].get("action") for event in phases]
+        phase_contract = [str(phase["id"]) for phase in cfg.get("phases", [])]
+        expected_markers = [phase_id for phase_id in phase_contract for _ in ("begin", "end")]
+        expected_actions = [action for _ in phase_contract for action in ("begin", "end")]
+        require(len(phases) == len(expected_markers), "IO workload must emit one begin/end pair for each canonical phase")
+        require(phase_contract == ["driver_initialization", "factorial", "two_way_dma"], "IO manifest must define exactly three canonical phases")
+        require(phase_names == expected_markers, "IO workload phases are not ordered as driver initialization, factorial, two-way DMA")
+        require(phase_actions == expected_actions, "IO workload phase boundaries are incomplete")
         fields = [event["data"]["fields"] for event in selected("qedu_dma_submit", "tracefs")]
         require({value["direction"] for value in fields} >= {"DMA_TO_DEVICE", "DMA_FROM_DEVICE"}, "both DMA directions must be observed")
-        stages = [event["data"]["fields"] for event in selected("qedu_probe_stage", "tracefs")]
-        require(any(value["stage"] == "PROBE_READY" for value in stages), "EDU probe did not finish")
+        probe_apis = [event["data"]["fields"] for event in selected("qedu_probe_api", "tracefs")]
+        require(any(value["api"] == "qedu_probe" and value["resource"] == "bound_qedu_device" for value in probe_apis), "EDU probe did not finish")
         handoffs = [event["data"]["fields"] for event in selected("qedu_dma_work_queue", "tracefs")]
         require({value["work_kind"] for value in handoffs if value["queued"] == "1"} >= {"ADVANCE", "FINISH"}, "EDU IRQ-to-worker handoff incomplete")
     elif name == "kapi":
@@ -827,8 +835,7 @@ class Session:
                 if event.startswith("syscalls/"):
                     self.trace.filter(event, "common_pid == %d" % pid)
             self.trace.filter("sched/sched_switch", "prev_pid == %d || next_pid == %d || prev_comm ~ \"kworker*\" || next_comm ~ \"kworker*\"" % (pid, pid))
-            for event in ("sched/sched_wakeup", "sched/sched_waking"):
-                self.trace.filter(event, "pid == %d" % pid)
+            self.trace.filter("sched/sched_wakeup", "pid == %d" % pid)
             proc.signal(signal.SIGCONT)
         elif self.name == "memory":
             # The MM observer is already keyed to workload_mm. Keep the
@@ -963,7 +970,7 @@ class Session:
 
 
 def prepare_image():
-    cfg = spec()
+    cfg = read_json(ROOT / "infra/environment.json")
     image = ROOT / "build/images/study.qcow2"
     stamp = ROOT / "build/images/study.json"
     expected = {"base_sha256": cfg["image_sha256"], "packages": "python3,kmod,util-linux,libbpf1,libelf1,zlib1g,openssh-server,ethtool"}
@@ -988,7 +995,7 @@ def prepare_image():
 
 
 def run(name, console=False):
-    cfg = spec()
+    cfg = read_json(ROOT / "infra/environment.json")
     image = prepare_image()
     build = ROOT / "build"
     build.mkdir(parents=True, exist_ok=True)

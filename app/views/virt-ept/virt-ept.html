@@ -10,16 +10,15 @@
 </head>
 <body>
 <main class="ept">
-    <header class="hero">
+    <header class="hero page-head">
         <div>
-            <div class="eyebrow">TRACEFS → eBPF SNAPSHOT → EPT STATE</div>
-            <h1>KVM <span>EPT</span></h1>
-            <p>Demand mapping, invalidation, MMIO markers, and huge-page splitting from one toy-VMM run.</p>
+            <h1>KVM EPT</h1>
+            <p>Demand mapping, invalidation, MMIO, and huge-page splitting</p>
         </div>
         <div id="status" role="status"><i class="trace-dot"></i><span>loading EPT capture…</span></div>
     </header>
 
-    <nav id="roadmap" class="roadmap panel" aria-label="EPT phases"></nav>
+    <nav id="roadmap" class="roadmap panel experiment-selector" aria-label="EPT phases"></nav>
 
     <section class="workbench">
         <section class="machine panel">
@@ -77,14 +76,18 @@
             </div>
         </section>
 
-        <aside class="inspector panel">
-            <header class="panel-head"><div><h2>Transition internals</h2><span>selected capture boundary</span></div><code id="source-badge">—</code></header>
+        <aside class="inspector inspector-pane panel">
+            <header class="panel-head inspector-head"><div><h2>Transition internals</h2><span>selected capture boundary</span></div><code id="source-badge">—</code></header>
             <div class="inspector-body">
                 <div class="selected-kind"><i class="trace-dot"></i><span id="event-kind">LOADING</span></div>
                 <h2 id="event-title">Reading EPT capture…</h2>
+                <section class="origin-card inspector-section">
+                    <h3>Origin</h3>
+                    <div class="origin-grid" id="event-origin"></div>
+                </section>
                 <dl id="fields" class="fields"></dl>
             </div>
-            <footer class="toolbar">
+            <footer class="inspector-footer toolbar">
                 <button id="prev" title="Previous observation">←</button><button id="play" title="Play or pause">▶</button><button id="next" title="Next observation">→</button>
                 <input id="scrub" type="range" min="0" value="0" aria-label="Phase observation scrubber" /><span id="counter">— / —</span>
             </footer>

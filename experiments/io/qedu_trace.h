@@ -37,50 +37,30 @@ TRACE_DEFINE_ENUM(QEDU_WORK_ADVANCE);
 TRACE_DEFINE_ENUM(QEDU_WORK_FINISH);
 TRACE_DEFINE_ENUM(QEDU_WAIT_BEGIN);
 TRACE_DEFINE_ENUM(QEDU_WAIT_END);
-TRACE_DEFINE_ENUM(QEDU_PROBE_BEGIN);
-TRACE_DEFINE_ENUM(QEDU_DEVICE_STATE_READY);
-TRACE_DEFINE_ENUM(QEDU_PCI_ENABLED);
-TRACE_DEFINE_ENUM(QEDU_BAR_REGIONS_CLAIMED);
-TRACE_DEFINE_ENUM(QEDU_BAR0_MAPPED);
-TRACE_DEFINE_ENUM(QEDU_IRQ_REGISTERED);
-TRACE_DEFINE_ENUM(QEDU_DMA_MASK_CONFIGURED);
-TRACE_DEFINE_ENUM(QEDU_BUS_MASTER_ENABLED);
-TRACE_DEFINE_ENUM(QEDU_DMA_BUFFER_READY);
-TRACE_DEFINE_ENUM(QEDU_WORKQUEUE_READY);
-TRACE_DEFINE_ENUM(QEDU_CHARDEV_PUBLISHED);
-TRACE_DEFINE_ENUM(QEDU_SYSFS_PUBLISHED);
-TRACE_DEFINE_ENUM(QEDU_DEBUGFS_PUBLISHED);
-TRACE_DEFINE_ENUM(QEDU_PROBE_READY);
-
 #define qedu_engine_name(engine) __print_symbolic(engine, {QEDU_ENGINE_NONE, "NONE"}, {QEDU_ENGINE_FACTORIAL, "FACTORIAL"}, {QEDU_ENGINE_DMA, "DMA"})
 
 #define qedu_stage_name(stage) __print_symbolic(stage, {QEDU_DMA_IDLE, "IDLE"}, {QEDU_DMA_TO_DEVICE, "TO_DEVICE"}, {QEDU_DMA_FROM_DEVICE, "FROM_DEVICE"})
 
-#define qedu_probe_stage_name(stage) __print_symbolic(stage, {QEDU_PROBE_BEGIN, "PROBE_BEGIN"}, {QEDU_DEVICE_STATE_READY, "DEVICE_STATE_READY"}, {QEDU_PCI_ENABLED, "PCI_ENABLED"}, {QEDU_BAR_REGIONS_CLAIMED, "BAR_REGIONS_CLAIMED"}, {QEDU_BAR0_MAPPED, "BAR0_MAPPED"}, {QEDU_IRQ_REGISTERED, "IRQ_REGISTERED"}, {QEDU_DMA_MASK_CONFIGURED, "DMA_MASK_CONFIGURED"}, {QEDU_BUS_MASTER_ENABLED, "BUS_MASTER_ENABLED"}, {QEDU_DMA_BUFFER_READY, "DMA_BUFFER_READY"}, {QEDU_WORKQUEUE_READY, "WORKQUEUE_READY"}, {QEDU_CHARDEV_PUBLISHED, "CHARDEV_PUBLISHED"}, {QEDU_SYSFS_PUBLISHED, "SYSFS_PUBLISHED"}, {QEDU_DEBUGFS_PUBLISHED, "DEBUGFS_PUBLISHED"}, {QEDU_PROBE_READY, "PROBE_READY"})
-
-TRACE_EVENT(qedu_probe_stage,
-			TP_PROTO(const char *device, u8 stage, const char *api, const char *resource, u64 address, u64 size, s32 result),
-			TP_ARGS(device, stage, api, resource, address, size, result),
+TRACE_EVENT(qedu_probe_api,
+			TP_PROTO(const char *device, const char *api, const char *resource, u64 address, u64 size, s32 result),
+			TP_ARGS(device, api, resource, address, size, result),
 			TP_STRUCT__entry(
 				__string(device, device)
-					__field(u8, stage)
-						__string(api, api)
-							__string(resource, resource)
-								__field(u64, address)
-									__field(u64, size)
-										__field(s32, result)),
+				__string(api, api)
+				__string(resource, resource)
+				__field(u64, address)
+				__field(u64, size)
+				__field(s32, result)),
 			TP_fast_assign(
 				__assign_str(device);
-				__entry->stage = stage;
 				__assign_str(api);
 				__assign_str(resource);
 				__entry->address = address;
 				__entry->size = size;
 				__entry->result = result;),
-			TP_printk("device=%s stage=%s api=%s resource=%s address=0x%016llx size=%llu result=%d",
-					  __get_str(device), qedu_probe_stage_name(__entry->stage),
-						  __get_str(api), __get_str(resource), __entry->address,
-						  __entry->size, __entry->result));
+			TP_printk("device=%s api=%s resource=%s address=0x%016llx size=%llu result=%d",
+					  __get_str(device), __get_str(api), __get_str(resource),
+					  __entry->address, __entry->size, __entry->result));
 
 TRACE_EVENT(qedu_file_op,
 	TP_PROTO(const char *device, u64 io_id, u8 operation, u8 phase, unsigned long file, u64 count, s64 offset, s64 result, u8 engine),
@@ -343,24 +323,6 @@ TRACE_EVENT(qedu_factorial_result,
 				__entry->result = result;),
 			TP_printk("device=%s io_id=%llu result=%u",
 					  __get_str(device), __entry->io_id, __entry->result));
-
-#ifndef QEDU_TRACE_CALL_ALIASES
-#define QEDU_TRACE_CALL_ALIASES
-
-/* Capitalized aliases distinguish observation sites from functional driver calls. */
-#define Trace_qedu_cpu_buffer_io(...) trace_qedu_cpu_buffer_io(__VA_ARGS__)
-#define Trace_qedu_file_op(...) trace_qedu_file_op(__VA_ARGS__)
-#define Trace_qedu_dma_stage(...) trace_qedu_dma_stage(__VA_ARGS__)
-#define Trace_qedu_dma_submit(...) trace_qedu_dma_submit(__VA_ARGS__)
-#define Trace_qedu_irq_ack(...) trace_qedu_irq_ack(__VA_ARGS__)
-#define Trace_qedu_dma_work_queue(...) trace_qedu_dma_work_queue(__VA_ARGS__)
-#define Trace_qedu_completion_publish(...) trace_qedu_completion_publish(__VA_ARGS__)
-#define Trace_qedu_wait(...) trace_qedu_wait(__VA_ARGS__)
-#define Trace_qedu_factorial_submit(...) trace_qedu_factorial_submit(__VA_ARGS__)
-#define Trace_qedu_factorial_result(...) trace_qedu_factorial_result(__VA_ARGS__)
-#define Trace_qedu_probe_stage(...) trace_qedu_probe_stage(__VA_ARGS__)
-
-#endif /* QEDU_TRACE_CALL_ALIASES */
 
 #endif /* _QEDU_TRACE_H */
 

@@ -312,7 +312,7 @@ import {
         var node = document.createElement("div"),
           title = document.createElement("span"),
           dots = document.createElement("span");
-        node.className = "zone";
+        node.className = "zone selector-option";
         title.className = "zone-label";
         title.textContent = label;
         dots.className = "zone-dots";

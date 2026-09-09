@@ -7,23 +7,17 @@ import {
 (function() {
   'use strict';
 
-  var records = [],
-    tracepoints = [],
+  var tracepoints = [],
     markers = [],
-    header = null,
-    footer = null,
-    parseStats = {
-      malformed: 0,
-      skippedTrace: 0
-    };
+    resources = [];
   var operations = [],
     journeys = {},
     navigation = [],
     selectedJourney = null,
-    selectedStep = 0,
     selectedNav = 0,
     selectedEvent = null,
-    selectedSequenceSeq = null;
+    selectedSequenceSeq = null,
+    selectedSequenceStep = null;
   var workloadPid = 0,
     deviceResource = null,
     fileResource = null,
@@ -75,11 +69,10 @@ import {
     return value + ' B'
   }
 
-  function duration(value) {
-    if (value < 1000) return value + ' ns';
-    if (value < 1000000) return (value / 1000).toFixed(value < 10000 ? 2 : 1) + ' µs';
-    if (value < 1000000000) return (value / 1000000).toFixed(value < 10000000 ? 2 : 1) + ' ms';
-    return (value / 1000000000).toFixed(2) + ' s'
+  function shortResource(value) {
+    var text = String(value == null ? '' : value),
+      parts = text.split('/').filter(Boolean);
+    return parts[parts.length - 1] || text
   }
 
   function traceName(record) {
@@ -100,7 +93,7 @@ import {
   }
 
   function resource(type) {
-    return (header && header.resources || []).find(function(item) {
+    return resources.find(function(item) {
       return item.resource_type === type
     }) || {
       fields: {}
@@ -111,6 +104,11 @@ import {
     return markers.find(function(record) {
       return record.marker === name && record.edge === edge
     })
+  }
+
+  function phaseTitle(name) {
+    var begin = marker(name, 'begin');
+    return begin && begin.facts.label || name.replace(/_/g, ' ')
   }
 
   function contextClass(record) {
@@ -164,43 +162,43 @@ import {
       };
       fields.ack = hex(ack, 8)
     }
-    if (event === 'qedu_probe_stage') {
+    if (event === 'qedu_probe_api') {
       var address = fields.address,
         size = fields.size,
-        stage = fields.stage;
+        api = fields.api;
       delete fields.address;
       delete fields.size;
-      if (stage === 'PROBE_BEGIN') {
+      if (api === 'qedu_probe' && fields.resource === 'pci_driver_probe') {
         fields.pci_dev = address;
         fields.object_size_bytes = integer(size)
-      } else if (stage === 'DEVICE_STATE_READY') {
+      } else if (api === 'qedu_probe') {
         fields.qedu_dev = address;
         fields.object_size_bytes = integer(size)
-      } else if (stage === 'PCI_ENABLED') fields.pci_dev = address;
-      else if (stage === 'BAR_REGIONS_CLAIMED') {
+      } else if (api === 'devm_kzalloc') {
+        fields.qedu_dev = address;
+        fields.object_size_bytes = integer(size)
+      } else if (api === 'pci_enable_device') fields.pci_dev = address;
+      else if (api === 'pci_request_regions') {
         fields.bar0_bus_address = address;
         fields.bar0_length_bytes = integer(size)
-      } else if (stage === 'BAR0_MAPPED') {
+      } else if (api === 'pci_iomap') {
         fields.bar0_kernel_virtual_address = address;
         fields.mapped_length_bytes = integer(size)
-      } else if (stage === 'IRQ_REGISTERED') {
+      } else if (api === 'request_irq') {
         fields.linux_irq = integer(address);
         fields.irq_flags = hex(size)
-      } else if (stage === 'DMA_MASK_CONFIGURED') {
+      } else if (api === 'dma_set_mask_and_coherent') {
         fields.coherent_dma_mask = address;
         fields.dma_mask_bits = integer(size)
-      } else if (stage === 'BUS_MASTER_ENABLED') fields.bus_master_enabled = fields.result === 0;
-      else if (stage === 'DMA_BUFFER_READY') {
+      } else if (api === 'pci_set_master') fields.bus_master_enabled = fields.result === 0;
+      else if (api === 'dma_alloc_coherent') {
         fields.dma_address = address;
         fields.size_bytes = integer(size)
-      } else if (stage === 'WORKQUEUE_READY') fields.workqueue_struct = address;
-      else if (stage === 'CHARDEV_PUBLISHED' || stage === 'SYSFS_PUBLISHED') fields.misc_minor = integer(address);
-      else if (stage === 'DEBUGFS_PUBLISHED') {
+      } else if (api === 'alloc_ordered_workqueue') fields.workqueue_struct = address;
+      else if (api === 'misc_register') fields.misc_minor = integer(address);
+      else if (api === 'debugfs_create_dir' || api === 'debugfs_create_file') {
         fields.dentry = address;
         fields.mode = integer(size).toString(8).padStart(4, '0')
-      } else if (stage === 'PROBE_READY') {
-        fields.qedu_dev = address;
-        fields.object_size_bytes = integer(size)
       }
     }
     if (event === 'qedu_factorial_submit' && fields.status_command != null) fields.status_command = hex(fields.status_command, 8);
@@ -220,14 +218,13 @@ import {
       const fields = parseTraceFields(system, e.kind, e.data.fields),
         correlation = {
           device: fields.device,
-          io_id: Number(fields.io_id || 0),
+          operation_id: Number(fields.io_id || 0),
           dma_leg: fields.leg
         };
-      const execution = e.kind.includes('irq_handler') || e.kind === 'qedu_irq_ack' ? 'hardirq' : e.context.comm?.startsWith('kworker') ? 'workqueue' : 'process';
+      const execution = e.kind.includes('irq_handler') || e.kind === 'qedu_irq_ack' || (e.kind === 'qedu_completion_publish' && fields.engine === 'FACTORIAL') ? 'hardirq' : e.context.comm?.startsWith('kworker') ? 'workqueue' : 'process';
       return {
         record: 'tracepoint',
         source: 'events.ndjson',
-        source_index: e.sequence,
         time_ns: relativeNs(capture, e),
         tracepoint: system + ':' + e.kind,
         context: {
@@ -242,20 +239,21 @@ import {
     });
   }
 
-  function buildResources(report, devicePath) {
-    var debug = report.debugfs,
-      meta = report.metadata,
-      sysfs = report.sysfs,
-      vector = tracepoints.find(function(record) {
+  function buildResources(debug, devicePath) {
+    var vector = tracepoints.find(function(record) {
         return record.tracepoint === 'irq_vectors:vector_config'
       }),
+      dmaTransfer = tracepoints.find(function(record) {
+        return record.tracepoint === 'qedu:qedu_dma_submit'
+      }),
+      localAddress = field(dmaTransfer, 'source_space') === 'EDU_LOCAL' ? field(dmaTransfer, 'source_address') : field(dmaTransfer, 'destination_address'),
       device = debug.pci_device || 'unknown';
     return [{
       resource_type: 'pci_function',
       id: device,
       fields: {
         bdf: device,
-        vendor_device: debug.vendor_device,
+        vendor_device: debug.vendor_device || 'qedu',
         driver: 'qedu'
       }
     }, {
@@ -264,18 +262,14 @@ import {
       fields: {
         path: devicePath,
         name: 'qedu',
-        minor: integer(debug.misc_minor),
-        registration: 'miscdevice'
+        minor: integer(debug.misc_minor)
       }
     }, {
       resource_type: 'bar_mapping',
       id: device + ':bar0',
       fields: {
-        bar: 0,
         bus_start: debug.bar0_start,
-        length: debug.bar0_length,
-        kernel_virtual_address: debug.bar0_mapping,
-        memory_type: 'MMIO'
+        length: debug.bar0_length
       }
     }, {
       resource_type: 'dma_allocation',
@@ -284,45 +278,28 @@ import {
         cpu_virtual_address: debug.cpu_address,
         dma_address: debug.device_address,
         size_bytes: integer(debug.buffer_size),
-        coherent: true,
-        dma_mask_bits: 32
+        dma_mask_bits: integer(debug.dma_mask_bits)
       }
     }, {
       resource_type: 'device_local_buffer',
       id: device + ':edu-buffer',
       fields: {
-        address_space: 'EDU_LOCAL',
-        offset: '0x0000000000040000',
-        size_bytes: 4096
+        offset: localAddress
       }
     }, {
       resource_type: 'irq_route',
       id: device + ':irq',
       fields: {
-        linux_irq: integer(debug.irq || meta.qedu_irq),
-        delivery: 'INTx',
-        shared_handler: true
+        linux_irq: integer(debug.irq),
+        delivery: 'INTx'
       }
     }, {
       resource_type: 'interrupt_controller',
       id: device + ':controller-route',
-      evidence: 'configured_inferred',
       fields: {
-        route: 'IOAPIC → Local APIC',
+        route: 'IOAPIC → LAPIC',
         vector: field(vector, 'vector'),
-        target_cpu: field(vector, 'cpu'),
-        apic_destination: field(vector, 'apicdest'),
-        source_record: vector && vector.tracepoint
-      }
-    }, {
-      resource_type: 'final_driver_state',
-      id: device + ':final-state',
-      fields: {
-        tx_bytes: integer(sysfs.tx || debug.tx_bytes_to_user),
-        rx_bytes: integer(sysfs.rx || debug.rx_bytes_from_user),
-        result_size: integer(debug.result_size),
-        timeout_ms: integer(sysfs.timeout_ms || debug.timeout_ms),
-        completion_bits: debug.completed_events
+        target_cpu: field(vector, 'cpu')
       }
     }]
   }
@@ -333,47 +310,36 @@ import {
       return {
         record: 'workload_marker',
         source: 'events.ndjson',
-        source_seq: e.sequence,
         time_ns: relativeNs(capture, e),
+        tracepoint: 'workload:phase',
         marker: info.phase,
         edge: info.action,
         facts: info,
-        context: e.context
+        context: e.context,
+        canonical: e
       };
     });
     tracepoints = parseTrace(capture);
-    workloadPid = markers[0]?.context.pid || 0;
-    const stages = capture.events.filter(e => e.kind === 'qedu_probe_stage').map(e => e.data.fields);
-    const stage = name => stages.find(f => f.stage === name) || {};
-    const dma = capture.events.find(e => e.kind === 'dma_alloc' && e.data.fields.device === stages[0]?.device)?.data.fields || {};
-    const report = {
-      metadata: {
-        workload_pid: workloadPid
-      },
-      sysfs: {},
-      trace_stats: {},
-      debugfs: {
-        pci_device: stages[0]?.device,
-        bar0_start: stage('BAR_REGIONS_CLAIMED').address,
-        bar0_length: stage('BAR_REGIONS_CLAIMED').size,
-        bar0_mapping: stage('BAR0_MAPPED').address,
-        device_address: stage('DMA_BUFFER_READY').address,
-        buffer_size: stage('DMA_BUFFER_READY').size,
-        irq: stage('IRQ_REGISTERED').address,
-        misc_minor: stage('CHARDEV_PUBLISHED').address,
-        cpu_address: dma.virt_addr || 'not captured'
-      }
-    };
-    records = markers.concat(tracepoints).sort((a, b) => ns(a) - ns(b));
-    records.forEach((r, i) => r.seq = i + 1);
-    header = {
-      resources: buildResources(report, markers[0]?.facts.device || '/dev/qedu').filter(r => r.resource_type !== 'final_driver_state')
-    };
-    footer = {
-      tracepoint_records: tracepoints.length,
-      trace_loss: {}
-    };
     if (!markers.length || !tracepoints.length) throw Error('Missing I/O workload or trace evidence');
+    workloadPid = markers[0]?.context.pid || 0;
+    const probeApis = capture.events.filter(e => e.kind === 'qedu_probe_api').map(e => e.data.fields);
+    const probe = api => probeApis.find(f => f.api === api) || {};
+    const dma = capture.events.find(e => e.kind === 'dma_alloc' && e.data.fields.device === probeApis[0]?.device)?.data.fields || {};
+    const debug = {
+      pci_device: probeApis[0]?.device,
+      bar0_start: probe('pci_request_regions').address,
+      bar0_length: probe('pci_request_regions').size,
+      device_address: probe('dma_alloc_coherent').address,
+      buffer_size: probe('dma_alloc_coherent').size,
+      dma_mask_bits: probe('dma_set_mask_and_coherent').size,
+      irq: probe('request_irq').address,
+      misc_minor: probe('misc_register').address,
+      cpu_address: dma.virt_addr || 'not captured'
+    };
+    markers.concat(tracepoints).sort((a, b) => ns(a) - ns(b)).forEach((record, index) => {
+      record.seq = index + 1;
+    });
+    resources = buildResources(debug, markers[0].facts.device || '/dev/qedu');
     deviceResource = resource('pci_function');
     fileResource = resource('character_device');
     dmaResource = resource('dma_allocation');
@@ -383,30 +349,43 @@ import {
     controllerResource = resource('interrupt_controller');
     buildOperations();
     buildJourneys();
+    renderSummary();
+  }
+
+  function renderSummary() {
+    var hooks = {};
+    tracepoints.forEach(function(record) {
+      if (record.tracepoint) hooks[record.tracepoint] = true
+    });
+    $('io-summary-text').textContent = [
+      Object.keys(journeys).length + ' phases',
+      Object.keys(hooks).length + ' hooks',
+      operations.length + ' operations'
+    ].join(' · ')
   }
 
   function buildOperations() {
-    var ids = {};
+    var operationIds = {};
     tracepoints.forEach(function(record) {
-      var id = record.correlation && record.correlation.io_id;
-      if (id) ids[id] = true
+      var operationId = record.correlation && record.correlation.operation_id;
+      if (operationId) operationIds[operationId] = true
     });
-    operations = Object.keys(ids).map(Number).sort(function(a, b) {
+    operations = Object.keys(operationIds).map(Number).sort(function(a, b) {
       return a - b
-    }).map(function(id) {
+    }).map(function(operationId) {
       var own = tracepoints.filter(function(record) {
-        return record.correlation && record.correlation.io_id === id
+        return record.correlation && record.correlation.operation_id === operationId
       });
       var dma = own.some(function(record) {
         return record.tracepoint === 'qedu:qedu_dma_submit'
       });
-      var phase = dma ? 'dma_echo' : 'factorial',
+      var phase = dma ? 'two_way_dma' : 'factorial',
         begin = marker(phase, 'begin'),
         end = marker(phase, 'end');
       var operation = {
-        id: id,
+        id: operationId,
         kind: dma ? 'dma' : 'factorial',
-        label: dma ? 'Two-leg DMA echo' : 'Factorial through MMIO',
+        label: phaseTitle(phase),
         start: ns(begin) || ns(own[0]),
         end: ns(end) || ns(own[own.length - 1]),
         semantic: own
@@ -464,7 +443,7 @@ import {
     var selected = windowEvents.filter(function(record) {
       var name = record.tracepoint || '',
         correlation = record.correlation || {};
-      if (isQedu(record)) return (traceName(record) === 'qedu_file_op' && field(record, 'operation') === 'OPEN') || correlation.io_id === operation.id;
+      if (isQedu(record)) return (traceName(record) === 'qedu_file_op' && field(record, 'operation') === 'OPEN') || correlation.operation_id === operation.id;
       if (name.indexOf('irq:') === 0) return deviceIrqRecords.indexOf(record) >= 0;
       if (name.indexOf('workqueue:') === 0) return raw(record).indexOf('qedu_dma_') >= 0;
       if (name.indexOf('syscalls:') === 0) return deviceSyscalls.indexOf(record) >= 0;
@@ -483,13 +462,13 @@ import {
       if (sleep) selected.push(sleep)
     }
     if (completion) {
-      var waking = windowEvents.find(function(record) {
-        return record.tracepoint === 'sched:sched_waking' && ns(record) > ns(completion) && number(field(record, 'pid', -1)) === workloadPid
+      var wakeup = windowEvents.find(function(record) {
+        return record.tracepoint === 'sched:sched_wakeup' && ns(record) > ns(completion) && number(field(record, 'pid', -1)) === workloadPid
       });
       var running = windowEvents.find(function(record) {
         return record.tracepoint === 'sched:sched_switch' && ns(record) > ns(completion) && number(field(record, 'next_pid', -1)) === workloadPid
       });
-      if (waking) selected.push(waking);
+      if (wakeup) selected.push(wakeup);
       if (running) selected.push(running)
     }
     return selected.filter(function(record, index, list) {
@@ -514,9 +493,8 @@ import {
     })
   }
 
-  function stage(shortTitle, anchor, stageRecords) {
+  function stage(anchor, stageRecords) {
     return {
-      shortTitle: shortTitle,
       anchor: anchor,
       records: stageRecords.filter(Boolean).sort(function(a, b) {
         return ns(a) - ns(b)
@@ -536,23 +514,44 @@ import {
     if (setup) journeys.setup = setup;
     if (factorial) journeys.factorial = buildFactorialJourney(factorial);
     if (dma) journeys.dma = buildDmaJourney(dma);
+    Object.keys(journeys).forEach(function(kind) {
+      journeys[kind].fullFlow = fullJourneyItem(journeys[kind])
+    });
     navigation = [];
     ['setup', 'factorial', 'dma'].forEach(function(kind) {
       var journey = journeys[kind];
       if (!journey) return;
-      journey.steps.forEach(function(item, index) {
-        navigation.push({
-          journey: journey,
-          step: index,
-          item: item
-        })
+      navigation.push({
+        journey: journey,
+        item: journey.fullFlow
       })
     })
   }
 
+  function fullJourneyItem(journey) {
+    var records = [],
+      seen = {};
+    journey.steps.forEach(function(item) {
+      item.records.forEach(function(record) {
+        if (seen[record.seq]) return;
+        seen[record.seq] = true;
+        records.push(record)
+      })
+    });
+    records.sort(function(a, b) {
+      return ns(a) - ns(b)
+    });
+    return {
+      anchor: journey.steps[0] && (journey.steps[0].anchor || records[0]),
+      records: records
+    }
+  }
+
   function buildSetupJourney() {
     var setupEvents = tracepoints.filter(function(record) {
-      return record.tracepoint === 'qedu:qedu_probe_stage' || (record.tracepoint === 'dma:dma_alloc' && record.correlation.device === deviceResource.fields.bdf)
+      var isDeviceDma = record.tracepoint === 'dma:dma_alloc' && record.correlation.device === deviceResource.fields.bdf,
+        isDeviceVector = record.tracepoint.indexOf('irq_vectors:vector_') === 0 && number(field(record, 'irq', -1)) === number(irqResource.fields.linux_irq);
+      return record.tracepoint === 'qedu:qedu_probe_api' || isDeviceDma || isDeviceVector
     }).sort(function(a, b) {
       return ns(a) - ns(b)
     });
@@ -560,22 +559,22 @@ import {
     var operation = {
       id: 'probe',
       kind: 'setup',
-      label: 'Driver initialization',
+      label: phaseTitle('driver_initialization'),
       start: ns(setupEvents[0]),
       end: ns(setupEvents[setupEvents.length - 1]),
       semantic: setupEvents,
       events: setupEvents
     };
 
-    function probeStages(names) {
+    function probeStages(names, resourceName) {
       return setupEvents.filter(function(record) {
-        return names.indexOf(field(record, 'stage')) >= 0
+        return names.indexOf(field(record, 'api')) >= 0 && (!resourceName || field(record, 'resource') === resourceName)
       })
     }
 
-    function probeStage(name) {
+    function probeStage(name, resourceName) {
       return setupEvents.find(function(record) {
-        return field(record, 'stage') === name
+        return field(record, 'api') === name && (!resourceName || field(record, 'resource') === resourceName)
       })
     }
     var allocation = setupEvents.find(function(record) {
@@ -584,18 +583,21 @@ import {
     return {
       kind: 'setup',
       operation: operation,
-      title: 'Driver initialization',
-      caption: 'PCI binding acquires resources, registers execution machinery, allocates coherent RAM, and publishes user-facing interfaces.',
+      title: operation.label,
       steps: [
-        stage('probe device state', probeStage('PROBE_BEGIN'), probeStages(['PROBE_BEGIN', 'DEVICE_STATE_READY'])),
-        stage('map PCI BAR', probeStage('PCI_ENABLED'), probeStages(['PCI_ENABLED', 'BAR_REGIONS_CLAIMED', 'BAR0_MAPPED'])),
-        stage('register INTx', probeStage('IRQ_REGISTERED'), probeStages(['IRQ_REGISTERED'])),
-        stage('enable DMA', probeStage('DMA_MASK_CONFIGURED'), probeStages(['DMA_MASK_CONFIGURED', 'BUS_MASTER_ENABLED'])),
-        stage('allocate DMA RAM', allocation || probeStage('DMA_BUFFER_READY'), [allocation, probeStage('DMA_BUFFER_READY')]),
-        stage('create workqueue', probeStage('WORKQUEUE_READY'), probeStages(['WORKQUEUE_READY'])),
-        stage('publish interfaces', probeStage('CHARDEV_PUBLISHED'), probeStages(['CHARDEV_PUBLISHED', 'SYSFS_PUBLISHED'])),
-        stage('publish debugfs', probeStage('DEBUGFS_PUBLISHED'), probeStages(['DEBUGFS_PUBLISHED'])),
-        stage('driver ready', probeStage('PROBE_READY'), probeStages(['PROBE_READY']))
+        stage(probeStage('qedu_probe'), probeStages(['qedu_probe', 'devm_kzalloc']).filter(function(record) {
+          return field(record, 'resource') !== 'bound_qedu_device'
+        })),
+        stage(probeStage('pci_enable_device'), probeStages(['pci_enable_device', 'pci_request_regions', 'pci_iomap'])),
+        stage(probeStage('request_irq'), setupEvents.filter(function(record) {
+          return field(record, 'api') === 'request_irq' || record.tracepoint.indexOf('irq_vectors:vector_') === 0
+        })),
+        stage(probeStage('dma_set_mask_and_coherent'), probeStages(['dma_set_mask_and_coherent', 'pci_set_master'])),
+        stage(allocation || probeStage('dma_alloc_coherent'), [allocation, probeStage('dma_alloc_coherent')]),
+        stage(probeStage('alloc_ordered_workqueue'), probeStages(['alloc_ordered_workqueue'])),
+        stage(probeStage('misc_register'), probeStages(['misc_register'])),
+        stage(probeStage('debugfs_create_dir'), probeStages(['debugfs_create_dir', 'debugfs_create_file'])),
+        stage(probeStage('qedu_probe', 'bound_qedu_device'), probeStages(['qedu_probe'], 'bound_qedu_device'))
       ].filter(function(item) {
         return item.records.length
       })
@@ -639,19 +641,18 @@ import {
     return {
       kind: 'factorial',
       operation: operation,
-      title: 'Factorial through MMIO',
-      caption: 'One synchronous write, one MMIO command, one INTx completion, and a direct wakeup.',
+      title: operation.label,
       steps: [
-        stage('open file', openEnter, range(operation, operation.start, writeEnter)),
-        stage('write request', writeOpEnter || writeEnter, range(operation, writeEnter, submit)),
-        stage('MMIO submit', submit, [submit]),
-        stage('writer blocks', waitBegin, range(operation, waitBegin, interruptStart)),
-        stage('IRQ completion', irqAck, range(operation, interruptStart, waitEnd)),
-        stage('writer resumes', waitEnd, range(operation, waitEnd, result)),
-        stage('read result', result, [result]),
-        stage('finish write', writeOpExit, range(operation, writeOpExit, readEnter)),
-        stage('read userspace', readOpEnter || copyOut, range(operation, readEnter, closeEnter)),
-        stage('close file', releaseEnter, range(operation, closeEnter, operation.end + 1))
+        stage(openEnter, range(operation, operation.start, writeEnter)),
+        stage(writeOpEnter || writeEnter, range(operation, writeEnter, submit)),
+        stage(submit, [submit]),
+        stage(waitBegin, range(operation, waitBegin, interruptStart)),
+        stage(irqAck, range(operation, interruptStart, waitEnd)),
+        stage(waitEnd, range(operation, waitEnd, result)),
+        stage(result, [result]),
+        stage(writeOpExit, range(operation, writeOpExit, readEnter)),
+        stage(readOpEnter || copyOut, range(operation, readEnter, closeEnter)),
+        stage(releaseEnter, range(operation, closeEnter, operation.end + 1))
       ].filter(function(item) {
         return item.anchor && item.records.length
       })
@@ -713,22 +714,21 @@ import {
     return {
       kind: 'dma',
       operation: operation,
-      title: 'Two-leg DMA echo',
-      caption: 'One write triggers two device transfers joined by two IRQ-to-workqueue handoffs.',
+      title: operation.label,
       steps: [
-        stage('open file', openEnter, range(operation, operation.start, writeEnter)),
-        stage('write request', writeOpEnter || copyIn, range(operation, writeEnter, submit0)),
-        stage('outbound DMA', submit0, [submit0]),
-        stage('writer blocks', waitBegin, range(operation, waitBegin, entry0)),
-        stage('first IRQ', irqAcks[0], range(operation, entry0, advance)),
-        stage('queue advance', advance, range(operation, advance, submit1)),
-        stage('return DMA', submit1, [submit1]),
-        stage('second IRQ', irqAcks[1], range(operation, entry1, finish)),
-        stage('queue finish', finish, range(operation, finish, waitEnd)),
-        stage('writer resumes', waitEnd, range(operation, waitEnd, writeOpExit)),
-        stage('finish write', writeOpExit, range(operation, writeOpExit, readEnter)),
-        stage('read userspace', readOpEnter || copyOut, range(operation, readEnter, closeEnter)),
-        stage('close file', releaseEnter, range(operation, closeEnter, operation.end + 1))
+        stage(openEnter, range(operation, operation.start, writeEnter)),
+        stage(writeOpEnter || copyIn, range(operation, writeEnter, submit0)),
+        stage(submit0, [submit0]),
+        stage(waitBegin, range(operation, waitBegin, entry0)),
+        stage(irqAcks[0], range(operation, entry0, advance)),
+        stage(advance, range(operation, advance, submit1)),
+        stage(submit1, [submit1]),
+        stage(irqAcks[1], range(operation, entry1, finish)),
+        stage(finish, range(operation, finish, waitEnd)),
+        stage(waitEnd, range(operation, waitEnd, writeOpExit)),
+        stage(writeOpExit, range(operation, writeOpExit, readEnter)),
+        stage(readOpEnter || copyOut, range(operation, readEnter, closeEnter)),
+        stage(releaseEnter, range(operation, closeEnter, operation.end + 1))
       ].filter(function(item) {
         return item.anchor && item.records.length
       })
@@ -736,31 +736,7 @@ import {
   }
 
   function eventTitle(record) {
-    var name = traceName(record),
-      fields = record.fields || {};
-    if (name === 'qedu_probe_stage') return field(record, 'api', fields.stage);
-    if (name === 'dma_alloc') return name + ' · size=' + fields.size_bytes + ' · DMA=' + fields.dma_address;
-    if (name === 'qedu_file_op') return fields.operation.toLowerCase() + ' ' + fields.phase.toLowerCase() + (fields.phase === 'EXIT' ? ' · result=' + fields.result : '');
-    if (name === 'qedu_cpu_buffer_io') return fields.operation + ' · ' + fields.completed + '/' + fields.requested + ' B';
-    if (name === 'qedu_dma_stage') return fields.reason + ' · ' + fields.old + ' → ' + fields.new;
-    if (name === 'qedu_dma_submit') return fields.direction + ' · leg ' + fields.leg + ' · ' + fields.bytes + ' B';
-    if (name === 'qedu_irq_ack') return 'IRQ ' + fields.irq + ' · STATUS ' + fields.status.raw + ' · ACK ' + fields.ack;
-    if (name === 'qedu_dma_work_queue') return fields.work_kind + ' · queued=' + fields.queued;
-    if (name === 'qedu_completion_publish') return 'completed_events bit ' + fields.event_bit + ' · ' + fields.bits_before + ' → ' + fields.bits_after;
-    if (name === 'qedu_wait') return fields.engine + ' wait ' + fields.phase + ' · ret=' + fields.wait_ret;
-    if (name === 'qedu_factorial_submit') return 'input=' + fields.input + ' · status_command=' + fields.status_command;
-    if (name === 'qedu_factorial_result') return 'result=' + fields.result;
-    if (name === 'irq_handler_entry') return record.tracepoint + ' · irq=' + field(record, 'irq') + ' · ' + field(record, 'name');
-    if (name === 'irq_handler_exit') return record.tracepoint + ' · ret=' + fields.ret;
-    if (name === 'workqueue_queue_work') return name + ' · ' + workFunction(record);
-    if (name === 'workqueue_activate_work') return name + ' · ' + workFunction(record);
-    if (name === 'workqueue_execute_start') return name + ' · ' + workFunction(record);
-    if (name === 'workqueue_execute_end') return name + ' · ' + workFunction(record);
-    if (name === 'sched_switch') return name + ' · ' + field(record, 'prev_comm') + ' → ' + field(record, 'next_comm');
-    if (name === 'sched_waking') return name + ' · pid=' + field(record, 'pid') + ' · CPU ' + field(record, 'target_cpu');
-    if (/^sys_(enter|entry)_/.test(name)) return name.replace(/^sys_(enter|entry)_/, '') + ' enter';
-    if (/^sys_exit_/.test(name)) return name.replace(/^sys_exit_/, '') + ' return=' + field(record, 'return_value');
-    return name
+    return traceName(record)
   }
 
   function workFunction(record) {
@@ -768,84 +744,57 @@ import {
     return match ? match[1] : 'work item'
   }
 
-  function evidence(record) {
-    var name = traceName(record),
-      operation = field(record, 'operation');
-    if (name === 'qedu_probe_stage') {
-      if (field(record, 'stage') === 'DMA_MASK_CONFIGURED') return field(record, 'dma_mask_bits') + '-bit coherent DMA mask · result=' + field(record, 'result');
-      return field(record, 'resource') + ' · result=' + field(record, 'result')
-    }
-    if (name === 'dma_alloc') return field(record, 'size_bytes') + ' B coherent · DMA ' + field(record, 'dma_address') + ' · CPU token ' + field(record, 'cpu_pointer_token');
-    if (name === 'qedu_file_op') return field(record, 'operation') + ' ' + field(record, 'phase') + ' · count ' + field(record, 'count') + ' · offset ' + field(record, 'offset') + (field(record, 'phase') === 'EXIT' ? ' · result ' + field(record, 'result') : '') + (field(record, 'engine') !== 'NONE' ? ' · ' + field(record, 'engine') : '');
-    if (name === 'qedu_cpu_buffer_io' && operation === 'COPY_FROM_USER') return 'CPU copy · ' + field(record, 'completed') + ' B · userspace → coherent RAM';
-    if (name === 'qedu_cpu_buffer_io' && operation === 'CLEAR_FOR_DMA_RETURN') return 'Worker cleared coherent RAM.';
-    if (name === 'qedu_cpu_buffer_io' && operation === 'COPY_TO_USER') return 'CPU copy · ' + field(record, 'completed') + ' B · coherent RAM → userspace';
-    if (name === 'qedu_dma_stage') return 'Driver state · ' + field(record, 'old') + ' → ' + field(record, 'new');
-    if (name === 'qedu_dma_submit') return 'Programmed SRC · DST · COUNT · CMD ' + field(record, 'command', {}).raw;
-    if (name === 'qedu_irq_ack') return 'Hardirq · STATUS ' + field(record, 'status', {}).raw + ' · ACK ' + field(record, 'ack');
-    if (name === 'qedu_dma_work_queue') return 'Queue ' + field(record, 'work_kind') + ' · queued=' + field(record, 'queued');
-    if (name === 'qedu_completion_publish') return 'completed_events · ' + field(record, 'bits_before') + ' → ' + field(record, 'bits_after');
-    if (name === 'qedu_wait') return field(record, 'phase') + ' · completion_bits ' + field(record, 'completion_bits') + ' · wait_ret ' + field(record, 'wait_ret');
-    if (name.indexOf('workqueue_') === 0) return 'Kernel workqueue lifecycle boundary.';
-    if (name.indexOf('irq_handler_') === 0) return 'IRQ ' + field(record, 'irq') + ' · handler ' + (name.endsWith('entry') ? 'entry' : 'exit');
-    if (name.indexOf('sched_') === 0) return 'Workload scheduling boundary.';
-    if (name.indexOf('sys_') === 0) return 'Userspace ↔ kernel boundary.';
-    if (name === 'qedu_factorial_submit') return 'MMIO · input ' + field(record, 'input') + ' · IRQ enabled';
-    if (name === 'qedu_factorial_result') return 'MMIO result read · ' + field(record, 'result');
-    return 'Captured tracepoint fields.'
-  }
-
   function actorModel(journey) {
     if (journey.kind === 'setup') return [{
       id: 'pci',
-      type: 'PCI SUBSYSTEM',
+      type: 'PCI',
       name: deviceResource.fields.bdf,
-      detail: deviceResource.fields.vendor_device + ' · probe owner'
+      detail: 'probe owner'
     }, {
       id: 'driver',
-      type: 'PCI DRIVER',
+      type: 'DRIVER',
       name: 'qedu_probe()',
-      detail: 'acquires and publishes device resources'
+      detail: 'resource owner'
     }, {
       id: 'devres',
-      type: 'DEVICE-MANAGED ALLOCATOR',
+      type: 'DEVRES',
       name: 'devm_kzalloc()',
-      detail: 'owns struct qedu_dev until detach'
+      detail: 'device state'
     }, {
       id: 'irq_core',
-      type: 'IRQ SUBSYSTEM',
+      type: 'IRQ',
       name: 'request_irq()',
-      detail: 'Linux IRQ ' + irqResource.fields.linux_irq + ' · shared INTx'
+      detail: 'IRQ ' + irqResource.fields.linux_irq + ' · INTx'
+    }, {
+      id: 'controller',
+      type: 'LAPIC',
+      name: 'vector ' + controllerResource.fields.vector,
+      detail: 'CPU ' + controllerResource.fields.target_cpu
     }, {
       id: 'dma_api',
-      type: 'DMA API / ALLOCATOR',
-      name: 'dma_alloc_coherent()',
-      detail: '32-bit coherent DMA domain'
+      type: 'DMA API',
+      name: 'dma_alloc_coherent',
+      detail: dmaResource.fields.dma_mask_bits + '-bit coherent'
     }, {
       id: 'ram',
-      type: 'SYSTEM RAM',
-      name: 'coherent DMA buffer',
-      detail: bytes(dmaResource.fields.size_bytes) + ' · CPU + device views'
+      type: 'RAM',
+      name: 'coherent buffer',
+      detail: bytes(dmaResource.fields.size_bytes) + ' · CPU + DMA'
     }, {
       id: 'workqueue_core',
-      type: 'WORKQUEUE CORE',
-      name: 'alloc_ordered_workqueue()',
-      detail: 'qedu_dma · one ordered execution lane'
+      type: 'WORKQUEUE',
+      name: 'ordered workqueue',
+      detail: 'qedu_dma'
     }, {
       id: 'misc_core',
-      type: 'MISC CORE',
-      name: 'misc_register()',
-      detail: fileResource.fields.path + ' · minor ' + fileResource.fields.minor
-    }, {
-      id: 'sysfs_core',
-      type: 'SYSFS',
-      name: '/sys/class/misc/qedu',
-      detail: 'timeout + statistics attributes'
+      type: 'MISC',
+      name: 'misc_register',
+      detail: fileResource.fields.path
     }, {
       id: 'debugfs_core',
       type: 'DEBUGFS',
-      name: '/sys/kernel/debug/qedu/status',
-      detail: 'diagnostic state snapshot'
+      name: 'qedu debugfs',
+      detail: 'status snapshot'
     }];
     var operation = journey.operation;
     var processRecord = operation.events.find(function(record) {
@@ -864,61 +813,61 @@ import {
     var irqName = irqRecord && field(irqRecord, 'name', 'IRQ ' + irqResource.fields.linux_irq) || 'IRQ ' + irqResource.fields.linux_irq;
     var common = [{
       id: 'user',
-      type: 'REQUESTER',
+      type: 'REQUEST',
       name: processName,
       detail: 'PID ' + workloadPid
     }, {
       id: 'file',
-      type: 'VFS / OPEN FILE',
+      type: 'FILE',
       name: fileResource.fields.path,
-      detail: 'fd ' + field(openExit, 'return_fd') + ' · misc minor ' + fileResource.fields.minor
+      detail: 'fd ' + field(openExit, 'return_fd') + ' · minor ' + fileResource.fields.minor
     }, {
       id: 'driver',
-      type: 'FILE OPERATIONS / DRIVER',
+      type: 'DRIVER',
       name: deviceResource.fields.driver,
       detail: deviceResource.fields.bdf
     }, {
       id: 'device',
-      type: 'PCI FUNCTION',
+      type: 'DEVICE',
       name: deviceResource.fields.vendor_device,
       detail: deviceResource.fields.bdf
     }, {
       id: 'scheduler',
       type: 'SCHEDULER',
       name: 'sched core',
-      detail: 'captured switch / waking records'
+      detail: 'switch + wakeup'
     }, {
       id: 'state',
-      type: 'WAIT QUEUE + CONDITION',
+      type: 'WAIT',
       name: 'job_wait',
-      detail: 'predicate: completed_events · io_id ' + operation.id
+      detail: 'completed_events'
     }, {
       id: 'irq',
-      type: 'HARDIRQ CONTEXT',
+      type: 'IRQ CTX',
       name: irqName,
-      detail: 'Linux IRQ ' + irqResource.fields.linux_irq
+      detail: 'IRQ ' + irqResource.fields.linux_irq
     }, {
       id: 'controller',
-      type: 'CONFIGURED / INFERRED',
+      type: 'IRQ ROUTE',
       name: controllerResource.fields.route,
       detail: 'vector ' + controllerResource.fields.vector + ' · CPU ' + controllerResource.fields.target_cpu,
       inferred: true
     }, {
       id: 'irq_core',
-      type: 'GENERIC IRQ CORE',
-      name: 'irq_desc / action chain',
-      detail: 'invokes qedu on shared Linux IRQ ' + irqResource.fields.linux_irq
+      type: 'IRQ CORE',
+      name: 'irq_desc chain',
+      detail: 'shared IRQ ' + irqResource.fields.linux_irq
     }, {
       id: 'ram',
-      type: 'SYSTEM RAM',
-      name: 'coherent DMA buffer',
-      detail: bytes(dmaResource.fields.size_bytes) + ' · DMA ' + dmaResource.fields.dma_address + ' · CPU VA ' + dmaResource.fields.cpu_virtual_address
+      type: 'RAM',
+      name: 'coherent buffer',
+      detail: bytes(dmaResource.fields.size_bytes) + ' · DMA buffer'
     }];
     if (journey.kind === 'dma') common.push({
       id: 'worker',
-      type: 'WORKQUEUE / KWORKER',
-      name: workerRecord && workerRecord.context.comm || 'qedu_dma worker',
-      detail: workerRecord ? 'PID ' + workerRecord.context.pid : 'workqueue record unavailable'
+      type: 'WORKQUEUE',
+      name: workerRecord && workerRecord.context.comm || 'qedu_dma',
+      detail: workerRecord ? 'PID ' + workerRecord.context.pid : 'no PID'
     });
     return common
   }
@@ -930,12 +879,17 @@ import {
       edges = [],
       nodes = [];
 
-    function connect(from, to, label, kind) {
+    function connect(from, to, label, kind, evidence) {
+      var rawKind = String(kind || 'control'),
+        inferred = evidence || (/\binferred-route\b/.test(rawKind) ? 'inferred' : 'observed');
       edges.push({
         from: from,
         to: to,
         label: label || record.tracepoint,
-        kind: kind || 'control'
+        kind: rawKind.replace(/\binferred-route\b/g, '').trim().replace(/\s+/g, '-') || 'control',
+        evidence: inferred,
+        local: from === to,
+        step: edges.length + 1
       })
     }
 
@@ -944,25 +898,26 @@ import {
     }
     if (journey.kind === 'setup') {
       if (name === 'dma_alloc') connect('dma_api', 'ram', 'allocate ' + bytes(field(record, 'size_bytes')) + ' coherent RAM', 'allocation');
-      else if (name === 'qedu_probe_stage') {
-        var probeStage = field(record, 'stage'),
-          api = field(record, 'api', probeStage),
+      else if (name === 'vector_alloc') connect('irq_core', 'controller', 'vector_alloc · vector ' + field(record, 'vector'), 'configuration');
+      else if (name === 'vector_config') connect('irq_core', 'controller', 'vector_config · CPU ' + field(record, 'cpu'), 'configuration');
+      else if (name === 'qedu_probe_api') {
+        var probeApi = field(record, 'api'),
+          api = probeApi,
           resourceName = field(record, 'resource'),
-          label = api + ' · ' + resourceName;
-        if (probeStage === 'PROBE_BEGIN') connect('pci', 'driver', label, 'probe');
-        else if (probeStage === 'DEVICE_STATE_READY') connect('driver', 'devres', api + ' · ' + bytes(field(record, 'object_size_bytes')) + ' ' + resourceName, 'allocation');
-        else if (probeStage === 'PCI_ENABLED') connect('driver', 'pci', label, 'resource');
-        else if (probeStage === 'BAR_REGIONS_CLAIMED') connect('driver', 'pci', api + ' · BAR0 ' + bytes(field(record, 'bar0_length_bytes')), 'resource');
-        else if (probeStage === 'BAR0_MAPPED') connect('driver', 'pci', api + ' · ' + bytes(field(record, 'mapped_length_bytes')), 'resource');
-        else if (probeStage === 'IRQ_REGISTERED') connect('driver', 'irq_core', api + ' · IRQ ' + field(record, 'linux_irq'), 'registration');
-        else if (probeStage === 'DMA_MASK_CONFIGURED') connect('driver', 'dma_api', api + ' · ' + field(record, 'dma_mask_bits') + '-bit', 'configuration');
-        else if (probeStage === 'BUS_MASTER_ENABLED') connect('driver', 'pci', api + ' · result=' + field(record, 'result'), 'configuration');
-        else if (probeStage === 'DMA_BUFFER_READY') connect('driver', 'dma_api', api + ' · ' + bytes(field(record, 'size_bytes')) + ' · DMA ' + field(record, 'dma_address'), 'allocation');
-        else if (probeStage === 'WORKQUEUE_READY') connect('driver', 'workqueue_core', label, 'registration');
-        else if (probeStage === 'CHARDEV_PUBLISHED') connect('driver', 'misc_core', label, 'publication');
-        else if (probeStage === 'SYSFS_PUBLISHED') connect('driver', 'sysfs_core', label, 'publication');
-        else if (probeStage === 'DEBUGFS_PUBLISHED') connect('driver', 'debugfs_core', label + ' · result=' + field(record, 'result'), 'publication');
-        else if (probeStage === 'PROBE_READY') connect('driver', 'pci', api + ' · return=' + field(record, 'result'), 'probe')
+          label = api + ' · ' + shortResource(resourceName);
+        if (probeApi === 'qedu_probe' && resourceName === 'pci_driver_probe') connect('pci', 'driver', label, 'probe');
+        else if (probeApi === 'qedu_probe' && resourceName === 'bound_qedu_device') connect('driver', 'pci', api + ' · return=' + field(record, 'result'), 'probe');
+        else if (probeApi === 'devm_kzalloc') connect('driver', 'devres', api + ' · ' + bytes(field(record, 'object_size_bytes')) + ' ' + resourceName, 'allocation');
+        else if (probeApi === 'pci_enable_device') connect('driver', 'pci', label, 'resource');
+        else if (probeApi === 'pci_request_regions') connect('driver', 'pci', api + ' · BAR0 ' + bytes(field(record, 'bar0_length_bytes')), 'resource');
+        else if (probeApi === 'pci_iomap') connect('driver', 'pci', api + ' · ' + bytes(field(record, 'mapped_length_bytes')), 'resource');
+        else if (probeApi === 'request_irq') connect('driver', 'irq_core', api + ' · IRQ ' + field(record, 'linux_irq'), 'registration');
+        else if (probeApi === 'dma_set_mask_and_coherent') connect('driver', 'dma_api', api + ' · ' + field(record, 'dma_mask_bits') + '-bit', 'configuration');
+        else if (probeApi === 'pci_set_master') connect('driver', 'pci', api + ' · result=' + field(record, 'result'), 'configuration');
+        else if (probeApi === 'dma_alloc_coherent') connect('ram', 'driver', api + ' returned · DMA ' + field(record, 'dma_address'), 'allocation');
+        else if (probeApi === 'alloc_ordered_workqueue') connect('driver', 'workqueue_core', label, 'registration');
+        else if (probeApi === 'misc_register') connect('driver', 'misc_core', label, 'publication');
+        else if (probeApi === 'debugfs_create_dir' || probeApi === 'debugfs_create_file') connect('driver', 'debugfs_core', label + ' · result=' + field(record, 'result'), 'publication')
       }
       edges.forEach(function(edge) {
         activate(edge.from);
@@ -999,16 +954,21 @@ import {
       connect(executor, 'device', 'CMD ' + command.raw + ' · ' + field(record, 'bytes') + ' B', 'mmio');
       connect('device', 'ram', (direction === 'DMA_TO_DEVICE' ? 'DMA read submitted · RAM → EDU' : 'DMA write submitted · EDU → RAM') + ' · ' + field(record, 'bytes') + ' B', 'dma-submitted')
     } else if (name === 'irq_handler_entry') {
-      connect('device', 'controller', 'configured ' + controllerResource.fields.route, 'inferred-route');
-      connect('controller', 'irq_core', 'vector ' + controllerResource.fields.vector + ' · CPU ' + controllerResource.fields.target_cpu, 'interrupt inferred-route');
+      connect('device', 'controller', 'INTx delivery', 'route', 'inferred');
+      connect('controller', 'irq_core', 'vector ' + controllerResource.fields.vector + ' · CPU ' + controllerResource.fields.target_cpu, 'interrupt', 'inferred');
       connect('irq_core', 'irq', record.tracepoint + ' · irq=' + field(record, 'irq') + ' · ' + field(record, 'name'), 'interrupt')
     } else if (name === 'irq_handler_exit') connect('irq', 'irq_core', record.tracepoint + ' · ret=' + field(record, 'ret'), 'interrupt');
     else if (name === 'qedu_irq_ack') connect('irq', 'device', 'STATUS ' + field(record, 'status', {}).raw + ' · ACK ' + field(record, 'ack'), 'mmio');
     else if (name === 'qedu_dma_work_queue') connect('irq', 'worker', field(record, 'work_kind') + ' · queued=' + field(record, 'queued'), 'workqueue');
     else if (name === 'workqueue_queue_work') connect('irq', 'worker', record.tracepoint + ' · ' + workFunction(record), 'workqueue');
     else if (name === 'qedu_completion_publish') connect(execution === 'hardirq' ? 'irq' : 'worker', 'state', 'bit ' + field(record, 'event_bit') + ' · ' + field(record, 'bits_before') + ' → ' + field(record, 'bits_after'), 'state');
-    else if (name === 'qedu_wait') connect(field(record, 'phase') === 'BEGIN' ? 'driver' : 'state', field(record, 'phase') === 'BEGIN' ? 'state' : 'driver', field(record, 'engine') + ' ' + field(record, 'phase') + ' · ret=' + field(record, 'wait_ret'), 'state');
-    else if (name === 'sched_waking') {
+    else if (name === 'qedu_wait') connect(
+      field(record, 'phase') === 'BEGIN' ? 'driver' : 'state',
+      field(record, 'phase') === 'BEGIN' ? 'state' : 'driver',
+      record.tracepoint + ' · ' + field(record, 'phase'),
+      'state'
+    );
+    else if (name === 'sched_wakeup') {
       var waker = execution === 'hardirq' ? 'irq' : execution === 'workqueue' ? 'worker' : 'state';
       connect(waker, 'scheduler', record.tracepoint + ' · pid=' + field(record, 'pid'), 'scheduler');
       connect('scheduler', 'user', 'runnable · CPU ' + field(record, 'target_cpu'), 'scheduler')
@@ -1034,21 +994,15 @@ import {
     }
   }
 
-  function stageActivity(item) {
-    var counts = {};
-    item.records.forEach(function(record) {
-      recordFlow(record, selectedJourney).nodes.forEach(function(id) {
-        counts[id] = (counts[id] || 0) + 1
-      })
-    });
-    return counts
-  }
-
   function renderActorGraph() {
-    var item = selectedJourney.steps[selectedStep],
-      activity = stageActivity(item),
+    var item = selectedJourney.fullFlow,
+      focus = selectedEvent && item.records.indexOf(selectedEvent) >= 0 ? selectedEvent : item.anchor || item.records[0],
+      active = {},
       nodes = actorModel(selectedJourney);
-    var order = selectedJourney.kind === 'setup' ? ['pci', 'driver', 'devres', 'irq_core', 'dma_api', 'ram', 'workqueue_core', 'misc_core', 'sysfs_core', 'debugfs_core'] : ['user', 'file', 'driver', 'ram', 'device', 'controller', 'irq_core', 'irq', 'worker', 'state', 'scheduler'];
+    if (focus) recordFlow(focus, selectedJourney).nodes.forEach(function(id) {
+      active[id] = true
+    });
+    var order = selectedJourney.kind === 'setup' ? ['pci', 'driver', 'devres', 'irq_core', 'controller', 'dma_api', 'ram', 'workqueue_core', 'misc_core', 'debugfs_core'] : ['user', 'file', 'driver', 'ram', 'device', 'controller', 'irq_core', 'irq', 'worker', 'state', 'scheduler'];
     nodes.sort(function(a, b) {
       return order.indexOf(a.id) - order.indexOf(b.id)
     });
@@ -1058,8 +1012,7 @@ import {
     });
     $('sequence-head').style.gridTemplateColumns = 'repeat(' + nodes.length + ',minmax(82px,1fr))';
     $('sequence-head').innerHTML = nodes.map(function(node) {
-      var count = activity[node.id] || 0;
-      return '<article data-actor="' + esc(node.id) + '" class="sequence-actor ' + (count ? 'active ' : '') + (node.inferred ? 'inferred' : '') + '" title="' + esc(node.type + ' · ' + node.name + ' · ' + node.detail) + '"><small>' + esc(node.type) + '</small><b>' + esc(node.name) + '</b><em>' + count + ' record' + (count === 1 ? '' : 's') + '</em></article>'
+      return '<article data-actor="' + esc(node.id) + '" class="sequence-actor ' + (active[node.id] ? 'active ' : '') + (node.inferred ? 'inferred' : '') + '"><small>' + esc(node.type) + '</small><b>' + esc(node.name) + '</b><em>' + esc(node.detail) + '</em></article>'
     }).join('');
     var interactions = [];
     item.records.forEach(function(record) {
@@ -1072,68 +1025,60 @@ import {
       });
       else mapped.nodes.forEach(function(actorId) {
         interactions.push({
-          actor: actorId,
+          flow: {
+            from: actorId,
+            to: actorId,
+            label: eventTitle(record),
+            kind: 'observation',
+            evidence: 'observed',
+            local: true,
+            step: 1
+          },
           record: record
         })
       })
     });
     $('sequence-body').style.setProperty('--rows', Math.max(interactions.length, 1));
     var lifelines = '<div class="sequence-lifelines">' + nodes.map(function(node, index) {
-      return '<i class="' + ((activity[node.id] || 0) ? 'active ' : '') + (node.inferred ? 'inferred' : '') + '" style="left:' + ((index + .5) / nodes.length * 100) + '%"></i>'
+      return '<i class="' + (active[node.id] ? 'active ' : '') + (node.inferred ? 'inferred' : '') + '" style="left:' + ((index + .5) / nodes.length * 100) + '%"></i>'
     }).join('') + '</div>';
     var rows = interactions.map(function(interaction) {
       var record = interaction.record,
-        label = interaction.flow ? interaction.flow.label : eventTitle(record),
-        selected = selectedSequenceSeq === record.seq ? ' selected' : '';
-      if (!interaction.flow) {
-        var local = (laneById[interaction.actor] + .5) / nodes.length * 100;
-        return '<button type="button" class="sequence-row local' + selected + '" data-sequence-event="' + record.seq + '"><span class="sequence-time">+' + esc(duration(ns(record) - selectedJourney.operation.start)) + '</span><i class="sequence-local-mark" style="left:' + local + '%"></i><code style="left:' + local + '%" title="' + esc(record.tracepoint) + '">' + esc(label) + '</code></button>'
-      }
+        flow = interaction.flow,
+        label = flow.label || eventTitle(record),
+        selected = selectedSequenceSeq === record.seq && selectedSequenceStep === flow.step ? ' selected' : '',
+        kind = esc(flow.kind || 'control'),
+        evidence = esc(flow.evidence || 'observed'),
+        metadata = ' data-flow-kind="' + kind + '" data-flow-evidence="' + evidence + '" data-flow-step="' + flow.step + '"';
+      if (laneById[interaction.flow.from] == null || laneById[interaction.flow.to] == null) return '';
       var from = (laneById[interaction.flow.from] + .5) / nodes.length * 100,
         to = (laneById[interaction.flow.to] + .5) / nodes.length * 100,
         left = Math.min(from, to),
         width = Math.abs(to - from),
         direction = to > from ? 'forward' : 'reverse';
-      return '<button type="button" class="sequence-row' + selected + '" data-sequence-event="' + record.seq + '"><span class="sequence-time">+' + esc(duration(ns(record) - selectedJourney.operation.start)) + '</span><i class="sequence-arrow ' + direction + ' ' + esc(interaction.flow.kind) + '" data-from="' + esc(interaction.flow.from) + '" data-to="' + esc(interaction.flow.to) + '" title="' + esc(interaction.flow.from + ' → ' + interaction.flow.to + ' · ' + label) + '" style="left:' + left + '%;width:' + width + '%"></i><i class="sequence-point" style="left:' + from + '%"></i><i class="sequence-point" style="left:' + to + '%"></i><code style="left:' + ((from + to) / 2) + '%" title="' + esc(record.tracepoint) + '">' + esc(label.split(':').pop()) + '</code></button>'
+      if (flow.local || from === to) {
+        return '<button type="button" class="sequence-row local' + selected + '" data-sequence-event="' + record.seq + '"' + metadata + ' aria-label="' + esc(label) + '"><i class="sequence-local-mark ' + kind + ' evidence-' + evidence + '" style="left:' + from + '%"></i><span class="sequence-label local" style="left:' + from + '%">' + esc(label.split(':').pop()) + '</span></button>'
+      }
+      return '<button type="button" class="sequence-row' + selected + '" data-sequence-event="' + record.seq + '"' + metadata + ' aria-label="' + esc(interaction.flow.from + ' to ' + interaction.flow.to + ' · ' + label) + '"><i class="sequence-arrow ' + direction + ' ' + kind + ' evidence-' + evidence + '" data-from="' + esc(interaction.flow.from) + '" data-to="' + esc(interaction.flow.to) + '" style="left:' + left + '%;width:' + width + '%"></i><i class="sequence-point evidence-' + evidence + '" style="left:' + from + '%"></i><i class="sequence-point evidence-' + evidence + '" style="left:' + to + '%"></i><span class="sequence-label" style="left:' + ((from + to) / 2) + '%">' + esc(label.split(':').pop()) + '</span></button>'
     }).join('');
     $('sequence-body').innerHTML = lifelines + (rows || '<p class="sequence-empty">No captured interaction in this stage.</p>');
     Array.prototype.forEach.call(document.querySelectorAll('[data-sequence-event]'), function(row) {
       row.onclick = function() {
-        selectRecord(selectedStep, number(row.dataset.sequenceEvent))
+        selectRecord(number(row.dataset.sequenceEvent), number(row.dataset.flowStep))
       }
     })
   }
 
-  function renderHeader() {
-    var loss = footer.trace_loss || {},
-      lost = Object.keys(loss).reduce(function(sum, key) {
-        return sum + number(loss[key])
-      }, 0),
-      skipped = parseStats.malformed + parseStats.skippedTrace;
-    $('capture-status').classList.toggle('complete', !lost && !skipped);
-    $('capture-status').innerHTML = '<i></i><span>' + esc(deviceResource.fields.bdf) + ' · ' + esc(footer.tracepoint_records) + ' events · ' + lost + ' lost' + (skipped ? ' · ' + skipped + ' unparsed' : '') + '</span>'
-  }
-
-  function renderJourneyHeader() {
-    $('journey-kicker').textContent = selectedJourney.kind === 'setup' ? 'CAPTURED DRIVER LIFECYCLE' : 'CAPTURED I/O · io_id ' + selectedJourney.operation.id;
-    $('journey-title').textContent = selectedJourney.title;
-    $('journey-caption').textContent = selectedJourney.caption
-  }
-
   function renderRoadmap() {
     var kinds = ['setup', 'factorial', 'dma'];
+    var phase = 0;
     $('step-roadmap').innerHTML = kinds.map(function(kind) {
       var journey = journeys[kind];
       if (!journey) return '';
-      var subtitle = kind === 'setup' ? 'module insertion → ready' : 'io_id ' + journey.operation.id;
-      var steps = journey.steps.map(function(item, index) {
-        var navIndex = navigation.findIndex(function(entry) {
-          return entry.journey === journey && entry.step === index
-        });
-        var state = navIndex === selectedNav ? 'active' : '';
-        return '<section class="flow-group ' + state + '"><button type="button" class="flow-step" data-navigation="' + navIndex + '"><b>' + esc(item.shortTitle) + '</b></button></section>'
-      }).join('');
-      return '<section class="roadmap-section ' + (journey === selectedJourney ? 'active' : '') + '"><header><b>' + esc(journey.title) + '</b><small>' + esc(subtitle) + '</small></header>' + steps + '</section>'
+      phase++;
+      return '<button type="button" class="selector-option ' + (journey === selectedJourney ? 'active' : '') + '" data-navigation="' + navigation.findIndex(function(entry) {
+        return entry.journey === journey
+      }) + '"><span class="selector-kicker">PHASE ' + phase + '</span><span class="selector-label">' + esc(journey.title) + '</span></button>';
     }).join('');
     Array.prototype.forEach.call(document.querySelectorAll('[data-navigation]'), function(button) {
       button.onclick = function() {
@@ -1143,46 +1088,31 @@ import {
   }
 
   function renderStep() {
-    var item = selectedJourney.steps[selectedStep],
+    var item = selectedJourney.fullFlow,
       anchor = item.anchor || item.records[0];
-    $('step-position').textContent = (selectedNav + 1) + ' of ' + navigation.length;
-    $('prev-stage').disabled = selectedNav === 0;
-    $('next-stage').disabled = selectedNav === navigation.length - 1;
     if (!selectedEvent || item.records.indexOf(selectedEvent) < 0) selectedEvent = anchor || item.records[0] || null;
     renderActorGraph();
     renderInspector()
   }
 
   function renderResources() {
-    var rows;
-    if (selectedJourney.kind === 'setup') rows = [
-      ['PCI function', deviceResource.fields.bdf + ' · ' + deviceResource.fields.vendor_device],
-      ['BAR0', barResource.fields.bus_start + ' · ' + barResource.fields.length],
-      ['IRQ action', 'Linux ' + irqResource.fields.linux_irq + ' · shared INTx'],
-      ['coherent RAM', dmaResource.fields.cpu_virtual_address + ' · ' + bytes(dmaResource.fields.size_bytes)],
-      ['DMA address', dmaResource.fields.dma_address],
-      ['file + sysfs', fileResource.fields.path + ' · /sys/class/misc/qedu'],
-      ['debugfs', '/sys/kernel/debug/qedu/status']
-    ];
-    else {
-      var common = [
-        ['file interface', fileResource.fields.path + ' · minor ' + fileResource.fields.minor],
-        ['IRQ route', 'Linux ' + irqResource.fields.linux_irq + ' · ' + irqResource.fields.delivery],
-        ['configured vector', controllerResource.fields.vector + ' · CPU ' + controllerResource.fields.target_cpu]
-      ];
-      var specific = selectedJourney.kind === 'dma' ? [
-        ['CPU virtual', dmaResource.fields.cpu_virtual_address],
-        ['DMA address', dmaResource.fields.dma_address],
-        ['device-local', localResource.fields.offset]
-      ] : [
-        ['BAR0', barResource.fields.bus_start],
-        ['factorial reg', 'BAR0 + 0x08'],
-        ['completion', 'completed_events bit 0']
-      ];
-      rows = common.concat(specific)
+    function compact(parts) {
+      return parts.filter(function(value) {
+        return value !== null && value !== undefined && value !== ''
+      }).join(' · ') || '—'
     }
-    $('resource-facts').innerHTML = rows.map(function(row) {
-      return '<div class="resource-row"><small>' + esc(row[0]) + '</small><code title="' + esc(row[1]) + '">' + esc(row[1]) + '</code></div>'
+    var rows = [
+      ['PCI', compact([deviceResource.fields.bdf, deviceResource.fields.vendor_device])],
+      ['BAR0', compact([barResource.fields.bus_start, barResource.fields.length])],
+      ['FILE', compact([fileResource.fields.path, fileResource.fields.minor == null ? null : 'minor ' + fileResource.fields.minor])],
+      ['IRQ', compact([irqResource.fields.linux_irq == null ? null : 'Linux ' + irqResource.fields.linux_irq, irqResource.fields.delivery])],
+      ['VECTOR', compact([controllerResource.fields.vector, controllerResource.fields.target_cpu == null ? null : 'CPU ' + controllerResource.fields.target_cpu])],
+      ['RAM', compact([dmaResource.fields.cpu_virtual_address, bytes(dmaResource.fields.size_bytes)])],
+      ['DMA', compact([dmaResource.fields.dma_address])],
+      ['LOCAL', compact([localResource.fields.offset])]
+    ];
+    $('journey-resources').innerHTML = rows.map(function(row) {
+      return '<span class="journey-resource" title="' + esc(row[0] + ' · ' + row[1]) + '"><small>' + esc(row[0]) + '</small><i aria-hidden="true">|</i><b>' + esc(row[1]) + '</b></span>'
     }).join('')
   }
 
@@ -1198,52 +1128,65 @@ import {
   function renderInspector() {
     var record = selectedEvent;
     if (!record) return;
-    var proof = evidence(record),
-      context = record.context || {};
-    $('inspect-index').textContent = 'record ' + record.seq + ' · +' + duration(ns(record) - selectedJourney.operation.start);
-    $('inspect-title').textContent = eventTitle(record);
-    $('inspect-tracepoint').textContent = record.tracepoint;
-    $('inspect-proof').textContent = proof;
-    $('inspect-evidence').textContent = isQedu(record) ? 'semantic trace' : 'kernel trace';
-    var contextFields = [
-      ['context', context.execution],
-      ['CPU', 'CPU ' + context.cpu],
-      ['task', context.comm],
-      ['PID', context.pid],
-      ['flags', context.trace_flags],
-      ['timestamp', record.time_ns + ' ns']
-    ];
-    $('inspect-context').innerHTML = contextFields.map(function(item) {
-      return '<div class="context-item"><small>' + esc(item[0]) + '</small><b title="' + esc(item[1]) + '">' + esc(item[1]) + '</b></div>'
-    }).join('');
-    var fields = {};
-    Object.keys(record.fields || {}).forEach(function(key) {
-      if (key !== 'raw_payload') fields[key] = record.fields[key]
+    renderOrigin('inspect-origin', record);
+    var canonicalData = record.canonical && record.canonical.data || {},
+      rawFields = canonicalData.fields || canonicalData.event_info || {},
+      rawRows = flatten(rawFields, '', []).filter(function(item) {
+      return item[1] !== null && item[1] !== undefined && item[1] !== ''
     });
-    var rows = flatten(fields, '', []);
-    $('inspect-fields').innerHTML = rows.length ? rows.map(function(item) {
-      return '<dt>' + esc(item[0]) + '</dt><dd>' + esc(item[1]) + '</dd>'
-    }).join('') : '<dt>payload</dt><dd>no structured fields</dd>';
+    function list(rows, empty) {
+      return rows.length ? rows.map(function(item) {
+        return '<div><small>' + esc(item[0]) + '</small><b title="' + esc(item[1]) + '">' + esc(item[1]) + '</b></div>'
+      }).join('') : '<p class="fields-empty">' + empty + '</p>'
+    }
+    $('inspect-fields').innerHTML = list(rawRows, 'no fields');
+  }
+
+  function taskContext(context) {
+    context = context || {};
+    var task = context.comm || '—',
+      pid = context.pid != null ? 'PID ' + context.pid : context.tid != null ? 'TID ' + context.tid : '';
+    if (pid) task += ' · ' + pid;
+    return task;
+  }
+
+  function renderOrigin(id, record) {
+    var source = record.canonical && record.canonical.source || {},
+      mechanism = mechanismLabel(source.mechanism || (record.record === 'workload_marker' ? 'workload' : '—')),
+      hook = record.tracepoint || source.hook || 'phase',
+      context = record.canonical && record.canonical.context || record.context || {};
+    var rows = [
+      ['mechanism', mechanism, ''],
+      ['hook', hook, ''],
+      ['CPU', context.cpu == null ? '—' : 'CPU ' + context.cpu, ''],
+      ['task', taskContext(context), '']
+    ];
+    $(id).innerHTML = rows.map(function(row) {
+      return '<div class="' + row[2] + '"><small>' + esc(row[0]) + '</small><b title="' + esc(row[1]) + '">' + esc(row[1]) + '</b></div>'
+    }).join('')
+  }
+
+  function mechanismLabel(value) {
+    return value === 'ebpf' ? 'eBPF' : value || '—'
   }
 
   function selectNavigation(index) {
     selectedNav = Math.max(0, Math.min(navigation.length - 1, index));
     var entry = navigation[selectedNav];
     selectedJourney = entry.journey;
-    selectedStep = entry.step;
     selectedSequenceSeq = null;
+    selectedSequenceStep = null;
     var item = entry.item;
     selectedEvent = item.anchor || item.records[0] || null;
     if (window.location.hash !== '#' + selectedJourney.kind) history.replaceState(null, '', '#' + selectedJourney.kind);
-    renderJourneyHeader();
     renderResources();
     renderRoadmap();
     renderStep()
   }
 
-  function selectRecord(stepIndex, sequence) {
-    selectedStep = stepIndex;
+  function selectRecord(sequence, flowStep) {
     selectedSequenceSeq = sequence;
+    selectedSequenceStep = flowStep;
     selectedEvent = tracepoints.find(function(record) {
       return record.seq === sequence
     }) || null;
@@ -1252,12 +1195,6 @@ import {
   }
 
   function bindControls() {
-    $('prev-stage').onclick = function() {
-      selectNavigation(selectedNav - 1)
-    };
-    $('next-stage').onclick = function() {
-      selectNavigation(selectedNav + 1)
-    };
     document.addEventListener('keydown', function(event) {
       if (event.target && /input|textarea|select/i.test(event.target.tagName)) return;
       if (event.key === 'ArrowLeft') selectNavigation(selectedNav - 1);
@@ -1271,7 +1208,6 @@ import {
         return entry.journey.kind === requested
       });
     if (initial < 0) initial = 0;
-    renderHeader();
     bindControls();
     selectNavigation(initial)
   }

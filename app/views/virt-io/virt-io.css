@@ -79,7 +79,7 @@ code,
 
 .eyebrow {
   color: var(--cyan);
-  font: 700 11px/1.2 var(--mono);
+  font: 700 10px/1.2 var(--mono);
   letter-spacing: .14em;
   text-transform: uppercase
 }
@@ -97,7 +97,7 @@ code,
 .head p {
   margin: 5px 0 0;
   color: var(--muted);
-  font: 11px/1.45 var(--mono)
+  font: 10px/1.45 var(--mono)
 }
 
 #status {
@@ -106,7 +106,7 @@ code,
   align-items: center;
   gap: 8px;
   color: var(--muted);
-  font: 11px var(--mono);
+  font: 10px var(--mono);
   white-space: nowrap
 }
 
@@ -162,7 +162,7 @@ code,
 .zone-label {
   min-width: 0;
   overflow: hidden;
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   text-overflow: ellipsis;
   white-space: nowrap
 }
@@ -193,7 +193,7 @@ code,
 
 .panel-head h2 {
   margin: 0;
-  font: 700 11px var(--mono);
+  font: 700 10px var(--mono);
   letter-spacing: .06em;
   text-transform: uppercase
 }
@@ -206,7 +206,7 @@ code,
   gap: 6px;
   overflow: hidden;
   color: var(--faint);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   white-space: nowrap
 }
 
@@ -232,27 +232,27 @@ code,
 
 .micro {
   color: var(--faint);
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   letter-spacing: .08em
 }
 
 .task {
   color: var(--text);
-  font: 700 11px var(--mono)
+  font: 700 8.5px var(--mono)
 }
 
 #episode-name {
   min-width: 0;
   overflow: hidden;
   color: var(--cyan);
-  font: 11px var(--mono);
+  font: 8.5px var(--mono);
   text-overflow: ellipsis;
   white-space: nowrap
 }
 
 #event-clock {
   color: var(--muted);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .stage {
@@ -309,7 +309,7 @@ code,
 }
 
 .dma .region-title b {
-  font-size: 11px
+  font-size: 9px
 }
 
 .region-title {
@@ -321,7 +321,7 @@ code,
 .region-title b {
   display: block;
   color: var(--text);
-  font: 700 11px var(--mono);
+  font: 700 10px var(--mono);
   letter-spacing: .05em
 }
 
@@ -329,13 +329,13 @@ code,
   display: block;
   margin-top: 3px;
   color: var(--faint);
-  font: 11px/1.3 var(--mono)
+  font: 8px/1.3 var(--mono)
 }
 
 .address {
   margin-left: auto;
   color: var(--region);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   white-space: nowrap
 }
 
@@ -344,7 +344,7 @@ code,
   align-items: center;
   gap: 7px;
   color: var(--muted);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 /* interrupt state */
@@ -377,7 +377,7 @@ code,
 
 .irq-life-head b {
   color: var(--cyan);
-  font: 800 11px var(--mono);
+  font: 800 9.5px var(--mono);
   letter-spacing: .05em;
   text-transform: uppercase;
   white-space: nowrap
@@ -387,7 +387,7 @@ code,
   min-width: 0;
   overflow: hidden;
   color: var(--text);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   text-overflow: ellipsis;
   white-space: nowrap
 }
@@ -433,7 +433,7 @@ code,
 
 .irq-life-steps b {
   color: var(--muted);
-  font: 700 11px var(--mono);
+  font: 700 8.2px var(--mono);
   letter-spacing: .025em;
   text-transform: uppercase
 }
@@ -441,7 +441,7 @@ code,
 .irq-life-steps small {
   margin: 0;
   color: var(--muted);
-  font: 11px var(--mono)
+  font: 8.2px var(--mono)
 }
 
 .irq-life-steps>span.seen {
@@ -506,13 +506,13 @@ code,
 
 .ctrl-group-head b {
   color: var(--g);
-  font: 800 11px var(--mono);
+  font: 800 8px var(--mono);
   letter-spacing: .06em
 }
 
 .ctrl-group-head span {
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .lapic-group {
@@ -524,19 +524,19 @@ code,
 }
 
 .ioapic-group .state-item label {
-  font-size: 11px
+  font-size: 8px
 }
 
 .ioapic-group .state-item .val {
-  font-size: 11px
+  font-size: 9.2px
 }
 
 .ioapic-group .state-item .sub {
-  font-size: 11px
+  font-size: 8px
 }
 
 .ioapic-group .state-item .val.big {
-  font-size: 11px
+  font-size: 10.2px
 }
 
 .state-grid {
@@ -573,7 +573,7 @@ code,
 .state-item label {
   display: block;
   color: var(--faint);
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   letter-spacing: .03em;
   white-space: nowrap;
   overflow: hidden;
@@ -584,21 +584,21 @@ code,
   display: block;
   margin-top: 2px;
   color: var(--text);
-  font: 800 11px var(--mono)
+  font: 800 9.2px var(--mono)
 }
 
 .state-item .sub {
   display: block;
   margin-top: 1px;
   color: var(--faint);
-  font: 11px/1.3 var(--mono);
+  font: 8px/1.3 var(--mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis
 }
 
 .state-item .val.big {
-  font-size: 11px
+  font-size: 10.2px
 }
 
 .state-item.changed {
@@ -667,7 +667,7 @@ code,
 .rt-end code {
   display: block;
   color: var(--blue);
-  font: 800 11px var(--mono);
+  font: 800 8px var(--mono);
   letter-spacing: .05em
 }
 
@@ -675,14 +675,14 @@ code,
   display: block;
   margin-top: 4px;
   color: var(--text);
-  font: 800 11px var(--mono)
+  font: 800 9.4px var(--mono)
 }
 
 .rt-end span {
   display: block;
   margin-top: 3px;
   color: var(--faint);
-  font: 11px/1.3 var(--mono)
+  font: 8px/1.3 var(--mono)
 }
 
 .rt-dev {
@@ -700,7 +700,7 @@ code,
 .rt-dev h3 {
   margin: 0;
   color: var(--faint);
-  font: 800 11px var(--mono);
+  font: 800 8px var(--mono);
   letter-spacing: .08em
 }
 
@@ -708,14 +708,14 @@ code,
   display: block;
   margin-top: 5px;
   color: var(--text);
-  font: 750 11px var(--mono)
+  font: 750 9px var(--mono)
 }
 
 .rt-dev small {
   display: block;
   margin-top: 3px;
   color: var(--muted);
-  font: 11px/1.3 var(--mono)
+  font: 8px/1.3 var(--mono)
 }
 
 .rt-edge {
@@ -755,11 +755,11 @@ code,
 
 /* phase-scoped component lifelines */
 .execution .region-title b {
-  font: 700 11px var(--mono)
+  font: 700 10px var(--mono)
 }
 
 .execution .region-title span {
-  font: 11px/1.3 var(--mono)
+  font: 8.5px/1.3 var(--mono)
 }
 
 .exec-html {
@@ -802,20 +802,20 @@ code,
 
 .component-actor small {
   color: var(--faint);
-  font: 700 11px var(--mono);
+  font: 700 8px var(--mono);
   letter-spacing: .045em
 }
 
 .component-actor b {
   margin-top: 3px;
   color: var(--text);
-  font: 750 11px var(--mono)
+  font: 750 8px var(--mono)
 }
 
 .component-actor em {
   margin-top: 3px;
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .component-actor.active {
@@ -985,7 +985,7 @@ code,
   border-radius: 2px;
   background: rgba(7, 12, 18, .9);
   color: var(--text);
-  font: 650 11px var(--mono);
+  font: 650 8px var(--mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis
@@ -1002,7 +1002,7 @@ code,
   bottom: 3px;
   z-index: 6;
   color: var(--faint);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .component-tail {
@@ -1010,7 +1010,7 @@ code,
   border-top: 1px solid rgba(74, 92, 106, .34);
   background: rgba(9, 15, 21, .58);
   color: var(--muted);
-  font: 11px/1.4 var(--mono)
+  font: 8px/1.4 var(--mono)
 }
 
 .component-tail b {
@@ -1059,7 +1059,7 @@ code,
   align-items: center;
   gap: 7px;
   color: var(--cyan);
-  font: 11px var(--mono);
+  font: 9px var(--mono);
   letter-spacing: .06em;
   text-transform: uppercase
 }
@@ -1083,7 +1083,7 @@ code,
   margin: 0;
   padding: 5px 6px;
   border-bottom: 1px solid var(--line);
-  font: 11px var(--mono)
+  font: 8px var(--mono)
 }
 
 .fields dt {
@@ -1124,7 +1124,7 @@ code,
 
 #counter {
   color: var(--text);
-  font: 11px var(--mono);
+  font: 8px var(--mono);
   text-align: center;
   white-space: nowrap
 }

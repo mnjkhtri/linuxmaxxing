@@ -35,7 +35,7 @@
   "tracefs:qedu_irq_ack": {
     "$ref": "shape_23"
   },
-  "tracefs:qedu_probe_stage": {
+  "tracefs:qedu_probe_api": {
     "$ref": "shape_25"
   },
   "tracefs:qedu_wait": {
@@ -45,9 +45,6 @@
     "$ref": "shape_29"
   },
   "tracefs:sched_wakeup": {
-    "$ref": "shape_31"
-  },
-  "tracefs:sched_waking": {
     "$ref": "shape_31"
   },
   "tracefs:sys_enter_close": {
@@ -586,9 +583,6 @@
         "device": {
           "type": "string"
         },
-        "stage": {
-          "type": "string"
-        },
         "api": {
           "type": "string"
         },
@@ -611,8 +605,7 @@
         "device",
         "resource",
         "result",
-        "size",
-        "stage"
+        "size"
       ]
     },
     "shape_25": {
@@ -1027,6 +1020,9 @@
         "phase": {
           "type": "string"
         },
+        "label": {
+          "type": "string"
+        },
         "category": {
           "type": "string"
         },
@@ -1058,6 +1054,7 @@
       "required": [
         "action",
         "category",
+        "label",
         "phase"
       ]
     },

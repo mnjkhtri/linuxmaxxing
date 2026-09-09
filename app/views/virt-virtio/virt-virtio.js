@@ -796,7 +796,7 @@ import {
     $("roadmap").innerHTML = ["A", "B", "C", "D"]
       .map(function(phase) {
         return (
-          '<button class="phase-zone ' +
+          '<button class="phase-zone selector-option ' +
           (phase === M.phase ? "active" : "") +
           '" data-phase="' +
           phase +
