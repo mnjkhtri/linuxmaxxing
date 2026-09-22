@@ -57,6 +57,25 @@ static const char *event_name(unsigned int event)
 	}
 }
 
+static const char *event_hook(unsigned int event)
+{
+	switch (event)
+	{
+	case VIRTIO_EVENT_MMIO: return "uprobe/build/vmm:do_mmio";
+	case VIRTIO_EVENT_QUEUE_BACKEND_BEGIN: return "uprobe/build/vmm:process_queue";
+	case VIRTIO_EVENT_QUEUE_BACKEND_END: return "uretprobe/build/vmm:process_queue";
+	case VIRTIO_EVENT_IOEVENTFD_KICK: return "uprobe/build/vmm:process_ioeventfd_kick";
+	case VIRTIO_EVENT_IRQFD_SIGNAL: return "uprobe/build/vmm:signal_irqfd_completion";
+	case VIRTIO_EVENT_SYS_ENTER_IOCTL: return "tracepoint/syscalls/sys_enter_ioctl";
+	case VIRTIO_EVENT_SYS_EXIT_IOCTL: return "tracepoint/syscalls/sys_exit_ioctl";
+	case VIRTIO_EVENT_VMX_HANDLE_EXIT_RETURN: return "kretprobe/vmx_handle_exit";
+	case VIRTIO_EVENT_MMIO_RETURN: return "uretprobe/build/vmm:do_mmio";
+	case VIRTIO_EVENT_IOEVENTFD_KICK_RETURN: return "uretprobe/build/vmm:process_ioeventfd_kick";
+	case VIRTIO_EVENT_IRQFD_SIGNAL_RETURN: return "uretprobe/build/vmm:signal_irqfd_completion";
+	default: return "unknown";
+	}
+}
+
 static const char *ioctl_request_name(unsigned long long request)
 {
 	switch (request)
@@ -521,6 +540,7 @@ static void write_snapshot(struct json_writer *jw, const struct virtio_event *ev
 	json_string(jw, "kind", "snapshot");
 	json_string(jw, "source", "ebpf");
 	json_u32(jw, "seq", seq);
+	json_string(jw, "hook", event_hook(event->event_info.event));
 	json_u64(jw, "time_ns", event->time_ns);
 	write_event_info(jw, event);
 	write_context(jw, &event->context);

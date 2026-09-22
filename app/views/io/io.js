@@ -1,4 +1,5 @@
 import {
+  hookLabel,
   mountView,
   relativeNs,
   values
@@ -1153,7 +1154,7 @@ import {
   function renderOrigin(id, record) {
     var source = record.canonical && record.canonical.source || {},
       mechanism = mechanismLabel(source.mechanism || (record.record === 'workload_marker' ? 'workload' : '—')),
-      hook = record.tracepoint || source.hook || 'phase',
+      hook = hookLabel(record.tracepoint || source.hook || 'phase', source.mechanism || (record.record === 'workload_marker' ? 'workload' : ''), source.hook),
       context = record.canonical && record.canonical.context || record.context || {};
     var rows = [
       ['mechanism', mechanism, ''],

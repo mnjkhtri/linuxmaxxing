@@ -1,4 +1,5 @@
 import {
+  hookLabel,
   playback,
   mountView,
   observation,
@@ -634,9 +635,13 @@ import {
   }
 
   function eventRows(event) {
+    var canonical = event.record && event.record.canonical,
+      source = canonical && canonical.source || {},
+      mechanism = source.mechanism === "ebpf" ? "eBPF" : source.mechanism || event.source;
     var rows = [
       ["phase", event.phase],
-      ["source", event.source],
+      ["mechanism", mechanism],
+      ["hook", hookLabel(event.name, mechanism, source.hook)],
       ["time", event.timeUs.toFixed(3) + " µs"],
       ["event", event.name],
     ];

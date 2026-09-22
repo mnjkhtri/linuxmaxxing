@@ -98,6 +98,22 @@ export function traceFields(event) {
   };
 }
 
+export function hookLabel(name, mechanism, explicitHook) {
+  const rawHook = String(explicitHook || name || '—');
+  const explicit = rawHook.match(/^(raw[_ ]?(?:tracepoint|tp)|tracepoint|tp|uprobe|uretprobe|kprobe|kretprobe|workload)[:\s·/]+(.+)$/i);
+  const hook = explicit ? explicit[2] : rawHook;
+  let type = explicit ? explicit[1].toLowerCase() : '';
+  if (type === 'tp') type = 'tracepoint';
+  if (type === 'raw_tp' || type === 'raw tracepoint') type = 'raw tracepoint';
+  const source = String(mechanism || '').toLowerCase();
+  if (!type && source === 'workload') type = 'workload';
+  if (!type && source.includes('tracefs')) type = 'tracepoint';
+  if (!type && source === 'sysfs') type = 'sysfs';
+  if (!type && source === 'module') type = 'module';
+  if (!type) type = 'unknown';
+  return type + ' · ' + hook;
+}
+
 export function reportState(state, message = '') {
   document.documentElement.dataset.captureState = state;
   const status = document.getElementById('capture-message');

@@ -1,19 +1,19 @@
 # LINUXMAXXING
 
-Linux internals experiments, collected on disposable Intel CloudLab hosts and rendered by a small static app. CloudLab is the execution environment. The Mac is the command client and dashboard host.
+Linux internals experiments, collected on a dedicated lab server and rendered by a small static app. The lab server is the execution environment. The Mac is the command client and dashboard host.
 
 ## Quick start
 
-Create `cloudlab.json` in the repository root. It is intentionally ignored so an SSH target is local configuration:
+Create `lab.json` in the repository root. It is intentionally ignored so the SSH target remains local configuration:
 
 ```json
 {
-  "target": "user@node.cloudlab.us",
+  "target": "lab-server",
   "workspace": "linuxmaxxing-lab"
 }
 ```
 
-The checked-in template is [infra/cloudlab.example.json](infra/cloudlab.example.json). The target may point to any suitable node; CloudLab nodes are temporary, so the same setup command is safe to repeat after changing nodes.
+The checked-in template is [infra/lab.example.json](infra/lab.example.json). The target may point to any suitable Linux server; the setup command is safe to repeat after replacing or rebuilding the server.
 
 ```bash
 ./lab.sh setup
@@ -23,9 +23,9 @@ The checked-in template is [infra/cloudlab.example.json](infra/cloudlab.example.
 ./run-app.sh
 ```
 
-`setup` runs on CloudLab. It installs the locked toolchain, downloads and verifies the pinned Ubuntu image, fetches the pinned Linux source, records environment facts, and applies a public-node baseline: UFW denies unsolicited inbound traffic while preserving SSH, fail2ban protects SSH, and unattended security upgrades are enabled. `build` and `run` synchronize the current source tree and execute remotely. A failed or replaced node can be rebuilt by running `./lab.sh setup` again.
+`setup` runs on the lab server. It installs the locked toolchain, downloads and verifies the pinned Ubuntu image, fetches the pinned Linux source, records environment facts, and applies the server baseline: UFW denies unsolicited inbound traffic while preserving SSH, fail2ban protects SSH, and unattended security upgrades are enabled. `build` and `run` synchronize the current source tree and execute remotely. A failed or replaced server can be rebuilt by running `./lab.sh setup` again.
 
-The node is treated as disposable and potentially hostile: keep credentials out of the repository, use an SSH key, expose no experiment service ports, and run `./lab.sh setup` again whenever CloudLab reallocates the node. The firewall intentionally permits only the configured SSH port for inbound traffic; add any temporary experiment exception explicitly and remove it afterward.
+The server is treated as potentially hostile: keep credentials out of the repository, use an SSH key, expose no experiment service ports, and run `./lab.sh setup` again whenever the server is replaced. The firewall intentionally permits only the configured SSH port for inbound traffic; add any temporary experiment exception explicitly and remove it afterward.
 
 The client needs Python 3 and SSH. It does not need Linux, QEMU, a kernel toolchain, libbpf, or root access. SSH keys and host aliases belong in the normal SSH configuration.
 
@@ -38,10 +38,10 @@ scheduler    custom-kernel guest: CFS enqueue and runqueue state
 memory       custom-kernel guest: MM phase snapshots and tracepoints
 kapi         custom-kernel guest: kernel API module lifetime
 io            custom-kernel guest: EDU device, DMA, IRQ, and workqueue
-virt-ept     CloudLab host: KVM EPT and MMU transitions
-virt-io      CloudLab host: KVM virtual I/O transitions
-virt-virtio  CloudLab host: virtqueue and eventfd transitions
-virt-vtd     CloudLab host plus assigned guest: VT-d/VFIO and guest DMA
+virt-ept     lab server host: KVM EPT and MMU transitions
+virt-io      lab server host: KVM virtual I/O transitions
+virt-virtio  lab server host: virtqueue and eventfd transitions
+virt-vtd     lab server host plus assigned guest: VT-d/VFIO and guest DMA
 ```
 
 Each experiment is self-contained under `experiments/<name>/`: its manifest, payload contract, build files, workload, observer, and resource-specific source live together. `common/` contains only reusable observer/runtime code. `framework/` contains the generic capture and execution machinery.
@@ -57,7 +57,7 @@ Use one experiment at a time while developing:
 
 `virt-vtd` requires an Intel host with an unused, isolated, FLR-capable NIC. If IOMMU is not enabled, run `./lab.sh prepare-vtd`, allow the node to reboot, and run it again. The management interface is audited and must remain available before, during, and after assignment.
 
-The custom kernel remains a guest kernel. CloudLab supplies the Linux host and KVM capability; QEMU supplies the study guest for the guest experiments. A fresh overlay and swap disk are created per execution, while the pinned base image and kernel build are reused on that node.
+The custom kernel remains a guest kernel. The lab server supplies the Linux host and KVM capability; QEMU supplies the study guest for the guest experiments. A fresh overlay and swap disk are created per execution, while the pinned base image and kernel build are reused on that server.
 
 ## Capture contract
 
@@ -67,7 +67,7 @@ Every successful experiment publishes exactly one latest result:
 captures/<experiment>/events.ndjson
 ```
 
-The file is replaced only after validation. A failed run leaves the previous valid capture unchanged. Temporary execution scratch is created on CloudLab and removed automatically; diagnostics are streamed through SSH.
+The file is replaced only after validation. A failed run leaves the previous valid capture unchanged. Temporary execution scratch is created on the lab server and removed automatically; diagnostics are streamed through SSH.
 
 Every event uses the same envelope:
 
@@ -105,17 +105,29 @@ Host and guest monotonic clocks are separate explicit domains. `sequence` is out
 
 ## How to add an experiment
 
-Start by writing the experiment question and evidence contract in the manifest. Declare the execution domain, build source, workload, observer, required and optional tracepoints, timeouts, and minimum event kinds. Add typed payload definitions to `payloads.json`.
-
-The framework owns synchronization, dependency checks, process supervision, private tracefs instances, readiness, cleanup, loss accounting, validation, and atomic publication. The experiment owns only observation code, workload semantics, resource-specific preparation, and scientific assertions.
-
-Collectors follow one lifecycle:
+Keep the experiment readable from its directory. Add:
 
 ```text
-preflight → prepare → attach → ready → workload → stop → drain → validate → publish
+experiment.json   what is being taught and what evidence is required
+payloads.json     the shapes of its event data
+run.sh            ./lab.sh run <name>
+Makefile          its build commands
+workload/observer source files for the actual experiment
 ```
 
-eBPF collects binary facts through the common observer ABI. The userspace observer serializes them. Tracefs uses a private monotonic instance and a declared decoder. Workloads emit phase markers through the same event contract. Diagnostics and control messages use separate streams from event data.
+The framework handles only the common mechanics: copying the source to the lab
+server, building, starting collectors, starting the workload, validating the
+capture, and publishing the latest result. The experiment code owns the kernel
+concept, its workload, its tracepoints, and its interpretation.
+
+The capture lifecycle is intentionally small:
+
+```text
+start → collectors ready → workload → collectors stopped → publish
+```
+
+eBPF, tracefs, module, and workload observations all use the same event envelope,
+but the raw collection code remains visible in the experiment directory.
 
 Run the framework tests with:
 
@@ -123,7 +135,7 @@ Run the framework tests with:
 python3 -m unittest discover -s tests -v
 ```
 
-The tests cover closed payload types, malformed records, trace decoding, readiness and shutdown failures, event loss, source synchronization, workspace locking, clock domains, and atomic capture replacement. Live experiment acceptance requires a compatible CloudLab node and zero unexplained loss.
+The tests cover closed payload types, malformed records, trace decoding, readiness and shutdown failures, event loss, source synchronization, workspace locking, clock domains, and atomic capture replacement. Live experiment acceptance requires a compatible lab server and zero unexplained loss.
 
 ## Local dashboard
 
@@ -137,21 +149,13 @@ Open `http://localhost:8000/app/`. Each view reads the latest `captures/<experim
 
 Each experiment has exactly three files in `app/views/<experiment>/`: its HTML, CSS, and JavaScript. `app/theme.css` owns shared colors, typography, controls, and responsive layout. `app/common.js` owns capture loading, status, accessible details panels, and playback utilities; `app/app.js` owns navigation. Keep experiment-specific diagrams and evidence interpretation in the experiment's JavaScript and geometry in its CSS.
 
-### Flow diagram contract
+### Flow views
 
-Flow-oriented views use one arrow grammar. An arrow means a directional transfer or handoff between two named actors; it does not mean that every tracepoint must become an arrow. A same-actor observation is a point or short tick, never a zero-length arrow or loop.
-
-Every rendered relation carries this shape:
-
-```text
-time · source · target · verb · detail · kind · evidence · step · record
-```
-
-`source` and `target` define direction. `kind` describes the operation (`control`, `data`, `interrupt`, `state`, and so on) but does not change arrow geometry. `evidence` describes how the relation is known: `observed` uses a solid line, `inferred` uses a dashed line, and architectural/context-only relations use a faint dotted line. Selection is the only strong accent color. Return and acknowledgement messages use the same arrow reversed.
-
-Labels stay in their own collision-safe layer above the line. Long details belong in the selected-event inspector. A compound record may produce several ordered steps, but each step must carry its `step` number and remain in the same event group; uncontrolled fan-out is not allowed. Inferred paths must be visibly distinct from tracepoint-backed observations.
-
-The rendering pipeline is: normalize records → derive relations → order actors → assign event rows → route endpoints → place labels → apply selection. The visual grammar is intentionally self-explanatory, so the diagram does not need a legend. IO is the reference implementation for this contract. EPT, VirtIO, Virt·IO, and VT-d should use the same relation fields, local-observation marker, evidence styles, endpoint dots, label behavior, and click-to-inspect interaction. Hover-only explanations are not part of the interaction model.
+Flow views use one simple rule: an arrow is a directional handoff between two
+actors; a point is an observation at one actor. Solid lines are observed,
+dashed lines are inferred, and selection is the only strong accent. Long details
+belong in the inspector, not on the diagram. IO is the reference view for the
+other flow experiments.
 
 Laptop layouts keep controls visible and open the inspector with **Details**. Wide screens show the inspector beside the diagram. Narrow screens stack panels and scroll complex diagrams without shrinking their labels. Motion respects the operating-system reduced-motion preference.
 

@@ -1,4 +1,5 @@
 import {
+  hookLabel,
   playback,
   mountView,
   observation,
@@ -1386,15 +1387,16 @@ import {
     var task = event.comm || '—',
       pid = event.pid != null ? 'PID ' + event.pid : event.tid != null ? 'TID ' + event.tid : '';
     if (pid) task += ' · ' + pid;
-    return (event.cpu != null ? 'CPU ' + event.cpu + ' · ' : '') + task;
+    return task;
   }
 
   function renderOrigin(event) {
     var origin = event.origin || {},
       rows = [
         ['mechanism', mechanismLabel(origin.mechanism), ''],
-        ['hook', origin.hook || event.name || '—', ''],
-        ['CPU / task', originContext(event), '']
+        ['hook', hookLabel(event.name, origin.mechanism, origin.hook), ''],
+        ['CPU', event.cpu != null ? 'CPU ' + event.cpu : '—', ''],
+        ['task', originContext(event), '']
       ];
     $('event-origin').innerHTML = rows.map(function(row) {
       return '<div class="' + row[2] + '"><small>' + esc(row[0]) + '</small><b title="' + esc(row[1]) + '">' + esc(row[1]) + '</b></div>';

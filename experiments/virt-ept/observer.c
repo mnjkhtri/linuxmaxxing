@@ -120,6 +120,35 @@ static const char *event_name(unsigned int event)
 	}
 }
 
+static const char *event_hook(unsigned int event)
+{
+	switch (event)
+	{
+	case EPT_EVENT_KVM_ENTRY: return "raw_tp/kvm_entry";
+	case EPT_EVENT_KVM_EXIT: return "tp/kvm/kvm_exit";
+	case EPT_EVENT_KVM_USERSPACE_EXIT: return "tp/kvm/kvm_userspace_exit";
+	case EPT_EVENT_KVM_UNMAP_HVA_RANGE: return "tp/kvm/kvm_unmap_hva_range";
+	case EPT_EVENT_KVM_MMU_SPTE_REQUESTED: return "tp/kvmmmu/kvm_mmu_spte_requested";
+	case EPT_EVENT_KVM_MMU_SET_SPTE: return "tp/kvmmmu/kvm_mmu_set_spte";
+	case EPT_EVENT_KVM_FLUSH_REMOTE_TLBS: return "kprobe/kvm_flush_remote_tlbs";
+	case EPT_EVENT_CONTROL_BEGIN: return "uprobe/build/vmm:handle_control_command";
+	case EPT_EVENT_CONTROL_END: return "uretprobe/build/vmm:handle_control_command";
+	case EPT_EVENT_MEMSLOT_BEGIN: return "uprobe/build/vmm:set_memory_region";
+	case EPT_EVENT_MEMSLOT_END: return "uretprobe/build/vmm:set_memory_region";
+	case EPT_EVENT_SYS_ENTER_IOCTL: return "tracepoint/syscalls/sys_enter_ioctl";
+	case EPT_EVENT_SYS_EXIT_IOCTL: return "tracepoint/syscalls/sys_exit_ioctl";
+	case EPT_EVENT_VMX_HANDLE_EXIT_RETURN: return "kretprobe/vmx_handle_exit";
+	case EPT_EVENT_KVM_PAGE_FAULT: return "tp/kvm/kvm_page_fault";
+	case EPT_EVENT_KVM_MMU_SPLIT_HUGE_PAGE: return "tp/kvmmmu/kvm_mmu_split_huge_page";
+	case EPT_EVENT_MARK_MMIO_SPTE: return "tp/kvmmmu/mark_mmio_spte";
+	case EPT_EVENT_SYS_ENTER_MADVISE: return "tracepoint/syscalls/sys_enter_madvise";
+	case EPT_EVENT_SYS_EXIT_MADVISE: return "tracepoint/syscalls/sys_exit_madvise";
+	case EPT_EVENT_SYS_ENTER_MMAP: return "tracepoint/syscalls/sys_enter_mmap";
+	case EPT_EVENT_SYS_EXIT_MMAP: return "tracepoint/syscalls/sys_exit_mmap";
+	default: return "unknown";
+	}
+}
+
 static const char *ioctl_request_name(unsigned long long request)
 {
 	switch (request)
@@ -401,6 +430,7 @@ static void write_snapshot(struct json_writer *jw, const struct ept_event *event
 	json_string(jw, "kind", "snapshot");
 	json_string(jw, "source", "ebpf");
 	json_u32(jw, "seq", seq);
+	json_string(jw, "hook", event_hook(event->event_info.event));
 	json_u64(jw, "time_ns", event->time_ns);
 	write_event_info(jw, &event->event_info);
 	write_context(jw, &event->context);

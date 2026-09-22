@@ -1,4 +1,5 @@
 import {
+  hookLabel,
   mountView,
   observation
 } from '../../common.js';
@@ -138,6 +139,10 @@ import {
 
   function executionInfo(record) {
     return recordState(record).execution || {};
+  }
+
+  function mechanismLabel(value) {
+    return value === "ebpf" ? "eBPF" : value || "—";
   }
 
   function guestPhaseGroup(record) {
@@ -1330,8 +1335,10 @@ import {
     var candidate = setupFacts.candidate_device || {};
     var assignment = current.assignment || {};
     var guest = current.guest_device || {};
+    var source = record && record.canonical && record.canonical.source || {};
     return {
-      source: record.source,
+      mechanism: mechanismLabel(source.mechanism || record.source),
+      hook: hookLabel(record.kind, source.mechanism || record.source, source.hook),
       time_ns: record.time_ns,
       host_bdf: candidate.bdf,
       host_driver: assignment.host_driver,
@@ -1362,8 +1369,10 @@ import {
         evidence: "architecture",
         relationship: actors[item.from].name + " → " + actors[item.to].name
       };
+    var source = record.canonical && record.canonical.source || {};
     return {
-      hook: info.hook,
+      mechanism: mechanismLabel(source.mechanism || record.source),
+      hook: hookLabel(record.kind, source.mechanism || record.source, info.hook || source.hook),
       operation: info.operation !== "none" ? info.operation : null,
       request_id: info.request_id || null,
       fd: info.fd || null,

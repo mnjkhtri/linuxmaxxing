@@ -295,6 +295,7 @@ body[data-experiment="io"] .inspector-pane .origin-grid > div {
   position: relative;
   min-width: 820px;
   min-height: 100%;
+  padding-top: 6px;
   display: grid;
   grid-template-rows: repeat(var(--rows), 56px);
   align-content: start;
@@ -328,7 +329,7 @@ body[data-experiment="io"] .inspector-pane .origin-grid > div {
   position: relative;
   z-index: 2;
   width: 100%;
-  min-height: 34px;
+  min-height: 56px;
   padding: 0;
   border: 0;
   border-bottom: 1px solid rgba(119, 142, 160, .10);
@@ -359,7 +360,7 @@ body[data-experiment="io"] .inspector-pane .origin-grid > div {
 
 .sequence-arrow {
   position: absolute;
-  top: 50%;
+  top: 66%;
   z-index: 3;
   height: 1px;
   transform: translateY(-50%);
@@ -392,7 +393,7 @@ body[data-experiment="io"] .inspector-pane .origin-grid > div {
 
 .sequence-point {
   position: absolute;
-  top: 50%;
+  top: 66%;
   z-index: 4;
   width: 6px;
   height: 6px;
@@ -424,7 +425,7 @@ body[data-experiment="io"] .inspector-pane .origin-grid > div {
 
 .sequence-local-mark {
   position: absolute;
-  top: 50%;
+  top: 66%;
   z-index: 4;
   width: 12px;
   height: 3px;
@@ -435,11 +436,11 @@ body[data-experiment="io"] .inspector-pane .origin-grid > div {
 
 .sequence-label {
   position: absolute;
-  top: 50%;
+  top: 24%;
   z-index: 6;
   max-width: 34%;
   padding: 0 3px;
-  transform: translate(-50%, calc(-50% - 8px));
+  transform: translate(-50%, -50%);
   border-radius: 2px;
   background: rgba(7, 12, 18, .9);
   color: var(--text);

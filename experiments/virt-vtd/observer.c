@@ -306,11 +306,11 @@ static const char *event_hook(const struct vtd_event *event)
 {
     switch (event->event_info.kind) {
     case VTD_EVENT_IOMMU_MAP:
-        return "iommu:map";
+        return "tracepoint/iommu/map";
     case VTD_EVENT_IOMMU_UNMAP:
-        return "iommu:unmap";
+        return "tracepoint/iommu/unmap";
     case VTD_EVENT_DEVICE_ATTACH:
-        return "iommu:attach_device_to_domain";
+        return "tracepoint/iommu/attach_device_to_domain";
     case VTD_EVENT_VFIO_MAP_ENTER:
         return "kprobe:vfio_iommu_type1_map_dma";
     case VTD_EVENT_VFIO_MAP_EXIT:
@@ -334,11 +334,11 @@ static const char *event_hook(const struct vtd_event *event)
     case VTD_EVENT_IRQFD_WAKEUP:
         return "kprobe:irqfd_wakeup";
     case VTD_EVENT_KVM_MSI_ROUTE:
-        return "kvm:kvm_msi_set_irq";
+        return "tracepoint/kvm/kvm_msi_set_irq";
     case VTD_EVENT_KVM_APIC_ACCEPT:
-        return "kvm:kvm_apic_accept_irq";
+        return "tracepoint/kvm/kvm_apic_accept_irq";
     case VTD_EVENT_KVM_MMIO:
-        return "kvm:kvm_mmio";
+        return "tracepoint/kvm/kvm_mmio";
     case VTD_EVENT_IRTE_ALLOC:
         return "kretprobe:alloc_irte";
     case VTD_EVENT_IRTE_ACTIVATE:
@@ -346,7 +346,7 @@ static const char *event_hook(const struct vtd_event *event)
     case VTD_EVENT_IR_MSI_MESSAGE:
         return "kretprobe:intel_ir_compose_msi_msg";
     case VTD_EVENT_KVM_PI_IRTE_UPDATE:
-        return "kvm:kvm_pi_irte_update";
+        return "tracepoint/kvm/kvm_pi_irte_update";
     case VTD_EVENT_GUEST_RUN_ENTRY:
         return "kprobe:ixgbe_run_loopback_test";
     case VTD_EVENT_GUEST_RUN_EXIT:
@@ -370,9 +370,9 @@ static const char *event_hook(const struct vtd_event *event)
     case VTD_EVENT_GUEST_CLEAN_EXIT:
         return "kretprobe:ixgbe_clean_test_rings";
     case VTD_EVENT_GUEST_IRQ_ENTRY:
-        return "irq:irq_handler_entry";
+        return "tracepoint/irq/irq_handler_entry";
     case VTD_EVENT_GUEST_IRQ_EXIT:
-        return "irq:irq_handler_exit";
+        return "tracepoint/irq/irq_handler_exit";
     case VTD_EVENT_GUEST_NETDEV_OPEN:
         return "kprobe:ixgbe_open";
     case VTD_EVENT_GUEST_NETDEV_CLOSE:
@@ -390,15 +390,15 @@ static const char *event_hook(const struct vtd_event *event)
     case VTD_EVENT_GUEST_LOOPBACK_EXIT:
         return "kretprobe:ixgbe_loopback_test";
     case VTD_EVENT_GUEST_SOFTIRQ_RAISE:
-        return "irq:softirq_raise";
+        return "tracepoint/irq/softirq_raise";
     case VTD_EVENT_GUEST_SOFTIRQ_ENTRY:
-        return "irq:softirq_entry";
+        return "tracepoint/irq/softirq_entry";
     case VTD_EVENT_GUEST_NAPI_POLL:
-        return "napi:napi_poll";
+        return "tracepoint/napi/napi_poll";
     case VTD_EVENT_GUEST_SOFTIRQ_EXIT:
-        return "irq:softirq_exit";
+        return "tracepoint/irq/softirq_exit";
     case VTD_EVENT_IOMMU_FAULT:
-        return "iommu:io_page_fault";
+        return "tracepoint/iommu/io_page_fault";
     case VTD_EVENT_DOMAIN_ATTACH_ENTER:
         return "kprobe:domain_attach_iommu";
     case VTD_EVENT_DOMAIN_ATTACH_EXIT:
@@ -416,7 +416,7 @@ static const char *event_hook(const struct vtd_event *event)
     case VTD_EVENT_PI_WAKEUP_VECTOR:
         return "kprobe:sysvec_kvm_posted_intr_wakeup_ipi";
     default:
-        return event->event_info.kind == VTD_EVENT_IOCTL_EXIT ? "syscalls:sys_exit_ioctl" : "syscalls:sys_enter_ioctl";
+        return event->event_info.kind == VTD_EVENT_IOCTL_EXIT ? "tracepoint/syscalls/sys_exit_ioctl" : "tracepoint/syscalls/sys_enter_ioctl";
     }
 }
 

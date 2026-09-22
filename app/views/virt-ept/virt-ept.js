@@ -1,4 +1,5 @@
 import {
+  hookLabel,
   playback,
   mountView,
   observation,
@@ -23,37 +24,30 @@ import {
   var PHASES = {
     A: {
       short: "Boot map",
-      caption: "register RAM · demand-map code and data",
       focus: 0
     },
     B: {
       short: "Discard refault",
-      caption: "MADV_DONTNEED · invalidate and rebuild GFN 7",
       focus: 7
     },
     C: {
       short: "Slot replace",
-      caption: "delete slot 0 · register replacement HVA · rebuild",
       focus: 7
     },
     D: {
       short: "Dirty clear",
-      caption: "enable dirty logging · clear GFN 7 · flush",
       focus: 7
     },
     E: {
       short: "MMIO hole",
-      caption: "unmapped GPA 0xa001 · install software MMIO SPTE",
       focus: 10
     },
     F: {
       short: "Huge leaf",
-      caption: "register slot 1 · install a level-2 2 MiB leaf",
       focus: 512
     },
     G: {
       short: "Huge split",
-      caption: "enable dirty logging · split and protect the huge leaf",
       focus: 512
     },
   };
@@ -649,7 +643,7 @@ import {
         direction = to > from ? "forward" : "reverse";
       arrow = '<i class="message-arrow ' + direction + " " + flowKind(event) + '" style="left:' + left + "%;width:" + width + '%"></i><code style="left:' + ((from + to) / 2) + '%">' + esc(link.label) + "</code>";
     }
-    return '<button class="message-row' + (local ? " local" : "") + (M.selected === event.index ? " current" : "") + '" data-event="' + event.index + '" data-name="' + event.name + '" data-from="' + link.from + '" data-to="' + link.to + '">' + arrow + '<span class="message-time">+' + relativeTime(event) + "</span></button>";
+    return '<button class="message-row' + (local ? " local" : "") + (M.selected === event.index ? " current" : "") + '" data-event="' + event.index + '" data-name="' + event.name + '" data-from="' + link.from + '" data-to="' + link.to + '">' + arrow + "</button>";
   }
 
   function renderTimeline() {
@@ -661,7 +655,6 @@ import {
       });
     });
     $("timeline-scope").textContent = "Phase " + M.phase + " · " + PHASES[M.phase].short + " · initiator → responder";
-    $("phase-caption").textContent = PHASES[M.phase].caption;
   }
 
   function activeActors(event) {
@@ -968,19 +961,13 @@ import {
 
   function renderInspector(event) {
     if (!event) {
-      $("event-kind").textContent = "NO RECORD";
-      $("event-title").textContent = "No captured boundary";
-      $("source-badge").textContent = "—";
       $("event-origin").innerHTML = "";
       $("fields").innerHTML = "";
       return;
     }
-    $("event-kind").textContent = eventKind(event);
-    $("event-title").textContent = eventTitle(event);
-    $("source-badge").textContent = event.source === "tracefs" ? "tracefs" : "eBPF";
     renderOrigin("event-origin", event);
     $("fields").innerHTML = rawFieldRows(event).map(function(row) {
-      return "<dt>" + esc(row[0]) + "</dt><dd>" + esc(row[1]) + "</dd>";
+      return '<div><small>' + esc(row[0]) + '</small><b title="' + esc(row[1]) + '">' + esc(row[1]) + '</b></div>';
     }).join("");
   }
 
@@ -1003,20 +990,21 @@ import {
     });
   }
 
-  function originContext(context) {
+  function taskContext(context) {
     context = context || {};
     var task = context.comm || "—",
       pid = context.pid != null ? "PID " + context.pid : context.tid != null ? "TID " + context.tid : "";
     if (pid) task += " · " + pid;
-    return (context.cpu != null ? "CPU " + context.cpu + " · " : "") + task;
+    return task;
   }
 
   function renderOrigin(id, event) {
     var origin = event.origin || {},
       rows = [
         ["mechanism", mechanismLabel(origin.mechanism), ""],
-        ["hook", origin.hook || event.name || "—", ""],
-        ["CPU / task", originContext(event.context), ""]
+        ["hook", hookLabel(event.name, origin.mechanism, origin.hook), ""],
+        ["CPU", event.context && event.context.cpu != null ? "CPU " + event.context.cpu : "—", ""],
+        ["task", taskContext(event.context), ""]
       ];
     $(id).innerHTML = rows.map(function(row) {
       return '<div class="' + row[2] + '"><small>' + esc(row[0]) + '</small><b title="' + esc(row[1]) + '">' + esc(row[1]) + '</b></div>';
@@ -1045,7 +1033,6 @@ import {
     renderState();
     renderInspector(event);
     renderToolbar();
-    $("selected-time").textContent = event ? "t = +" + relativeTime(event) : "Phase " + M.phase;
     $("flow-kind").textContent = event ? eventKind(event) : "NO RECORD";
     $("flow-caption").textContent = event ? relation(event).label : "No captured boundary in this phase.";
   }

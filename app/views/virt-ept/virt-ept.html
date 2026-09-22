@@ -22,11 +22,6 @@
 
     <section class="workbench">
         <section class="machine panel">
-            <header class="panel-head">
-                <div><h2>EPT translation path</h2><span id="phase-caption">Guest accesses drive KVM's second-level page tables.</span></div>
-                <code id="selected-time">t = —</code>
-            </header>
-
             <div class="stage">
                 <section class="lifeline-region region">
                     <header class="region-title">
@@ -34,12 +29,12 @@
                         <code>TIME ↓</code>
                     </header>
                     <div class="actor-head">
-                        <article data-actor="vmm"><small>USERSPACE</small><b>VMM</b><em>KVM ioctls</em></article>
-                        <article data-actor="kvmcore"><small>HOST KERNEL</small><b>KVM CORE</b><em>KVM_RUN + VMX</em></article>
-                        <article data-actor="guest"><small>GUEST</small><b>vCPU 0</b><em>memory access</em></article>
-                        <article data-actor="kvmmmu"><small>HOST KERNEL</small><b>KVM MMU</b><em>fault + notifier</em></article>
-                        <article data-actor="ept"><small>TRANSLATION</small><b>EPT</b><em>SPTE hierarchy</em></article>
-                        <article data-actor="hostmm"><small>HOST MEMORY</small><b>HOST MM</b><em>HVA backing</em></article>
+                        <article data-actor="vmm"><small>USER</small><b>VMM</b><em>ioctl</em></article>
+                        <article data-actor="kvmcore"><small>HOST</small><b>KVM CORE</b><em>KVM_RUN</em></article>
+                        <article data-actor="guest"><small>GUEST</small><b>vCPU 0</b><em>access</em></article>
+                        <article data-actor="kvmmmu"><small>HOST</small><b>KVM MMU</b><em>fault</em></article>
+                        <article data-actor="ept"><small>EPT</small><b>EPT</b><em>SPTE</em></article>
+                        <article data-actor="hostmm"><small>MEMORY</small><b>HOST MM</b><em>HVA</em></article>
                     </div>
                     <div id="timeline" class="timeline" aria-label="EPT phase lifelines"></div>
                     <footer class="region-foot"><b id="flow-kind">LOADING</b><span id="flow-caption">reading capture…</span></footer>
@@ -77,18 +72,18 @@
         </section>
 
         <aside class="inspector inspector-pane panel">
-            <header class="panel-head inspector-head"><div><h2>Transition internals</h2><span>selected capture boundary</span></div><code id="source-badge">—</code></header>
             <div class="inspector-body">
-                <div class="selected-kind"><i class="trace-dot"></i><span id="event-kind">LOADING</span></div>
-                <h2 id="event-title">Reading EPT capture…</h2>
                 <section class="origin-card inspector-section">
                     <h3>Origin</h3>
                     <div class="origin-grid" id="event-origin"></div>
                 </section>
-                <dl id="fields" class="fields"></dl>
+                <section class="field-card">
+                    <h3>Fields</h3>
+                    <div id="fields" class="origin-grid"></div>
+                </section>
             </div>
-            <footer class="inspector-footer toolbar">
-                <button id="prev" title="Previous observation">←</button><button id="play" title="Play or pause">▶</button><button id="next" title="Next observation">→</button>
+            <footer class="inspector-footer playback-bar">
+                <button id="prev" title="Previous observation">Prev</button><button id="play" title="Play or pause">Play</button><button id="next" title="Next observation">Next</button>
                 <input id="scrub" type="range" min="0" value="0" aria-label="Phase observation scrubber" /><span id="counter">— / —</span>
             </footer>
         </aside>

@@ -88,6 +88,31 @@ static const char *event_name(unsigned int event)
 	}
 }
 
+static const char *event_hook(unsigned int event)
+{
+	switch (event)
+	{
+	case IO_EVENT_KVM_ENTRY: return "raw_tp/kvm_entry";
+	case IO_EVENT_KVM_EXIT: return "raw_tp/kvm_exit";
+	case IO_EVENT_KVM_USERSPACE_EXIT: return "raw_tp/kvm_userspace_exit";
+	case IO_EVENT_KVM_IOAPIC_SET_IRQ: return "raw_tp/kvm_ioapic_set_irq";
+	case IO_EVENT_KVM_APIC_ACCEPT_IRQ: return "raw_tp/kvm_apic_accept_irq";
+	case IO_EVENT_KVM_INJ_VIRQ: return "raw_tp/kvm_inj_virq";
+	case IO_EVENT_KVM_EOI: return "raw_tp/kvm_eoi";
+	case IO_EVENT_KVM_APIC: return "raw_tp/kvm_apic";
+	case IO_EVENT_DEVICE_DMA_TRANSFER: return "uprobe/build/vmm:device_dma_transfer";
+	case IO_EVENT_KVM_MSI_SET_IRQ: return "raw_tp/kvm_msi_set_irq";
+	case IO_EVENT_SYS_ENTER_IOCTL: return "tracepoint/syscalls/sys_enter_ioctl";
+	case IO_EVENT_SYS_EXIT_IOCTL: return "tracepoint/syscalls/sys_exit_ioctl";
+	case IO_EVENT_VMX_HANDLE_EXIT_RETURN: return "kretprobe/vmx_handle_exit";
+	case IO_EVENT_DEVICE_MMIO_WRITE: return "uprobe/build/vmm:device_mmio_write";
+	case IO_EVENT_DEVICE_EXECUTE_COMMAND: return "uprobe/build/vmm:device_execute_command";
+	case IO_EVENT_DEVICE_EXECUTE_COMMAND_RETURN: return "uretprobe/build/vmm:device_execute_command";
+	case IO_EVENT_DEVICE_DMA_TRANSFER_RETURN: return "uretprobe/build/vmm:device_dma_transfer";
+	default: return "unknown";
+	}
+}
+
 static const char *ioctl_request_name(unsigned long long request)
 {
 	switch (request)
@@ -358,6 +383,7 @@ static void write_snapshot(struct json_writer *jw, const struct vio_event *event
 	json_string(jw, "kind", "snapshot");
 	json_string(jw, "source", "ebpf");
 	json_u32(jw, "seq", seq);
+	json_string(jw, "hook", event_hook(event->event_info.event));
 	json_u64(jw, "time_ns", event->time_ns);
 	write_event_info(jw, &event->event_info);
 	write_context(jw, &event->context);

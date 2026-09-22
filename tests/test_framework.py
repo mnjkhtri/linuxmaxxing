@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from framework.core.runtime import Capture, LabError, Process, atomic_bytes, check_type, lock, ndjson, publish, record, trace_record, validate
-from framework.cloudlab.environment import Remote
+from framework.lab.environment import Remote
 
 
 def fixture(directory):
@@ -26,7 +26,7 @@ def fixture(directory):
     runqueue = {"address": "0x1", "nr_running": "1", "root": "0x2", "leftmost": "0x2",
                 "enqueued_entity": {"address": "0x3", "rb_node": "0x4"}, "node_count": "1",
                 "truncated": False,
-                "nodes": [{"address": "0x2", "left": None, "right": None, "color": "black", "comm": "workload"}]}
+                "nodes": [{"address": "0x2", "left": None, "right": None, "color": "black", "comm": "workload", "pid": "1"}]}
     capture.events.extend([
         record("scheduler", "observer", "ebpf", "guest", "enqueue_entity", 1,
                {"event_info": {"name": "enqueue_entity", "phase": "after", "probe": "test"},
@@ -168,7 +168,7 @@ class TransportTests(unittest.TestCase):
             with tarfile.open(fileobj=io.BytesIO(remote.archive())) as archive:
                 names = archive.getnames()
                 self.assertIn("infra/environment.json", names)
-                self.assertFalse(any("_captures" in n or "cloudlab.json" in n or n.startswith("temp/") for n in names))
+                self.assertFalse(any("_captures" in n or "lab.json" in n or n.startswith("temp/") for n in names))
             for workspace in ("/", "../other", "x;id", "~"):
                 config.write_text(json.dumps({"target": "user@node", "workspace": workspace}))
                 with self.assertRaises(LabError):

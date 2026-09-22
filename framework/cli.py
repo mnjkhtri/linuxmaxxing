@@ -1,20 +1,34 @@
 #!/usr/bin/env python3
 """The only public command parser and remote dispatch entry point."""
+
 import argparse
 import hashlib
 import os
-from pathlib import Path
-import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from framework.core.runtime import LabError, NAMES, ROOT, atomic_bytes, atomic_json, command, lock, manifest, signals
+from framework.core.runtime import (
+    NAMES,
+    ROOT,
+    LabError,
+    atomic_bytes,
+    atomic_json,
+    command,
+    lock,
+    manifest,
+    signals,
+)
 
 
 def parser():
-    p = argparse.ArgumentParser(description="Build and run Linux experiments on a disposable CloudLab host.")
-    p.add_argument("--config", help="CloudLab JSON configuration (default: cloudlab.json)")
+    p = argparse.ArgumentParser(
+        description="Build and run Linux experiments on the configured lab server."
+    )
+    p.add_argument(
+        "--config", help="Lab-server JSON configuration (default: lab.json)"
+    )
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--host", action="store_true", help=argparse.SUPPRESS)
     mode.add_argument("--guest", action="store_true", help=argparse.SUPPRESS)
@@ -41,7 +55,12 @@ def ownership(name):
 
 def local_worker(args, name):
     from framework.core.runtime import Session
-    result = Path(os.environ["LAB_SHARED_SCRATCH"]) / "guest-result.json" if args.guest else None
+
+    result = (
+        Path(os.environ["LAB_SHARED_SCRATCH"]) / "guest-result.json"
+        if args.guest
+        else None
+    )
     try:
         Session(name, "guest" if args.guest else "host").execute()
         if result is not None:
@@ -60,7 +79,11 @@ def main(argv=None):
         for name in NAMES:
             print("%-14s %s" % (name, manifest(name)["environment"]))
         return
-    names = NAMES if getattr(args, "experiment", None) == "all" else [getattr(args, "experiment", "")]
+    names = (
+        NAMES
+        if getattr(args, "experiment", None) == "all"
+        else [getattr(args, "experiment", "")]
+    )
     if args.guest or args.worker:
         if args.action != "run" or len(names) != 1 or not names[0]:
             raise LabError("workers accept one run only")
@@ -68,13 +91,15 @@ def main(argv=None):
         return
     if args.action == "validate":
         from framework.core.runtime import validate
+
         for name in names:
             events = validate(ROOT / "captures" / name / "events.ndjson", name)
             print("%s: validated %d records" % (name, len(events)))
         return
     if args.host:
-        from framework.cloudlab.environment import build, doctor, setup, prepare_vtd
+        from framework.lab.environment import build, doctor, prepare_vtd, setup
         from framework.core import runtime as guest
+
         if args.action == "setup":
             setup()
         elif args.action == "doctor":
@@ -91,13 +116,27 @@ def main(argv=None):
                     if manifest(name)["environment"] == "guest":
                         guest.run(name)
                     else:
-                        command(["sudo", "-n", sys.executable, ROOT / "framework/cli.py", "--worker", "run", name],
-                                timeout=1800, capture=False)
+                        command(
+                            [
+                                "sudo",
+                                "-n",
+                                sys.executable,
+                                ROOT / "framework/cli.py",
+                                "--worker",
+                                "run",
+                                name,
+                            ],
+                            timeout=1800,
+                            capture=False,
+                        )
         return
-    from framework.cloudlab.environment import Remote
+    from framework.lab.environment import Remote
     from framework.core.runtime import publish
+
     remote = Remote(args.config)
-    lock_name = "linuxmaxxing-%s.lock" % hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]
+    lock_name = (
+        "linuxmaxxing-%s.lock" % hashlib.sha256(str(ROOT).encode()).hexdigest()[:16]
+    )
     with lock(Path(tempfile.gettempdir()) / lock_name):
         if args.action not in ("fetch",):
             remote.execute(args.action, getattr(args, "experiment", ""))
@@ -115,5 +154,10 @@ if __name__ == "__main__":
         with signals():
             main()
     except (LabError, OSError, ValueError, KeyboardInterrupt) as exc:
-        print("lab.sh: " + (str(exc) or "interrupted") + "; no successful result published for the failed attempt", file=sys.stderr)
+        print(
+            "lab.sh: "
+            + (str(exc) or "interrupted")
+            + "; no successful result published for the failed attempt",
+            file=sys.stderr,
+        )
         sys.exit(1)

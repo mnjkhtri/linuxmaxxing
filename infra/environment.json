@@ -15,5 +15,35 @@
     "fail2ban": true,
     "unattended_upgrades": true
   },
-  "packages": ["build-essential", "bc", "bison", "flex", "libssl-dev", "libelf-dev", "dwarves", "clang", "llvm", "libbpf-dev", "pkg-config", "zlib1g-dev", "linux-tools-common", "linux-tools-generic", "qemu-system-x86", "qemu-utils", "cloud-image-utils", "ccache", "curl", "git", "python3", "openssh-client", "libguestfs-tools", "pciutils", "iproute2", "ethtool", "ufw", "fail2ban", "unattended-upgrades"]
+  "packages": [
+    "build-essential",
+    "bc",
+    "bison",
+    "flex",
+    "libssl-dev",
+    "libelf-dev",
+    "dwarves",
+    "clang",
+    "llvm",
+    "libbpf-dev",
+    "pkg-config",
+    "zlib1g-dev",
+    "linux-tools-common",
+    "linux-tools-generic",
+    "qemu-system-x86",
+    "qemu-utils",
+    "cloud-image-utils",
+    "ccache",
+    "curl",
+    "git",
+    "python3",
+    "openssh-client",
+    "libguestfs-tools",
+    "pciutils",
+    "iproute2",
+    "ethtool",
+    "ufw",
+    "fail2ban",
+    "unattended-upgrades"
+  ]
 }

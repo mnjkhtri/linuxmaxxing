@@ -1,1 +1,1 @@
-"""CloudLab experiment execution and capture contracts."""
+"""Lab-server experiment execution and capture contracts."""

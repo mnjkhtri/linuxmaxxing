@@ -648,13 +648,14 @@ body[data-experiment] .inspector-pane .origin-grid {
 
 body[data-experiment] .inspector-pane .origin-grid > div {
   min-width: 0;
-  display: grid;
-  grid-template-columns: 100px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  padding: 5px 6px;
+  display: block;
+  padding: 6px;
   border-bottom: 1px solid var(--line);
   background: var(--panel-2);
+}
+
+body[data-experiment] .inspector-pane .origin-grid > div small {
+  margin-bottom: 3px;
 }
 
 body[data-experiment] .inspector-pane .origin-grid > div:last-child {

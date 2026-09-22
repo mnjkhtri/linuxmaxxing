@@ -1,4 +1,4 @@
 {
-  "target": "user@node.cloudlab.us",
+  "target": "lab-server",
   "workspace": "linuxmaxxing-lab"
 }

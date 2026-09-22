@@ -1,5 +1,5 @@
 /build/
-/cloudlab.json
+/lab.json
 /captures/
 __pycache__/
 /rootfs/

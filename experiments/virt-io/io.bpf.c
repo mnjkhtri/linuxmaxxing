@@ -30,7 +30,7 @@
  * The kvm_ioapic_set_irq tracepoint samples its RTE bits and the RTE-derived vector from its argument.
  * The kvm_msi_set_irq tracepoint samples the raw MSI address and data, and derives the vector from the data field.
  *
- * The argument order was verified on CloudLab kernel 6.8 from /sys/kernel/tracing/events/kvm/<event>/format.
+ * The argument order was verified on a Linux 6.8 host from /sys/kernel/tracing/events/kvm/<event>/format.
  * kvm_msi_set_irq is expected to carry (address, data); its exact argument positions must be confirmed on the target kernel before first use.
  * Only kvm_entry and kvm_exit expose the vcpu directly; the remaining intercepts recover it from the map.
  * On this kernel kvm_inj_virq and kvm_eoi never fire for this guest, so only the events above appear in the capture.
