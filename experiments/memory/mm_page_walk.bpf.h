@@ -7,7 +7,8 @@
  *
  * This is intentionally not a correctness oracle: it does not take mmap_lock, page-table locks, RCU read locks, or mmu_notifier synchronization.
  * The workload is single-purpose and snapshots are taken at phase boundaries,
- * so the sampled PTE/PMD state is useful for teaching VMA -> page-table -> physical-target relationships, including COW and THP, without turning this exercise into a kernel page-table walker module.
+ * so the sampled PTE/PMD state is useful for teaching VMA -> page-table -> physical-target relationships,
+ * including COW and THP, without turning this exercise into a kernel page-table walker module.
  */
 
 struct pt_walk
