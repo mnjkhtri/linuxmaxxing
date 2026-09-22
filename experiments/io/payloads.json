@@ -1,1077 +1,1007 @@
 {
   "tracefs:dma_alloc": {
-    "$ref": "shape_1"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "dir": {
+            "type": "string"
+          },
+          "dma_addr": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer64"
+          },
+          "virt_addr": {
+            "type": "string"
+          },
+          "flags": {
+            "type": "string"
+          },
+          "attrs": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attrs",
+          "device",
+          "dir",
+          "dma_addr",
+          "flags",
+          "size",
+          "virt_addr"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:irq_handler_entry": {
-    "$ref": "shape_3"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "irq": {
+            "type": "integer64"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "irq",
+          "name"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:irq_handler_exit": {
-    "$ref": "shape_5"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "irq": {
+            "type": "integer64"
+          },
+          "ret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "irq",
+          "ret"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_completion_publish": {
-    "$ref": "shape_7"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "io_id": {
+            "type": "integer64"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "event_bit": {
+            "type": "integer64"
+          },
+          "bits_before": {
+            "type": "hex"
+          },
+          "bits_after": {
+            "type": "hex"
+          }
+        },
+        "required": [
+          "bits_after",
+          "bits_before",
+          "device",
+          "engine",
+          "event_bit",
+          "io_id"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_cpu_buffer_io": {
-    "$ref": "shape_9"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "io_id": {
+            "type": "integer64"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "integer64"
+          },
+          "requested": {
+            "type": "integer64"
+          },
+          "completed": {
+            "type": "integer64"
+          }
+        },
+        "required": [
+          "completed",
+          "device",
+          "io_id",
+          "offset",
+          "operation",
+          "requested"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_dma_stage": {
-    "$ref": "shape_11"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "io_id": {
+            "type": "integer64"
+          },
+          "old": {
+            "type": "string"
+          },
+          "new": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "device",
+          "io_id",
+          "new",
+          "old",
+          "reason"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_dma_submit": {
-    "$ref": "shape_13"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "io_id": {
+            "type": "integer64"
+          },
+          "leg": {
+            "type": "integer64"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "src_space": {
+            "type": "string"
+          },
+          "src": {
+            "type": "hex"
+          },
+          "dst_space": {
+            "type": "string"
+          },
+          "dst": {
+            "type": "hex"
+          },
+          "bytes": {
+            "type": "integer64"
+          },
+          "command": {
+            "type": "hex"
+          }
+        },
+        "required": [
+          "bytes",
+          "command",
+          "device",
+          "direction",
+          "dst",
+          "dst_space",
+          "io_id",
+          "leg",
+          "src",
+          "src_space"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_dma_work_queue": {
-    "$ref": "shape_15"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "io_id": {
+            "type": "integer64"
+          },
+          "dma_stage": {
+            "type": "string"
+          },
+          "work_kind": {
+            "type": "string"
+          },
+          "work": {
+            "type": "string"
+          },
+          "queued": {
+            "type": "integer64"
+          }
+        },
+        "required": [
+          "device",
+          "dma_stage",
+          "io_id",
+          "queued",
+          "work",
+          "work_kind"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_factorial_result": {
-    "$ref": "shape_17"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "io_id": {
+            "type": "integer64"
+          },
+          "result": {
+            "type": "integer64"
+          }
+        },
+        "required": [
+          "device",
+          "io_id",
+          "result"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_factorial_submit": {
-    "$ref": "shape_19"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "io_id": {
+            "type": "integer64"
+          },
+          "input": {
+            "type": "integer64"
+          },
+          "status_command": {
+            "type": "hex"
+          }
+        },
+        "required": [
+          "device",
+          "input",
+          "io_id",
+          "status_command"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_file_op": {
-    "$ref": "shape_21"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "io_id": {
+            "type": "integer64"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer64"
+          },
+          "offset": {
+            "type": "integer64"
+          },
+          "result": {
+            "type": "integer64"
+          },
+          "engine": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "count",
+          "device",
+          "engine",
+          "file",
+          "io_id",
+          "offset",
+          "operation",
+          "phase",
+          "result"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_irq_ack": {
-    "$ref": "shape_23"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "io_id": {
+            "type": "integer64"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "irq": {
+            "type": "integer64"
+          },
+          "status": {
+            "type": "hex"
+          },
+          "ack": {
+            "type": "hex"
+          },
+          "dma_stage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ack",
+          "device",
+          "dma_stage",
+          "engine",
+          "io_id",
+          "irq",
+          "status"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_probe_api": {
-    "$ref": "shape_25"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "api": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          },
+          "address": {
+            "type": "hex"
+          },
+          "size": {
+            "type": "integer64"
+          },
+          "result": {
+            "type": "integer64"
+          }
+        },
+        "required": [
+          "address",
+          "api",
+          "device",
+          "resource",
+          "result",
+          "size"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:qedu_wait": {
-    "$ref": "shape_27"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "device": {
+            "type": "string"
+          },
+          "io_id": {
+            "type": "integer64"
+          },
+          "engine": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          },
+          "timeout_ms": {
+            "type": "integer64"
+          },
+          "wait_ret": {
+            "type": "integer64"
+          },
+          "completion_bits": {
+            "type": "hex"
+          }
+        },
+        "required": [
+          "completion_bits",
+          "device",
+          "engine",
+          "io_id",
+          "phase",
+          "timeout_ms",
+          "wait_ret"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:sched_switch": {
-    "$ref": "shape_29"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "prev_comm": {
+            "type": "string"
+          },
+          "prev_pid": {
+            "type": "integer64"
+          },
+          "prev_prio": {
+            "type": "integer64"
+          },
+          "prev_state": {
+            "type": "string"
+          },
+          "next_comm": {
+            "type": "string"
+          },
+          "next_pid": {
+            "type": "integer64"
+          },
+          "next_prio": {
+            "type": "integer64"
+          }
+        },
+        "required": [
+          "next_comm",
+          "next_pid",
+          "next_prio",
+          "prev_comm",
+          "prev_pid",
+          "prev_prio",
+          "prev_state"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:sched_wakeup": {
-    "$ref": "shape_31"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "comm": {
+            "type": "string"
+          },
+          "pid": {
+            "type": "integer64"
+          },
+          "prio": {
+            "type": "integer64"
+          },
+          "target_cpu": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "comm",
+          "pid",
+          "prio",
+          "target_cpu"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:sys_enter_close": {
-    "$ref": "shape_33"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "fd": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "fd"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:sys_enter_openat": {
-    "$ref": "shape_35"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "dfd": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "flags": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dfd",
+          "filename",
+          "flags"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:sys_enter_read": {
-    "$ref": "shape_37"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "fd": {
+            "type": "string"
+          },
+          "buf": {
+            "type": "string"
+          },
+          "count": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "buf",
+          "count",
+          "fd"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:sys_enter_write": {
-    "$ref": "shape_39"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "fd": {
+            "type": "string"
+          },
+          "buf": {
+            "type": "string"
+          },
+          "count": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "buf",
+          "count",
+          "fd"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:sys_exit_close": {
-    "$ref": "shape_41"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "result": {
+            "type": "hex"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:sys_exit_openat": {
-    "$ref": "shape_41"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "result": {
+            "type": "hex"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:sys_exit_read": {
-    "$ref": "shape_41"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "result": {
+            "type": "hex"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:sys_exit_write": {
-    "$ref": "shape_41"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "result": {
+            "type": "hex"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:vector_alloc": {
-    "$ref": "shape_43"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "irq": {
+            "type": "integer64"
+          },
+          "vector": {
+            "type": "integer64"
+          },
+          "reserved": {
+            "type": "integer64"
+          },
+          "ret": {
+            "type": "integer64"
+          }
+        },
+        "required": [
+          "irq",
+          "reserved",
+          "ret",
+          "vector"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:vector_config": {
-    "$ref": "shape_45"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "irq": {
+            "type": "integer64"
+          },
+          "vector": {
+            "type": "integer64"
+          },
+          "cpu": {
+            "type": "integer64"
+          },
+          "apicdest": {
+            "type": "hex"
+          }
+        },
+        "required": [
+          "apicdest",
+          "cpu",
+          "irq",
+          "vector"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:workqueue_activate_work": {
-    "$ref": "shape_47"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "work": {
+            "type": "string"
+          },
+          "function": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "function",
+          "work"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:workqueue_execute_end": {
-    "$ref": "shape_47"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "work": {
+            "type": "string"
+          },
+          "function": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "function",
+          "work"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:workqueue_execute_start": {
-    "$ref": "shape_47"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "work": {
+            "type": "string"
+          },
+          "function": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "function",
+          "work"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "tracefs:workqueue_queue_work": {
-    "$ref": "shape_49"
+    "type": "object",
+    "fields": {
+      "fields": {
+        "type": "object",
+        "fields": {
+          "work": {
+            "type": "string"
+          },
+          "function": {
+            "type": "string"
+          },
+          "workqueue": {
+            "type": "string"
+          },
+          "req_cpu": {
+            "type": "integer64"
+          },
+          "cpu": {
+            "type": "integer64"
+          }
+        },
+        "required": [
+          "cpu",
+          "function",
+          "req_cpu",
+          "work",
+          "workqueue"
+        ]
+      }
+    },
+    "required": [
+      "fields"
+    ]
   },
   "workload:phase": {
-    "$ref": "shape_51"
-  },
-  "$defs": {
-    "shape_0": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "dir": {
-          "type": "string"
-        },
-        "dma_addr": {
-          "type": "string"
-        },
-        "size": {
-          "type": "integer64"
-        },
-        "virt_addr": {
-          "type": "string"
-        },
-        "flags": {
-          "type": "string"
-        },
-        "attrs": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "attrs",
-        "device",
-        "dir",
-        "dma_addr",
-        "flags",
-        "size",
-        "virt_addr"
-      ]
-    },
-    "shape_1": {
-      "type": "object",
-      "fields": {
+    "type": "object",
+    "fields": {
+      "event_info": {
+        "type": "object",
         "fields": {
-          "$ref": "shape_0"
-        }
+          "phase": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "device": {
+            "type": "string"
+          },
+          "attribute": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "input": {
+            "type": "integer64"
+          },
+          "result": {
+            "type": "integer64"
+          },
+          "bytes": {
+            "type": "integer64"
+          },
+          "read_calls": {
+            "type": "integer64"
+          }
+        },
+        "required": [
+          "action",
+          "category",
+          "label",
+          "phase"
+        ]
       },
-      "required": [
-        "fields"
-      ]
+      "producer_sequence": {
+        "type": "integer64"
+      }
     },
-    "shape_2": {
-      "type": "object",
-      "fields": {
-        "irq": {
-          "type": "integer64"
-        },
-        "name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "irq",
-        "name"
-      ]
-    },
-    "shape_3": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_2"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_4": {
-      "type": "object",
-      "fields": {
-        "irq": {
-          "type": "integer64"
-        },
-        "ret": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "irq",
-        "ret"
-      ]
-    },
-    "shape_5": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_4"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_6": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "io_id": {
-          "type": "integer64"
-        },
-        "engine": {
-          "type": "string"
-        },
-        "event_bit": {
-          "type": "integer64"
-        },
-        "bits_before": {
-          "type": "hex"
-        },
-        "bits_after": {
-          "type": "hex"
-        }
-      },
-      "required": [
-        "bits_after",
-        "bits_before",
-        "device",
-        "engine",
-        "event_bit",
-        "io_id"
-      ]
-    },
-    "shape_7": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_6"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_8": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "io_id": {
-          "type": "integer64"
-        },
-        "operation": {
-          "type": "string"
-        },
-        "offset": {
-          "type": "integer64"
-        },
-        "requested": {
-          "type": "integer64"
-        },
-        "completed": {
-          "type": "integer64"
-        }
-      },
-      "required": [
-        "completed",
-        "device",
-        "io_id",
-        "offset",
-        "operation",
-        "requested"
-      ]
-    },
-    "shape_9": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_8"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_10": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "io_id": {
-          "type": "integer64"
-        },
-        "old": {
-          "type": "string"
-        },
-        "new": {
-          "type": "string"
-        },
-        "reason": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "device",
-        "io_id",
-        "new",
-        "old",
-        "reason"
-      ]
-    },
-    "shape_11": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_10"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_12": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "io_id": {
-          "type": "integer64"
-        },
-        "leg": {
-          "type": "integer64"
-        },
-        "direction": {
-          "type": "string"
-        },
-        "src_space": {
-          "type": "string"
-        },
-        "src": {
-          "type": "hex"
-        },
-        "dst_space": {
-          "type": "string"
-        },
-        "dst": {
-          "type": "hex"
-        },
-        "bytes": {
-          "type": "integer64"
-        },
-        "command": {
-          "type": "hex"
-        }
-      },
-      "required": [
-        "bytes",
-        "command",
-        "device",
-        "direction",
-        "dst",
-        "dst_space",
-        "io_id",
-        "leg",
-        "src",
-        "src_space"
-      ]
-    },
-    "shape_13": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_12"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_14": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "io_id": {
-          "type": "integer64"
-        },
-        "dma_stage": {
-          "type": "string"
-        },
-        "work_kind": {
-          "type": "string"
-        },
-        "work": {
-          "type": "string"
-        },
-        "queued": {
-          "type": "integer64"
-        }
-      },
-      "required": [
-        "device",
-        "dma_stage",
-        "io_id",
-        "queued",
-        "work",
-        "work_kind"
-      ]
-    },
-    "shape_15": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_14"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_16": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "io_id": {
-          "type": "integer64"
-        },
-        "result": {
-          "type": "integer64"
-        }
-      },
-      "required": [
-        "device",
-        "io_id",
-        "result"
-      ]
-    },
-    "shape_17": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_16"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_18": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "io_id": {
-          "type": "integer64"
-        },
-        "input": {
-          "type": "integer64"
-        },
-        "status_command": {
-          "type": "hex"
-        }
-      },
-      "required": [
-        "device",
-        "input",
-        "io_id",
-        "status_command"
-      ]
-    },
-    "shape_19": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_18"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_20": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "io_id": {
-          "type": "integer64"
-        },
-        "operation": {
-          "type": "string"
-        },
-        "phase": {
-          "type": "string"
-        },
-        "file": {
-          "type": "string"
-        },
-        "count": {
-          "type": "integer64"
-        },
-        "offset": {
-          "type": "integer64"
-        },
-        "result": {
-          "type": "integer64"
-        },
-        "engine": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "count",
-        "device",
-        "engine",
-        "file",
-        "io_id",
-        "offset",
-        "operation",
-        "phase",
-        "result"
-      ]
-    },
-    "shape_21": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_20"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_22": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "io_id": {
-          "type": "integer64"
-        },
-        "engine": {
-          "type": "string"
-        },
-        "irq": {
-          "type": "integer64"
-        },
-        "status": {
-          "type": "hex"
-        },
-        "ack": {
-          "type": "hex"
-        },
-        "dma_stage": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "ack",
-        "device",
-        "dma_stage",
-        "engine",
-        "io_id",
-        "irq",
-        "status"
-      ]
-    },
-    "shape_23": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_22"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_24": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "api": {
-          "type": "string"
-        },
-        "resource": {
-          "type": "string"
-        },
-        "address": {
-          "type": "hex"
-        },
-        "size": {
-          "type": "integer64"
-        },
-        "result": {
-          "type": "integer64"
-        }
-      },
-      "required": [
-        "address",
-        "api",
-        "device",
-        "resource",
-        "result",
-        "size"
-      ]
-    },
-    "shape_25": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_24"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_26": {
-      "type": "object",
-      "fields": {
-        "device": {
-          "type": "string"
-        },
-        "io_id": {
-          "type": "integer64"
-        },
-        "engine": {
-          "type": "string"
-        },
-        "phase": {
-          "type": "string"
-        },
-        "timeout_ms": {
-          "type": "integer64"
-        },
-        "wait_ret": {
-          "type": "integer64"
-        },
-        "completion_bits": {
-          "type": "hex"
-        }
-      },
-      "required": [
-        "completion_bits",
-        "device",
-        "engine",
-        "io_id",
-        "phase",
-        "timeout_ms",
-        "wait_ret"
-      ]
-    },
-    "shape_27": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_26"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_28": {
-      "type": "object",
-      "fields": {
-        "prev_comm": {
-          "type": "string"
-        },
-        "prev_pid": {
-          "type": "integer64"
-        },
-        "prev_prio": {
-          "type": "integer64"
-        },
-        "prev_state": {
-          "type": "string"
-        },
-        "next_comm": {
-          "type": "string"
-        },
-        "next_pid": {
-          "type": "integer64"
-        },
-        "next_prio": {
-          "type": "integer64"
-        }
-      },
-      "required": [
-        "next_comm",
-        "next_pid",
-        "next_prio",
-        "prev_comm",
-        "prev_pid",
-        "prev_prio",
-        "prev_state"
-      ]
-    },
-    "shape_29": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_28"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_30": {
-      "type": "object",
-      "fields": {
-        "comm": {
-          "type": "string"
-        },
-        "pid": {
-          "type": "integer64"
-        },
-        "prio": {
-          "type": "integer64"
-        },
-        "target_cpu": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "comm",
-        "pid",
-        "prio",
-        "target_cpu"
-      ]
-    },
-    "shape_31": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_30"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_32": {
-      "type": "object",
-      "fields": {
-        "fd": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "fd"
-      ]
-    },
-    "shape_33": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_32"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_34": {
-      "type": "object",
-      "fields": {
-        "dfd": {
-          "type": "string"
-        },
-        "filename": {
-          "type": "string"
-        },
-        "flags": {
-          "type": "string"
-        },
-        "mode": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "dfd",
-        "filename",
-        "flags"
-      ]
-    },
-    "shape_35": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_34"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_36": {
-      "type": "object",
-      "fields": {
-        "fd": {
-          "type": "string"
-        },
-        "buf": {
-          "type": "string"
-        },
-        "count": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "buf",
-        "count",
-        "fd"
-      ]
-    },
-    "shape_37": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_36"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_38": {
-      "type": "object",
-      "fields": {
-        "fd": {
-          "type": "string"
-        },
-        "buf": {
-          "type": "string"
-        },
-        "count": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "buf",
-        "count",
-        "fd"
-      ]
-    },
-    "shape_39": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_38"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_40": {
-      "type": "object",
-      "fields": {
-        "result": {
-          "type": "hex"
-        }
-      },
-      "required": [
-        "result"
-      ]
-    },
-    "shape_41": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_40"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_42": {
-      "type": "object",
-      "fields": {
-        "irq": {
-          "type": "integer64"
-        },
-        "vector": {
-          "type": "integer64"
-        },
-        "reserved": {
-          "type": "integer64"
-        },
-        "ret": {
-          "type": "integer64"
-        }
-      },
-      "required": [
-        "irq",
-        "reserved",
-        "ret",
-        "vector"
-      ]
-    },
-    "shape_43": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_42"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_44": {
-      "type": "object",
-      "fields": {
-        "irq": {
-          "type": "integer64"
-        },
-        "vector": {
-          "type": "integer64"
-        },
-        "cpu": {
-          "type": "integer64"
-        },
-        "apicdest": {
-          "type": "hex"
-        }
-      },
-      "required": [
-        "apicdest",
-        "cpu",
-        "irq",
-        "vector"
-      ]
-    },
-    "shape_45": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_44"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_46": {
-      "type": "object",
-      "fields": {
-        "work": {
-          "type": "string"
-        },
-        "function": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "function",
-        "work"
-      ]
-    },
-    "shape_47": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_46"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_48": {
-      "type": "object",
-      "fields": {
-        "work": {
-          "type": "string"
-        },
-        "function": {
-          "type": "string"
-        },
-        "workqueue": {
-          "type": "string"
-        },
-        "req_cpu": {
-          "type": "integer64"
-        },
-        "cpu": {
-          "type": "integer64"
-        }
-      },
-      "required": [
-        "cpu",
-        "function",
-        "req_cpu",
-        "work",
-        "workqueue"
-      ]
-    },
-    "shape_49": {
-      "type": "object",
-      "fields": {
-        "fields": {
-          "$ref": "shape_48"
-        }
-      },
-      "required": [
-        "fields"
-      ]
-    },
-    "shape_50": {
-      "type": "object",
-      "fields": {
-        "phase": {
-          "type": "string"
-        },
-        "label": {
-          "type": "string"
-        },
-        "category": {
-          "type": "string"
-        },
-        "action": {
-          "type": "string"
-        },
-        "device": {
-          "type": "string"
-        },
-        "attribute": {
-          "type": "string"
-        },
-        "file": {
-          "type": "string"
-        },
-        "input": {
-          "type": "integer64"
-        },
-        "result": {
-          "type": "integer64"
-        },
-        "bytes": {
-          "type": "integer64"
-        },
-        "read_calls": {
-          "type": "integer64"
-        }
-      },
-      "required": [
-        "action",
-        "category",
-        "label",
-        "phase"
-      ]
-    },
-    "shape_51": {
-      "type": "object",
-      "fields": {
-        "event_info": {
-          "$ref": "shape_50"
-        },
-        "producer_sequence": {
-          "type": "integer64"
-        }
-      },
-      "required": [
-        "event_info",
-        "producer_sequence"
-      ]
-    }
+    "required": [
+      "event_info",
+      "producer_sequence"
+    ]
   }
 }

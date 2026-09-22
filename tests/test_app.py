@@ -1,4 +1,4 @@
-"""Static dashboard contract and browser checks; no CloudLab access required."""
+"""Static dashboard contract and browser checks; no lab-server access required."""
 import functools
 import http.server
 import json
@@ -23,6 +23,13 @@ class StructureTests(unittest.TestCase):
         for name in NAMES:
             self.assertEqual({p.name for p in (ROOT / 'app/views' / name).iterdir()},
                              {f'{name}.{ext}' for ext in ('html', 'css', 'js')})
+
+    def test_payloads_are_event_local(self):
+        for name in NAMES:
+            payloads = (ROOT / 'experiments' / name / 'payloads.json').read_text()
+            self.assertNotIn('shape_', payloads, name)
+            self.assertNotIn('"$ref"', payloads, name)
+            self.assertNotIn('"$defs"', payloads, name)
 
 
 class QuietHandler(http.server.SimpleHTTPRequestHandler):
