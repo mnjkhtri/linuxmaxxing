@@ -2,7 +2,7 @@
   "name": "memory",
   "source": "experiments/memory",
   "environment": "guest",
-  "observer": "build/mm",
+  "observer": "build/observer",
   "workload": [
     "./workload_mm"
   ],

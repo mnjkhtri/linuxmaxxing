@@ -293,6 +293,7 @@ import {
 
   function zoneName(name) {
     if (/^file backed:/.test(name)) return "FILE SETUP";
+    if (/^(?:cold|warm) page fault: file shared:/.test(name)) return "SHARED FILE";
     if (/^file shared:/.test(name)) return "SHARED FILE";
     if (/^file private:/.test(name)) return "PRIVATE FILE";
     if (/^anonymous private:/.test(name)) return "PRIVATE ANON";

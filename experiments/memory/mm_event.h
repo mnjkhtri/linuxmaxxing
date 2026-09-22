@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Ring-buffer ABI shared between the BPF side (mm.bpf.c) and the userspace loader (mm.c).
- * This is the binary format only: the loader serializes it into the canonical NDJSON envelope.
+ * Ring-buffer ABI shared between the BPF side (mm.bpf.c) and the userspace observer.c.
  *
  * One post-phase-boundary MM snapshot, grouped into three semantic facts:
  *
@@ -9,10 +8,6 @@
  *   event_info which completed workload phase produced this snapshot
  *   context    where and as whom the probe executed (the workload task, not the captured mm)
  *   state      the observed mm_struct / RSS / VMA / page-cache / page-table state after the boundary
- *
- * The header intentionally contains no JSON vocabulary and no JSON representation choices.
- * Pointers are raw u64 here; the loader converts them into "0x..."/null for the public schema.
- * It must compile in both BPF (-target bpf) and normal userspace builds.
  */
 #ifndef MM_EVENT_H
 #define MM_EVENT_H

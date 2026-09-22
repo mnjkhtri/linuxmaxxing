@@ -1036,7 +1036,8 @@ body[data-experiment="memory"] .view-controls #details-toggle {
   border: 1px solid rgba(55, 74, 88, .72);
   border-radius: 5px;
   background: rgba(7, 12, 18, .52);
-  max-width: 58%
+  width: 100%;
+  max-width: none
 }
 
 .order-card h4 {
@@ -1070,9 +1071,13 @@ body[data-experiment="memory"] .view-controls #details-toggle {
 }
 
 .order-row-head strong {
+  min-width: 0;
+  overflow: hidden;
   color: var(--muted);
   font-size: 8px;
-  font-weight: 650
+  font-weight: 650;
+  white-space: nowrap;
+  text-overflow: ellipsis
 }
 
 .order-track {
@@ -1137,7 +1142,9 @@ body[data-experiment="memory"] .view-controls #details-toggle {
   min-width: 0;
   color: var(--muted);
   font: 500 8px/1.35 var(--mono);
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis
 }
 
 .cache-empty {

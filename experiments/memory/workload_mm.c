@@ -1,5 +1,15 @@
 /*
- * This does not attempt every Linux MM feature—NUMA migration, memory cgroups, mlock, hugeTLB, DAX, direct I/O, userfaultfd, KSM, and OOM behavior are separate subjects.
+ * This does not attempt every Linux MM feature
+ * —NUMA migration,
+ * memory cgroups,
+ * mlock,
+ * hugeTLB,
+ * DAX,
+ * direct I/O,
+ * userfaultfd,
+ * KSM,
+ * and OOM behavior
+ * are separate subjects.
  */
 
 #define _GNU_SOURCE
@@ -20,38 +30,18 @@
 #include <unistd.h>
 #include "json_writer.h"
 
-#define KiB 1024UL
-#define MiB (1024UL * KiB)
-#define ANON_LENGTH (2 * MiB)
-#define ANON_EIGHTH_LENGTH (ANON_LENGTH / 8)
-#define ANON_QUARTER_LENGTH (ANON_LENGTH / 4)
-#define ANON_HALF_LENGTH (ANON_LENGTH / 2)
-#define ANON_PROTECT_START ANON_QUARTER_LENGTH
-#define ANON_PROTECT_LENGTH ANON_QUARTER_LENGTH
-#define ANON_HOLE_START ANON_HALF_LENGTH
-#define ANON_HOLE_LENGTH ANON_EIGHTH_LENGTH
-#define ANON_TAIL_OLD_LENGTH ANON_EIGHTH_LENGTH
-#define ANON_TAIL_GROWN_LENGTH (ANON_QUARTER_LENGTH + ANON_EIGHTH_LENGTH)
-#define ANON_TAIL_FINAL_LENGTH ANON_QUARTER_LENGTH
-#define ANON_TAIL_OFFSET (ANON_LENGTH - ANON_TAIL_OLD_LENGTH)
-#define ANON_DISCARD_START ANON_EIGHTH_LENGTH
-#define ANON_DISCARD_LENGTH ANON_EIGHTH_LENGTH
-#define ANON_PAGEOUT_START ANON_QUARTER_LENGTH
-#define ANON_PAGEOUT_LENGTH ANON_EIGHTH_LENGTH
-#define SHARED_ANON_LENGTH (2 * MiB)
-#define SHARED_ANON_HALF_LENGTH (SHARED_ANON_LENGTH / 2)
-#define FILE_LENGTH (2 * MiB)
-#define FILE_HALF_LENGTH (FILE_LENGTH / 2)
-#define FILE_COLD_READS_PER_PAGE 8
-#define FILE_THP_LENGTH (16 * MiB)
-#define FILE_THP_READS_PER_PAGE 8
+#define KIB 1024
+#define MIB (1024 * KIB)
+
+#define ANON_LENGTH (2 * MIB)
+#define SHARED_ANON_LENGTH (2 * MIB)
+#define FILE_LENGTH (2 * MIB)
+#define FILE_THP_LENGTH (16 * MIB)
 #define MM_PT_SAMPLE_PAGES 512
 #define MM_XARRAY_SCAN_SLOTS 4096
 #define MM_HUGE_PMD_PAGES 512
-#define THP_LENGTH (2 * MiB)
-#define THP_ALIGNMENT (2 * MiB)
-#define THP_MAPPING_LENGTH (THP_LENGTH + THP_ALIGNMENT)
-#define THP_SPLIT_OFFSET (THP_LENGTH / 2)
+#define THP_LENGTH (2 * MIB)
+#define THP_ALIGNMENT (2 * MIB)
 
 __attribute__((noinline, used, visibility("default"))) void phase_boundary(unsigned int phase_seq)
 {
@@ -120,7 +110,7 @@ static void print_mm_constraints(void)
 
 static size_t kb_count(size_t bytes)
 {
-	return bytes / KiB;
+	return bytes / KIB;
 }
 
 static void phasef(const char *format, ...)
@@ -135,8 +125,6 @@ static void phasef(const char *format, ...)
 	va_end(args);
 	phase(messages[slot]);
 }
-
-#define PHASE(...) phasef(__VA_ARGS__)
 
 static int wait_for_signal(pid_t child, int expected, const char *name)
 {
@@ -161,7 +149,7 @@ static int exercise_file_backed_memory(size_t page_size, volatile unsigned long 
 	char path[] = "/var/tmp/lx-mm-XXXXXX";
 
 	/* Seed deterministic disk contents, then drop cache so the first file faults are cold. */
-	PHASE("file backed: created a %zu KB file, wrote one byte per page, synced it, and evicted cached pages", kb_count(FILE_LENGTH));
+	phasef("file backed: created a %zu KiB file, initialized one byte per page, synced it, and evicted cached folios", kb_count(FILE_LENGTH));
 	int fd = mkstemp(path);
 	if (fd < 0)
 	{
@@ -202,7 +190,7 @@ static int exercise_file_backed_memory(size_t page_size, volatile unsigned long 
 	unlink(path);
 
 	/* A cold mapping starts without resident cache folios and may require I/O. */
-	PHASE("file shared: mmap created a %zu KB read-only MAP_SHARED VMA; no page-cache folios or PTEs were faulted yet", kb_count(FILE_LENGTH));
+	phasef("file shared: mmap created a %zu KiB read-only MAP_SHARED VMA; no page-cache folios or file PTEs are resident yet", kb_count(FILE_LENGTH));
 	unsigned char *cold = mmap(NULL, FILE_LENGTH, PROT_READ, MAP_SHARED, fd, 0);
 	if (cold == MAP_FAILED)
 	{
@@ -214,29 +202,29 @@ static int exercise_file_backed_memory(size_t page_size, volatile unsigned long 
 	}
 
 	/* Dense forward reads give readahead a real stream instead of one sparse touch per page. */
-	size_t cold_stride = page_size / FILE_COLD_READS_PER_PAGE;
-	PHASE("file shared: cold sequential reads faulted %zu KB from disk into page cache and installed file PTEs", kb_count(FILE_LENGTH));
+	size_t cold_stride = page_size / 8;
+	phasef("file shared: sequential reads faulted %zu KiB from disk, populated page-cache folios, and installed file PTEs (cold page fault)", kb_count(FILE_LENGTH));
 	for (size_t i = 0; i < FILE_LENGTH; i += cold_stride)
 		*checksum += cold[i];
 
 	/* Dropping PTEs while retaining cache produces warm minor refaults. */
-	PHASE("file shared: MADV_DONTNEED dropped %zu KB of file PTEs while the VMA and address_space cache stayed alive", kb_count(FILE_LENGTH));
+	phasef("file shared: MADV_DONTNEED dropped %zu KiB of file PTEs while the VMA and address_space cache stayed alive", kb_count(FILE_LENGTH));
 	errno = 0;
 	int dropped_ptes = madvise(cold, FILE_LENGTH, MADV_DONTNEED);
 	if (dropped_ptes != 0)
 		result = -1;
 
 	/* Cached folios remain, so refaults rebuild PTEs without disk I/O. */
-	PHASE("file shared: warm reads rebuilt %zu KB of PTEs from clean page-cache folios without disk I/O", kb_count(FILE_LENGTH));
+	phasef("file shared: reads rebuilt %zu KiB of file PTEs from clean page-cache folios without disk I/O (warm page fault)", kb_count(FILE_LENGTH));
 	for (size_t i = 0; i < FILE_LENGTH; i += page_size)
 		*checksum += cold[i];
 
 	/* Removing the VMA does not evict its clean pages from address_space. */
-	PHASE("file shared: munmap removed the %zu KB read-only VMA while clean page-cache folios remained on address_space", kb_count(FILE_LENGTH));
+	phasef("file shared: munmap removed the %zu KiB read-only VMA and its file PTEs; clean page-cache folios remained in address_space", kb_count(FILE_LENGTH));
 	munmap(cold, FILE_LENGTH);
 
 	/* Two MAP_SHARED VMAs resolve to the same dirty page-cache folios. */
-	PHASE("file shared: mmap created two writable %zu KB MAP_SHARED VMAs pointing at the same inode and address_space", kb_count(FILE_LENGTH));
+	phasef("file shared: mmap created two writable %zu KiB MAP_SHARED VMAs sharing one inode and address_space", kb_count(FILE_LENGTH));
 	unsigned char *shared_a = mmap(NULL, FILE_LENGTH, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	unsigned char *shared_b = mmap(NULL, FILE_LENGTH, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (shared_a == MAP_FAILED || shared_b == MAP_FAILED)
@@ -253,40 +241,40 @@ static int exercise_file_backed_memory(size_t page_size, volatile unsigned long 
 	}
 
 	/* MAP_SHARED writes dirty page-cache folios, not private anonymous pages. */
-	PHASE("file shared: writes through shared_a dirtied %zu KB of page-cache folios shared by both VMAs", kb_count(FILE_HALF_LENGTH));
-	for (size_t i = 0; i < FILE_HALF_LENGTH; i += page_size)
+	phasef("file shared: writes through shared_a dirtied %zu KiB of page-cache folios visible through both VMAs", kb_count((FILE_LENGTH / 2)));
+	for (size_t i = 0; i < (FILE_LENGTH / 2); i += page_size)
 		shared_a[i] = (unsigned char)(0x5a ^ (i / page_size));
 
 	/* The second shared VMA sees the same dirty cache folios immediately. */
-	PHASE("file shared: reads through shared_b observed the same %zu KB dirty page-cache folios through a second VMA", kb_count(FILE_HALF_LENGTH));
+	phasef("file shared: reads through shared_b observed the same %zu KiB dirty page-cache folios through a second VMA", kb_count((FILE_LENGTH / 2)));
 	int coherent = 1;
-	for (size_t i = 0; coherent && i < FILE_HALF_LENGTH; i += page_size)
+	for (size_t i = 0; coherent && i < (FILE_LENGTH / 2); i += page_size)
 		coherent = shared_b[i] == (unsigned char)(0x5a ^ (i / page_size));
 	if (!coherent)
 		result = -1;
 
 	/* Coherence is immediate; persistence is a separate writeback operation. */
-	PHASE("file shared: msync and fsync wrote back %zu KB of dirty folios while both shared VMAs stayed mapped", kb_count(FILE_HALF_LENGTH));
-	int synced = msync(shared_a, FILE_HALF_LENGTH, MS_SYNC) == 0 && fsync(fd) == 0;
+	phasef("file shared: msync and fsync wrote back %zu KiB of dirty folios while both shared VMAs stayed mapped", kb_count((FILE_LENGTH / 2)));
+	int synced = msync(shared_a, (FILE_LENGTH / 2), MS_SYNC) == 0 && fsync(fd) == 0;
 	if (!synced)
 		result = -1;
 
 	/* Unmap one alias while the inode and second shared VMA remain alive. */
-	PHASE("file shared: munmap(shared_a) removed the first shared VMA while shared_b still mapped the same address_space");
+	phasef("file shared: munmap(shared_a) removed the first shared VMA while shared_b still mapped the same address_space");
 	munmap(shared_a, FILE_LENGTH);
 
 	/* Remove the final shared alias after writeback has completed. */
-	PHASE("file shared: munmap(shared_b) removed the remaining shared VMA while the file object still existed");
+	phasef("file shared: munmap(shared_b) removed the remaining shared VMA while the file object still existed");
 	munmap(shared_b, FILE_LENGTH);
 
 	/* Ask the kernel to drop clean cache so the private-file section starts clear. */
-	PHASE("file shared: POSIX_FADV_DONTNEED requested page-cache eviction after both shared VMAs were removed");
+	phasef("file shared: POSIX_FADV_DONTNEED requested page-cache eviction after both shared VMAs were removed");
 	int persistence_drop = posix_fadvise(fd, 0, FILE_LENGTH, POSIX_FADV_DONTNEED);
 	if (persistence_drop != 0)
 		result = -1;
 
 	/* MAP_PRIVATE reads file folios, then writes replace PTEs with anon COW. */
-	PHASE("file private: mmap created %zu KB MAP_SHARED read-only and MAP_PRIVATE writable views of the same inode", kb_count(FILE_LENGTH));
+	phasef("file private: mmap created %zu KiB MAP_SHARED and MAP_PRIVATE views of the same inode", kb_count(FILE_LENGTH));
 	unsigned char *shared_view = mmap(NULL, FILE_LENGTH, PROT_READ, MAP_SHARED, fd, 0);
 	unsigned char *private_view = mmap(NULL, FILE_LENGTH, PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
 	if (shared_view == MAP_FAILED || private_view == MAP_FAILED)
@@ -297,19 +285,19 @@ static int exercise_file_backed_memory(size_t page_size, volatile unsigned long 
 	else
 	{
 		/* MAP_PRIVATE reads still use page-cache folios until the mapping writes. */
-		PHASE("file private: reads faulted %zu KB MAP_PRIVATE PTEs through existing clean page-cache folios", kb_count(FILE_LENGTH));
+		phasef("file private: reads faulted %zu KiB MAP_PRIVATE PTEs through existing clean page-cache folios", kb_count(FILE_LENGTH));
 		for (size_t i = 0; i < FILE_LENGTH; i += page_size)
 			*checksum += private_view[i];
 
 		/* First MAP_PRIVATE writes replace file PTEs with private anonymous pages. */
-		PHASE("file private: writes COWed %zu KB from file-cache folios into private anonymous PFNs", kb_count(FILE_HALF_LENGTH));
-		for (size_t i = 0; i < FILE_HALF_LENGTH; i += page_size)
+		phasef("file private: writes performed copy-on-write for %zu KiB, replacing file-cache PTEs with private anonymous PFNs", kb_count((FILE_LENGTH / 2)));
+		for (size_t i = 0; i < (FILE_LENGTH / 2); i += page_size)
 			private_view[i] ^= 0x3c;
 
 		/* After COW, the VMA remains file-backed but dirty PTEs point at anon pages. */
-		PHASE("file private: COW completed; VMA still has struct file but private PTEs now target anonymous PFNs");
+		phasef("file private: copy-on-write completed; the VMA still has struct file but PTEs target anonymous PFNs");
 		int isolated = 1;
-		for (size_t i = 0; isolated && i < FILE_HALF_LENGTH; i += page_size)
+		for (size_t i = 0; isolated && i < (FILE_LENGTH / 2); i += page_size)
 		{
 			unsigned char file_value = (unsigned char)(0x5a ^ (i / page_size));
 			isolated = shared_view[i] == file_value && private_view[i] == (unsigned char)(file_value ^ 0x3c);
@@ -318,11 +306,11 @@ static int exercise_file_backed_memory(size_t page_size, volatile unsigned long 
 			result = -1;
 
 		/* Private COW pages behave like anonymous memory when pageout targets them. */
-		PHASE("file private: MADV_PAGEOUT requested swapout for %zu KB of private COW anonymous pages", kb_count(FILE_HALF_LENGTH));
+		phasef("file private: MADV_PAGEOUT requested swapout for %zu KiB of private COW anonymous pages", kb_count((FILE_LENGTH / 2)));
 		struct sysinfo memory;
 		if (sysinfo(&memory) == 0 && memory.totalswap != 0)
 		{
-			if (madvise(private_view, FILE_HALF_LENGTH, MADV_PAGEOUT) != 0)
+			if (madvise(private_view, (FILE_LENGTH / 2), MADV_PAGEOUT) != 0)
 			{
 				perror("madvise(private file pageout)");
 				result = -1;
@@ -330,15 +318,15 @@ static int exercise_file_backed_memory(size_t page_size, volatile unsigned long 
 			else
 			{
 				/* Reading the private COW range faults swapped/nonresident pages back in. */
-				PHASE("file private: reads refaulted %zu KB of paged-out COW pages back into private PTEs", kb_count(FILE_HALF_LENGTH));
-				for (size_t i = 0; i < FILE_HALF_LENGTH; i += page_size)
+				phasef("file private: reads refaulted %zu KiB of paged-out COW pages back into private PTEs", kb_count((FILE_LENGTH / 2)));
+				for (size_t i = 0; i < (FILE_LENGTH / 2); i += page_size)
 					*checksum += private_view[i];
 			}
 		}
 	}
 
 	/* Truncation invalidates the final mapped page; accessing it raises SIGBUS. */
-	PHASE("file private: truncate invalidated the final file page; access raised SIGBUS and file VMAs were unmapped");
+	phasef("file private: truncate invalidated the final file page; access raised SIGBUS and file VMAs were unmapped");
 	if (shared_view != MAP_FAILED && ftruncate(fd, FILE_LENGTH - page_size) == 0)
 	{
 		child = fork();
@@ -376,7 +364,7 @@ static int exercise_private_anonymous_memory(size_t page_size, volatile unsigned
 	int result = 0;
 
 	/* Reserve address space; mmap itself does not populate physical pages. */
-	PHASE("anonymous private: mmap created one %zu KB read-write MAP_PRIVATE anonymous VMA with no resident pages", kb_count(ANON_LENGTH));
+	phasef("anonymous private: mmap reserved one %zu KiB read-write MAP_PRIVATE VMA; no private pages are resident yet", kb_count(ANON_LENGTH));
 	unsigned char *anon = mmap(NULL, ANON_LENGTH, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (anon == MAP_FAILED)
 	{
@@ -385,23 +373,23 @@ static int exercise_private_anonymous_memory(size_t page_size, volatile unsigned
 	}
 
 	/* Untouched reads fault through read-only zero-page mappings. */
-	PHASE("anonymous private: reads over %zu KB installed shared zero-page PTEs without allocating private RSS", kb_count(ANON_EIGHTH_LENGTH));
-	for (size_t i = 0; i < ANON_EIGHTH_LENGTH; i += page_size)
+	phasef("anonymous private: reads over %zu KiB installed shared zero-page PTEs without allocating private RSS", kb_count((ANON_LENGTH / 8)));
+	for (size_t i = 0; i < (ANON_LENGTH / 8); i += page_size)
 		*checksum += anon[i];
 
 	/* First writes replace zero-page PTEs and allocate private anonymous pages. */
-	PHASE("anonymous private: writes over %zu KB replaced zero-page PTEs with private anonymous PFNs", kb_count(ANON_LENGTH));
+	phasef("anonymous private: writes over %zu KiB replaced zero-page PTEs with private anonymous PFNs", kb_count(ANON_LENGTH));
 	for (size_t i = 0; i < ANON_LENGTH; i += page_size)
 		anon[i] = (unsigned char)(i / page_size);
 
 	/* fork shares MAP_PRIVATE pages only until either process writes and gets a COW copy. */
-	PHASE("anonymous private: child wrote %zu KB after fork; COW isolated child PFNs while parent PTEs stayed unchanged", kb_count(ANON_QUARTER_LENGTH));
+	phasef("anonymous private: after fork, child writes triggered COW for %zu KiB while parent PTEs stayed unchanged", kb_count((ANON_LENGTH / 4)));
 	unsigned char parent_value = anon[0];
 	pid_t child = fork();
 	if (child == 0)
 	{
 		/* One write per page forces COW without rewriting every byte. */
-		for (size_t i = 0; i < ANON_QUARTER_LENGTH; i += page_size)
+		for (size_t i = 0; i < (ANON_LENGTH / 4); i += page_size)
 			anon[i] ^= 0xa5;
 		_exit(0);
 	}
@@ -420,8 +408,8 @@ static int exercise_private_anonymous_memory(size_t page_size, volatile unsigned
 	}
 
 	/* A write to a read-only VMA is a protection fault, not a demand fault. */
-	PHASE("anonymous private: mprotect made the middle %zu KB read-only and split one VMA into three", kb_count(ANON_PROTECT_LENGTH));
-	if (mprotect(anon + ANON_PROTECT_START, ANON_PROTECT_LENGTH, PROT_READ) != 0)
+	phasef("anonymous private: mprotect made the middle %zu KiB read-only and split one VMA into three", kb_count((ANON_LENGTH / 4)));
+	if (mprotect(anon + (ANON_LENGTH / 4), (ANON_LENGTH / 4), PROT_READ) != 0)
 	{
 		perror("mprotect(read-only)");
 		result = -1;
@@ -429,34 +417,34 @@ static int exercise_private_anonymous_memory(size_t page_size, volatile unsigned
 	else
 	{
 		/* Verify that VMA permission changes are enforced by a protection fault. */
-		PHASE("anonymous private: write through the read-only middle VMA raised a protection SIGSEGV");
+		phasef("anonymous private: write through the read-only middle VMA raised a protection SIGSEGV");
 		child = fork();
 		if (child == 0)
 		{
-			*(volatile unsigned char *)(anon + ANON_PROTECT_START) = 0xff;
+			*(volatile unsigned char *)(anon + (ANON_LENGTH / 4)) = 0xff;
 			_exit(0);
 		}
 		if (child < 0 || wait_for_signal(child, SIGSEGV, "private_anon_write_protection") != 0)
 			result = -1;
 		/* Restoring identical permissions lets the kernel merge compatible VMAs. */
-		PHASE("anonymous private: mprotect restored write permission and merged compatible adjacent VMAs");
-		if (mprotect(anon + ANON_PROTECT_START, ANON_PROTECT_LENGTH, PROT_READ | PROT_WRITE) != 0)
+		phasef("anonymous private: mprotect restored write permission and merged compatible adjacent VMAs");
+		if (mprotect(anon + (ANON_LENGTH / 4), (ANON_LENGTH / 4), PROT_READ | PROT_WRITE) != 0)
 			result = -1;
 	}
 
 	/* Removing the middle creates two VMAs separated by an unmapped hole. */
-	PHASE("anonymous private: munmap removed the middle %zu KB and left an unmapped hole between VMAs", kb_count(ANON_HOLE_LENGTH));
-	if (munmap(anon + ANON_HOLE_START, ANON_HOLE_LENGTH) != 0)
+	phasef("anonymous private: munmap removed the middle %zu KiB and left an unmapped hole between VMAs", kb_count((ANON_LENGTH / 8)));
+	if (munmap(anon + (ANON_LENGTH / 2), (ANON_LENGTH / 8)) != 0)
 	{
 		perror("munmap(private hole)");
 		result = -1;
 	}
 
 	/* Resize the final part of this same mapping; no unrelated mmap is needed. */
-	PHASE("anonymous private: mremap grew the tail VMA from %zu KB to %zu KB and could move its address", kb_count(ANON_TAIL_OLD_LENGTH), kb_count(ANON_TAIL_GROWN_LENGTH));
-	unsigned char *tail = anon + ANON_TAIL_OFFSET;
+	phasef("anonymous private: mremap grew the tail VMA from %zu KiB to %zu KiB and could move its address", kb_count((ANON_LENGTH / 8)), kb_count(((ANON_LENGTH / 4) + (ANON_LENGTH / 8))));
+	unsigned char *tail = anon + (ANON_LENGTH - (ANON_LENGTH / 8));
 	errno = 0;
-	unsigned char *remapped = mremap(tail, ANON_TAIL_OLD_LENGTH, ANON_TAIL_GROWN_LENGTH, MREMAP_MAYMOVE);
+	unsigned char *remapped = mremap(tail, (ANON_LENGTH / 8), ((ANON_LENGTH / 4) + (ANON_LENGTH / 8)), MREMAP_MAYMOVE);
 	if (remapped == MAP_FAILED)
 	{
 		perror("mremap(grow)");
@@ -465,45 +453,45 @@ static int exercise_private_anonymous_memory(size_t page_size, volatile unsigned
 	else
 	{
 		/* Touching the expanded tail turns new virtual space into real anon pages. */
-		PHASE("anonymous private: writes populated the new %zu KB tail with fresh private anonymous PFNs", kb_count(ANON_TAIL_GROWN_LENGTH - ANON_TAIL_OLD_LENGTH));
-		memset(remapped + ANON_TAIL_OLD_LENGTH, 0x52, ANON_TAIL_GROWN_LENGTH - ANON_TAIL_OLD_LENGTH);
+		phasef("anonymous private: writes populated the new %zu KiB tail with fresh private anonymous PFNs", kb_count(((ANON_LENGTH / 4) + (ANON_LENGTH / 8)) - (ANON_LENGTH / 8)));
+		memset(remapped + (ANON_LENGTH / 8), 0x52, ((ANON_LENGTH / 4) + (ANON_LENGTH / 8)) - (ANON_LENGTH / 8));
 
 		/* Shrinking keeps the remaining prefix mapped and releases the right end. */
-		PHASE("anonymous private: mremap shrank the tail VMA from %zu KB to %zu KB and unmapped its right edge", kb_count(ANON_TAIL_GROWN_LENGTH), kb_count(ANON_TAIL_FINAL_LENGTH));
+		phasef("anonymous private: mremap shrank the tail VMA from %zu KiB to %zu KiB and unmapped its right edge", kb_count(((ANON_LENGTH / 4) + (ANON_LENGTH / 8))), kb_count((ANON_LENGTH / 4)));
 		errno = 0;
-		unsigned char *shrunk = mremap(remapped, ANON_TAIL_GROWN_LENGTH, ANON_TAIL_FINAL_LENGTH, 0);
+		unsigned char *shrunk = mremap(remapped, ((ANON_LENGTH / 4) + (ANON_LENGTH / 8)), (ANON_LENGTH / 4), 0);
 		if (shrunk == MAP_FAILED)
 		{
 			perror("mremap(shrink)");
-			munmap(remapped, ANON_TAIL_GROWN_LENGTH);
+			munmap(remapped, ((ANON_LENGTH / 4) + (ANON_LENGTH / 8)));
 			result = -1;
 		}
 		else
 		{
 			/* Clean up the remapped tail so the later anon ranges are easier to read. */
-			PHASE("anonymous private: munmap removed the remaining remapped tail VMA and its private PTEs");
-			munmap(shrunk, ANON_TAIL_FINAL_LENGTH);
+			phasef("anonymous private: munmap removed the remaining remapped tail VMA and its private PTEs");
+			munmap(shrunk, (ANON_LENGTH / 4));
 		}
 	}
 
 	/* MADV_DONTNEED discards private pages and leaves the VMA in place. */
-	PHASE("anonymous private: MADV_DONTNEED discarded %zu KB of anonymous PTEs without writing them to swap", kb_count(ANON_DISCARD_LENGTH));
+	phasef("anonymous private: MADV_DONTNEED discarded %zu KiB of anonymous PTEs without writing them to swap", kb_count((ANON_LENGTH / 8)));
 	errno = 0;
-	int discarded = madvise(anon + ANON_DISCARD_START, ANON_DISCARD_LENGTH, MADV_DONTNEED);
+	int discarded = madvise(anon + (ANON_LENGTH / 8), (ANON_LENGTH / 8), MADV_DONTNEED);
 	if (discarded != 0)
 		result = -1;
 
 	/* Writes after DONTNEED allocate fresh zeroed private anon pages. */
-	PHASE("anonymous private: writes refaulted %zu KB as fresh zeroed anonymous pages after DONTNEED", kb_count(ANON_DISCARD_LENGTH));
-	for (size_t i = ANON_DISCARD_START; i < ANON_DISCARD_START + ANON_DISCARD_LENGTH; i += page_size)
+	phasef("anonymous private: writes refaulted %zu KiB as fresh zeroed anonymous pages after DONTNEED", kb_count((ANON_LENGTH / 8)));
+	for (size_t i = (ANON_LENGTH / 8); i < (ANON_LENGTH / 8) + (ANON_LENGTH / 8); i += page_size)
 		anon[i] = (unsigned char)(i / page_size);
 
 	/* With active swap, pageout can replace present anon PTEs with swap entries. */
-	PHASE("anonymous private: MADV_PAGEOUT requested swapout for %zu KB of resident anonymous pages", kb_count(ANON_PAGEOUT_LENGTH));
+	phasef("anonymous private: MADV_PAGEOUT requested swapout for %zu KiB of resident anonymous pages", kb_count((ANON_LENGTH / 8)));
 	struct sysinfo memory;
 	if (sysinfo(&memory) == 0 && memory.totalswap != 0)
 	{
-		if (madvise(anon + ANON_PAGEOUT_START, ANON_PAGEOUT_LENGTH, MADV_PAGEOUT) != 0)
+		if (madvise(anon + (ANON_LENGTH / 4), (ANON_LENGTH / 8), MADV_PAGEOUT) != 0)
 		{
 			perror("madvise(private pageout)");
 			result = -1;
@@ -511,16 +499,16 @@ static int exercise_private_anonymous_memory(size_t page_size, volatile unsigned
 		else
 		{
 			/* Reading the paged-out anon range faults swap/nonresident pages back in. */
-			PHASE("anonymous private: reads refaulted %zu KB of paged-out anonymous pages from swap-backed entries", kb_count(ANON_PAGEOUT_LENGTH));
-			for (size_t i = ANON_PAGEOUT_START; i < ANON_PAGEOUT_START + ANON_PAGEOUT_LENGTH; i += page_size)
+			phasef("anonymous private: reads refaulted %zu KiB of paged-out anonymous pages from swap-backed entries", kb_count((ANON_LENGTH / 8)));
+			for (size_t i = (ANON_LENGTH / 4); i < (ANON_LENGTH / 4) + (ANON_LENGTH / 8); i += page_size)
 				*checksum += anon[i];
 		}
 	}
 
 	/* Remove the remaining pieces after the split/remap/discard sequence. */
-	PHASE("anonymous private: munmap removed all remaining private-anonymous VMA ranges and PTEs");
-	munmap(anon, ANON_HOLE_START);
-	munmap(anon + ANON_HOLE_START + ANON_HOLE_LENGTH, ANON_TAIL_OFFSET - (ANON_HOLE_START + ANON_HOLE_LENGTH));
+	phasef("anonymous private: munmap removed all remaining private-anonymous VMA ranges and PTEs");
+	munmap(anon, (ANON_LENGTH / 2));
+	munmap(anon + (ANON_LENGTH / 2) + (ANON_LENGTH / 8), (ANON_LENGTH - (ANON_LENGTH / 8)) - ((ANON_LENGTH / 2) + (ANON_LENGTH / 8)));
 	return result;
 }
 
@@ -530,7 +518,7 @@ static int exercise_shared_anonymous_memory(size_t page_size, volatile unsigned 
 	int result = 0;
 
 	/* Unlike forked MAP_PRIVATE memory, MAP_SHARED anonymous memory stays shared through shmem. */
-	PHASE("anonymous shared: mmap created one %zu KB read-write MAP_SHARED anonymous VMA backed by shmem", kb_count(SHARED_ANON_LENGTH));
+	phasef("anonymous shared: mmap created one %zu KiB read-write MAP_SHARED VMA backed by shmem rather than private anon pages", kb_count(SHARED_ANON_LENGTH));
 	unsigned char *shared = mmap(NULL, SHARED_ANON_LENGTH, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 	if (shared == MAP_FAILED)
 	{
@@ -539,16 +527,16 @@ static int exercise_shared_anonymous_memory(size_t page_size, volatile unsigned 
 	}
 
 	/* First access allocates shmem-backed pages rather than private anon pages. */
-	PHASE("anonymous shared: reads faulted %zu KB through shmem folios shared by all mappings of this object", kb_count(SHARED_ANON_LENGTH));
+	phasef("anonymous shared: reads faulted %zu KiB through shmem folios shared by all mappings of this object", kb_count(SHARED_ANON_LENGTH));
 	for (size_t i = 0; i < SHARED_ANON_LENGTH; i += page_size)
 		*checksum += shared[i];
 
 	/* Child writes update the same shmem folios, so the parent sees them. */
-	PHASE("anonymous shared: child writes updated %zu KB of shmem folios immediately visible to the parent", kb_count(SHARED_ANON_HALF_LENGTH));
+	phasef("anonymous shared: child writes updated %zu KiB of shmem folios immediately visible to the parent", kb_count((SHARED_ANON_LENGTH / 2)));
 	pid_t child = fork();
 	if (child == 0)
 	{
-		for (size_t i = 0; i < SHARED_ANON_HALF_LENGTH; i += page_size)
+		for (size_t i = 0; i < (SHARED_ANON_LENGTH / 2); i += page_size)
 			shared[i] = (unsigned char)(0x80 ^ (i / page_size));
 		_exit(0);
 	}
@@ -562,7 +550,7 @@ static int exercise_shared_anonymous_memory(size_t page_size, volatile unsigned 
 		int status;
 		waitpid(child, &status, 0);
 		int visible = WIFEXITED(status) && WEXITSTATUS(status) == 0;
-		for (size_t i = 0; visible && i < SHARED_ANON_HALF_LENGTH; i += page_size)
+		for (size_t i = 0; visible && i < (SHARED_ANON_LENGTH / 2); i += page_size)
 			visible = shared[i] ==
 					  (unsigned char)(0x80 ^ (i / page_size));
 		if (!visible)
@@ -570,11 +558,11 @@ static int exercise_shared_anonymous_memory(size_t page_size, volatile unsigned 
 	}
 
 	/* Shared-anon pageout uses shmem/swap machinery while preserving contents. */
-	PHASE("anonymous shared: MADV_PAGEOUT requested swapout for %zu KB of shared shmem-backed pages", kb_count(SHARED_ANON_HALF_LENGTH));
+	phasef("anonymous shared: MADV_PAGEOUT requested swapout for %zu KiB of shared shmem-backed pages", kb_count((SHARED_ANON_LENGTH / 2)));
 	struct sysinfo shared_memory;
 	if (sysinfo(&shared_memory) == 0 && shared_memory.totalswap != 0)
 	{
-		if (madvise(shared, SHARED_ANON_HALF_LENGTH, MADV_PAGEOUT) != 0)
+		if (madvise(shared, (SHARED_ANON_LENGTH / 2), MADV_PAGEOUT) != 0)
 		{
 			perror("madvise(shared pageout)");
 			result = -1;
@@ -582,14 +570,14 @@ static int exercise_shared_anonymous_memory(size_t page_size, volatile unsigned 
 		else
 		{
 			/* Reading the shared-anon range faults shmem/swap-backed pages back in. */
-			PHASE("anonymous shared: reads refaulted %zu KB of paged-out shmem pages through the shared VMA", kb_count(SHARED_ANON_HALF_LENGTH));
-			for (size_t i = 0; i < SHARED_ANON_HALF_LENGTH; i += page_size)
+			phasef("anonymous shared: reads refaulted %zu KiB of paged-out shmem pages through the shared VMA", kb_count((SHARED_ANON_LENGTH / 2)));
+			for (size_t i = 0; i < (SHARED_ANON_LENGTH / 2); i += page_size)
 				*checksum += shared[i];
 		}
 	}
 
 	/* Removing the only shared-anon VMA drops this process view of the shmem object. */
-	PHASE("anonymous shared: munmap removed the shared-anonymous shmem VMA and released its view");
+	phasef("anonymous shared: munmap removed the shared-anonymous shmem VMA and released its view");
 	munmap(shared, SHARED_ANON_LENGTH);
 	return result;
 }
@@ -598,8 +586,8 @@ static int exercise_shared_anonymous_memory(size_t page_size, volatile unsigned 
 static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned long *checksum)
 {
 	/* Reserve padding, keep only the aligned 2 MiB VMA, and discard the padding. */
-	PHASE("transparent huge pages: mmap created one aligned %zu KB anonymous VMA eligible for one huge PMD", kb_count(THP_LENGTH));
-	unsigned char *mapping = mmap(NULL, THP_MAPPING_LENGTH, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	phasef("transparent huge pages: mmap created one aligned %zu KiB anonymous VMA eligible for a single huge PMD", kb_count(THP_LENGTH));
+	unsigned char *mapping = mmap(NULL, (THP_LENGTH + THP_ALIGNMENT), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (mapping == MAP_FAILED)
 	{
 		perror("mmap(transparent huge pages)");
@@ -608,11 +596,11 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 
 	unsigned char *thp = (unsigned char *)(((uintptr_t)mapping + THP_ALIGNMENT - 1) & ~(uintptr_t)(THP_ALIGNMENT - 1));
 	size_t prefix = (size_t)(thp - mapping);
-	size_t suffix = THP_MAPPING_LENGTH - prefix - THP_LENGTH;
+	size_t suffix = (THP_LENGTH + THP_ALIGNMENT) - prefix - THP_LENGTH;
 	if (prefix && munmap(mapping, prefix) != 0)
 	{
 		perror("munmap(thp prefix)");
-		munmap(mapping, THP_MAPPING_LENGTH);
+		munmap(mapping, (THP_LENGTH + THP_ALIGNMENT));
 		return -1;
 	}
 	if (suffix && munmap(thp + THP_LENGTH, suffix) != 0)
@@ -623,7 +611,7 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 	}
 
 	/* Keep first faults as base pages so collapse has a visible before/after. */
-	PHASE("transparent huge pages: MADV_NOHUGEPAGE kept %zu KB in base-page mode before population", kb_count(THP_LENGTH));
+	phasef("transparent huge pages: MADV_NOHUGEPAGE kept %zu KiB in base-page mode before population", kb_count(THP_LENGTH));
 	if (madvise(thp, THP_LENGTH, MADV_NOHUGEPAGE) != 0)
 	{
 		perror("madvise(MADV_NOHUGEPAGE)");
@@ -632,12 +620,12 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 	}
 
 	/* First writes populate exactly 512 base-page slots before collapse. */
-	PHASE("transparent huge pages: writes populated %zu KB as %zu KiB PTE-mapped anonymous pages", kb_count(THP_LENGTH), page_size / 1024);
+	phasef("transparent huge pages: writes populated %zu KiB as %zu KiB PTE-mapped anonymous pages", kb_count(THP_LENGTH), page_size / 1024);
 	for (size_t i = 0; i < THP_LENGTH; i += page_size)
 		thp[i] = (unsigned char)(i / page_size);
 
 	/* Collapse the 512 base-page PTEs into one PMD-level THP mapping. */
-	PHASE("transparent huge pages: MADV_COLLAPSE replaced 512 base-page PTEs with one huge PMD");
+	phasef("transparent huge pages: MADV_COLLAPSE replaced 512 base-page PTEs with one 2 MiB huge PMD");
 	if (madvise(thp, THP_LENGTH, MADV_HUGEPAGE) != 0 || madvise(thp, THP_LENGTH, MADV_COLLAPSE) != 0)
 	{
 		perror("madvise(transparent huge pages)");
@@ -646,8 +634,8 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 	}
 
 	/* A 4 KiB permission change forces a huge-PMD split around that page. */
-	PHASE("transparent huge pages: mprotect changed one %zu KiB subpage and split the huge PMD", page_size / 1024);
-	if (mprotect(thp + THP_SPLIT_OFFSET, page_size, PROT_READ) != 0)
+	phasef("transparent huge pages: mprotect changed one %zu KiB subpage and split the huge PMD", page_size / 1024);
+	if (mprotect(thp + (THP_LENGTH / 2), page_size, PROT_READ) != 0)
 	{
 		perror("mprotect(split transparent huge page)");
 		munmap(thp, THP_LENGTH);
@@ -655,8 +643,8 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 	}
 
 	/* Matching permissions allow adjacent VMAs to merge, but PTEs stay split. */
-	PHASE("transparent huge pages: mprotect restored write permission and merged VMAs while PTEs stayed split");
-	if (mprotect(thp + THP_SPLIT_OFFSET, page_size, PROT_READ | PROT_WRITE) != 0)
+	phasef("transparent huge pages: mprotect restored write permission and merged VMAs while PTEs stayed split");
+	if (mprotect(thp + (THP_LENGTH / 2), page_size, PROT_READ | PROT_WRITE) != 0)
 	{
 		perror("mprotect(restore transparent huge page)");
 		munmap(thp, THP_LENGTH);
@@ -664,7 +652,7 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 	}
 
 	/* Explicit collapse is needed to rebuild the huge PMD after mprotect split it. */
-	PHASE("transparent huge pages: MADV_COLLAPSE rebuilt one huge PMD after the mprotect split");
+	phasef("transparent huge pages: MADV_COLLAPSE rebuilt one huge PMD after the mprotect split");
 	if (madvise(thp, THP_LENGTH, MADV_COLLAPSE) != 0)
 	{
 		perror("madvise(recollapse transparent huge page)");
@@ -673,13 +661,13 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 	}
 
 	/* Tear down the aligned anonymous THP-sized VMA. */
-	PHASE("transparent huge pages: munmap removed the aligned %zu KB anonymous THP-sized VMA", kb_count(THP_LENGTH));
+	phasef("transparent huge pages: munmap removed the aligned %zu KiB anonymous THP-sized VMA", kb_count(THP_LENGTH));
 	munmap(thp, THP_LENGTH);
 
 	char path[] = "/var/tmp/lx-mm-large-XXXXXX";
 
 	/* Prepare a real file for file-backed THP faults in the same THP section. */
-	PHASE("transparent huge pages: prepared a %zu KB file so file-cache faults can form large folios", kb_count(FILE_THP_LENGTH));
+	phasef("transparent huge pages: prepared a %zu KiB file so file-cache faults can form large folios", kb_count(FILE_THP_LENGTH));
 	int fd = mkstemp(path);
 	if (fd < 0)
 	{
@@ -712,7 +700,7 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 	unlink(path);
 
 	/* Map the file, mark it hugepage-friendly, then let faults install file THPs. */
-	PHASE("transparent huge pages: mmap created a %zu KB read-only MAP_SHARED file VMA and requested huge faults", kb_count(FILE_THP_LENGTH));
+	phasef("transparent huge pages: mmap created a %zu KiB read-only MAP_SHARED file VMA and requested huge faults", kb_count(FILE_THP_LENGTH));
 	unsigned char *file_thp = mmap(NULL, FILE_THP_LENGTH, PROT_READ, MAP_SHARED, fd, 0);
 	if (file_thp == MAP_FAILED)
 	{
@@ -727,13 +715,13 @@ static int exercise_transparent_huge_pages(size_t page_size, volatile unsigned l
 	}
 
 	/* One snapshot captures PMD-sized file-cache folios plus sampled huge-PMD page-table state. */
-	size_t stride = page_size / FILE_THP_READS_PER_PAGE;
-	PHASE("transparent huge pages: file faults populated large page-cache folios visible through address_space");
+	size_t stride = page_size / 8;
+	phasef("transparent huge pages: sequential file faults populated large page-cache folios visible through address_space");
 	for (size_t i = 0; i < FILE_THP_LENGTH; i += stride)
 		*checksum += file_thp[i];
 
 	/* Remove the file-backed THP VMA. */
-	PHASE("transparent huge pages: munmap removed the 16 MiB file-backed huge-fault VMA");
+	phasef("transparent huge pages: munmap removed the 16 MiB file-backed huge-fault VMA");
 	munmap(file_thp, FILE_THP_LENGTH);
 	close(fd);
 	return result;
@@ -767,7 +755,7 @@ int main(void)
 		result = -1;
 
 	/* Final boundary lets the observer capture the fully cleaned-up address space. */
-	PHASE("complete: all file-backed, private-anon, shared-anon, and THP exercise mappings were cleaned up");
+	phasef("complete: all file-backed, private-anon, shared-anon, and THP exercise mappings were cleaned up");
 	phase(NULL);
 	struct json_writer jw;
 

@@ -16,7 +16,6 @@
  * libbpf loads and verifies mm.bpf.o, attaches the phase_boundary entry/return probes, and polls the ring buffer.
  * Each callback serializes one post-phase MM snapshot as a single NDJSON record for the frontend.
  *
- * Stdout carries NDJSON only.
  * Stderr carries machine-readable lifecycle lines (LX_READY / LX_DONE) plus human diagnostics.
  * run.sh can therefore gate the workload on a successful attachment without parsing capture records.
  *
@@ -30,7 +29,7 @@
  * The page-table and XArray observations are bounded and best-effort; the derived counts summarize those bounds.
  */
 
-#define WORKLOAD_PATH "/mnt/host/memory/workload_mm"
+#define WORKLOAD_PATH "/mnt/host/experiments/memory/workload_mm"
 
 static unsigned int record_count;
 static unsigned int seq_counter;
@@ -482,7 +481,7 @@ int main(void)
 		err = 1;
 		goto out;
 	}
-	return_link = bpf_program__attach_uprobe_opts(skel->progs.snapshot_phase_return, -1, WORKLOAD_PATH, phase_offset, &return_options);
+	return_link = bpf_program__attach_uprobe_opts(skel->progs.phase_boundary_ret, -1, WORKLOAD_PATH, phase_offset, &return_options);
 	if (!return_link)
 	{
 		fprintf(stderr, "mm: failed to attach phase boundary return uprobe: %d\n", -errno);

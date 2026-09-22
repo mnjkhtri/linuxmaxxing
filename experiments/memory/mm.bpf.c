@@ -95,11 +95,11 @@ int phase_boundary_entry(struct pt_regs *context)
 
 /*
  * Return probe: capture the post-boundary MM state and emit exactly one event per phase boundary.
- * The workload calls phase_boundary() after publishing the completed phase, so the snapshot
- * represents the MM state produced by that phase, identified by event_info.phase_seq.
+ * The workload calls phase_boundary() after publishing the completed phase,
+ * so the snapshot represents the MM state produced by that phase, identified by event_info.phase_seq.
  */
 SEC("uretprobe")
-int snapshot_phase_return(struct pt_regs *context)
+int phase_boundary_ret(struct pt_regs *context)
 {
 	(void)context;
 	u32 zero = 0;

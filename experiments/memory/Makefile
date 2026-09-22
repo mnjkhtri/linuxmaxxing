@@ -9,8 +9,8 @@ BUILD_DIR := $(DIR)build
 BPF_SRC := $(DIR)mm.bpf.c
 BPF_OBJ := $(BUILD_DIR)/mm.bpf.o
 SKEL := $(BUILD_DIR)/mm.skel.h
-LOADER_SRC := $(DIR)mm.c
-LOADER := $(BUILD_DIR)/mm
+LOADER_SRC := $(DIR)observer.c
+LOADER := $(BUILD_DIR)/observer
 VMLINUX := $(BUILD_DIR)/vmlinux.h
 EVENT_HDR := $(DIR)mm_event.h
 JSON_WRITER_SRC := $(SHARED_DIR)/json_writer.c
@@ -20,7 +20,7 @@ WORKLOAD_CFLAGS := -O2 -g -Wall -Wextra
 
 CFLAGS := -g -O2 -Wall -Wextra -I$(BUILD_DIR) -I$(DIR) -I$(SHARED_DIR)
 
-.PHONY: all workload clean
+.PHONY: all workload clean observer
 
 all: $(LOADER) workload
 
