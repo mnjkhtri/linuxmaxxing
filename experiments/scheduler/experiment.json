@@ -2,7 +2,7 @@
   "name": "scheduler",
   "source": "experiments/scheduler",
   "environment": "guest",
-  "observer": "cfs",
+  "observer": "observer",
   "workload": [
     "./workload_fork",
     "--trace-wait"

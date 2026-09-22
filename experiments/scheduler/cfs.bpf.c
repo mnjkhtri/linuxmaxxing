@@ -43,9 +43,9 @@ static __always_inline int workload_name(char *comm);
 static __always_inline struct task_struct *node_task(struct rb_node *node)
 {
 	struct sched_entity *se = (struct sched_entity *)((char *)node -
-		bpf_core_field_offset(struct sched_entity, run_node));
+													  bpf_core_field_offset(struct sched_entity, run_node));
 	return (struct task_struct *)((char *)se -
-		bpf_core_field_offset(struct task_struct, se));
+								  bpf_core_field_offset(struct task_struct, se));
 }
 
 struct
@@ -71,10 +71,9 @@ static __always_inline void fill_node(struct tree_node *dst, struct rb_node *nod
 
 /*
  * During the workload, scope snapshots to the launcher and schedNNN workers.
- * During the short post-workload drain, the userspace observer enables all
- * task enqueues so the final per-CPU kernel activity remains visible.
+ * During the short post-workload drain, the userspace observer enables all task enqueues so the final per-CPU kernel activity remains visible.
  * Task-level entities embed struct task_struct at se - offsetof(task_struct, se), the same walk read_node_comm uses for tree nodes.
- * A group entity has no task behind that offset; reading its comm then fails with a negative error, which we treat as not-a-workload-task, so such enqueues are safely skipped.
+ * A group entity has no task behind that offset which we treat as not-a-workload-task, so such enqueues are safely skipped.
  */
 static __always_inline int workload_entity(struct sched_entity *se)
 {
@@ -106,7 +105,7 @@ static __always_inline int workload_name(char *comm)
 	const char launcher_name[] = WORKLOAD_LAUNCHER;
 
 	return has_prefix(comm, worker_prefix, sizeof(worker_prefix) - 1) ||
-		has_prefix(comm, launcher_name, sizeof(launcher_name) - 1);
+		   has_prefix(comm, launcher_name, sizeof(launcher_name) - 1);
 }
 
 /* Recover a task name from a task-level sched_entity; group entities may have no task. */
@@ -130,7 +129,7 @@ struct
 	__type(value, struct saved_args);
 } active_args SEC(".maps");
 
-/* Per-CPU temporary workspace: keeps large traversal state off the 512-byte BPF stack and prevents CPUs from sharing one mutable scratch value, so no scratch lock is needed. */
+/* Per-CPU temporary workspace: keeps large traversal state off the 512-byte BPF stack and prevents CPUs from sharing one mutable scratch value. */
 struct
 {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
@@ -184,8 +183,7 @@ static long walk_one_node(u64 index, void *ctx)
 	return 0;
 }
 
-static __always_inline int emit_snapshot(struct cfs_rq *cfs_rq,
-		struct sched_entity *se)
+static __always_inline int emit_snapshot(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
 	u64 id = bpf_get_current_pid_tgid();
 	u32 zero = 0;
@@ -232,8 +230,7 @@ int BPF_KPROBE(kprobe_enqueue_entity)
 		.se = (struct sched_entity *)PT_REGS_PARM2(ctx),
 	};
 
-	/* Keep the active_args map focused during the workload; drain mode is
-	 * enabled by the userspace observer after workload completion. */
+	/* Keep the active_args map focused during the workload; drain mode is enabled by the userspace observer after workload completion. */
 	if (!workload_entity(args.se))
 		return 0;
 

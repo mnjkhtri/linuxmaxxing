@@ -17,9 +17,9 @@
 
 /*
  * Create repeatable but varied scheduler pressure for both observers in run.sh.
- * Eight children are released together, named schedNNN, and assigned different positive nice values. Some periodically sleep or yield; the rest stay CPU-bound.
+ * Eight children are released together, named schedNNN, and assigned different positive nice values.
+ * Some periodically sleep or yield; the rest stay CPU-bound.
  * This exposes forks, wakeups, context switches, per-CPU CFS tree changes, and cross-CPU movement in one experiment.
- *
  * The eBPF CFS observer captures the launcher and schedNNN children, so the first tree state includes the launcher before the child burst.
  * The tracefs side still records the full sched_* stream for cross-reference.
  */

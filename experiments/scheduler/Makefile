@@ -13,13 +13,13 @@ SKEL := $(DIR)cfs.skel.h
 EVENT_HDR := $(DIR)cfs_event.h
 JSON_WRITER_SRC := $(SHARED_DIR)/json_writer.c
 JSON_WRITER_HDR := $(SHARED_DIR)/json_writer.h
-LOADER_SRC := $(DIR)cfs.c
-LOADER := $(DIR)cfs
+LOADER_SRC := $(DIR)observer.c
+LOADER := $(DIR)observer
 VMLINUX := $(DIR)vmlinux.h
 KERNEL_BUILD := $(abspath $(DIR)../../build)
-CFS_CFLAGS := -g -O2 -Wall -I$(DIR) -I$(SHARED_DIR)
+SCHEDULER_CFLAGS := -g -O2 -Wall -I$(DIR) -I$(SHARED_DIR)
 
-.PHONY: all clean workload cfs
+.PHONY: all clean workload observer
 
 all: workload_fork $(LOADER)
 
@@ -34,11 +34,11 @@ $(BPF_OBJ): $(BPF_SRC) $(SHARED_DIR)/observer_bpf.h $(VMLINUX) $(EVENT_HDR)
 	$(CLANG) -g -O2 -target bpf -I$(SHARED_DIR) -D__TARGET_ARCH_x86 -I$(DIR) -c $< -o $@
 
 $(SKEL): $(BPF_OBJ)
-	# The generated skeleton gives cfs.c typed access to programs and maps.
+	# The generated skeleton gives observer.c typed access to programs and maps.
 	$(BPFTOOL) gen skeleton $< > $@
 
 $(LOADER): $(LOADER_SRC) $(SKEL) $(EVENT_HDR) $(JSON_WRITER_SRC) $(JSON_WRITER_HDR) $(SHARED_DIR)/observer_runtime.h
-	$(CC) $(CFS_CFLAGS) -o $@ $< $(JSON_WRITER_SRC) $(shell $(PKG_CONFIG) --libs libbpf) -lelf -lz
+	$(CC) $(SCHEDULER_CFLAGS) -o $@ $< $(JSON_WRITER_SRC) $(shell $(PKG_CONFIG) --libs libbpf) -lelf -lz
 
 clean:
 	$(RM) workload_fork $(BPF_OBJ) $(SKEL) $(LOADER)

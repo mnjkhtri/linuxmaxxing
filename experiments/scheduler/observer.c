@@ -176,20 +176,20 @@ int main(void)
 	struct cfs_bpf *skel = cfs_bpf__open_and_load();
 	if (!skel)
 	{
-		fprintf(stderr, "cfs: failed to open/load BPF skeleton\n");
+		fprintf(stderr, "observer: failed to open/load BPF skeleton\n");
 		return 1;
 	}
 	int err = cfs_bpf__attach(skel);
 	if (err)
 	{
-		fprintf(stderr, "cfs: failed to attach BPF programs: %d\n", err);
+		fprintf(stderr, "observer: failed to attach BPF programs: %d\n", err);
 		cfs_bpf__destroy(skel);
 		return 1;
 	}
 	struct ring_buffer *ringbuf = ring_buffer__new(bpf_map__fd(skel->maps.events), handle_event, NULL, NULL);
 	if (!ringbuf)
 	{
-		fprintf(stderr, "cfs: failed to create ring buffer: %d\n", -errno);
+		fprintf(stderr, "observer: failed to create ring buffer: %d\n", -errno);
 		cfs_bpf__destroy(skel);
 		return 1;
 	}
@@ -200,7 +200,7 @@ int main(void)
 	write_meta(&jw);
 	fflush(stdout);
 
-	lab_control("LX_READY experiment=scheduler observer=cfs\n");
+	lab_control("LX_READY experiment=scheduler observer=observer\n");
 
 	err = 0;
 	while (!exiting)
@@ -210,7 +210,7 @@ int main(void)
 			unsigned int key = 0;
 			unsigned int enabled = 1;
 			if (bpf_map_update_elem(bpf_map__fd(skel->maps.capture_mode), &key,
-				&enabled, BPF_ANY))
+									&enabled, BPF_ANY))
 			{
 				err = -errno;
 				break;
@@ -249,6 +249,6 @@ int main(void)
 
 	if (err)
 		return 1;
-	lab_control("LX_DONE experiment=scheduler observer=cfs records=%u\n", record_count);
+	lab_control("LX_DONE experiment=scheduler observer=observer records=%u\n", record_count);
 	return 0;
 }
