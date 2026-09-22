@@ -139,12 +139,12 @@ body[data-experiment="io"] .inspector-pane .origin-grid > div {
   height: 100%;
   display: grid;
   grid-template-columns: 170px minmax(0, 1fr);
-  grid-template-rows: 44px minmax(330px, 1fr)
+  grid-template-rows: 34px minmax(330px, 1fr)
 }
 
 .journey-head {
   grid-column: 1/-1;
-  padding: 4px 8px;
+  padding: 2px 8px;
   display: flex;
   align-items: center;
   gap: 8px;

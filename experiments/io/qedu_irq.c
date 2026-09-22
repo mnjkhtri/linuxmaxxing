@@ -8,7 +8,7 @@
 /*
  * QEMU EDU uses legacy INTx, which may share one Linux IRQ with other devices.
  * request_irq(..., IRQF_SHARED, ...) adds qedu to that IRQ's action chain:
- * the list of handlers Linux calls whenever the shared line is raised.
+ * The list of handlers Linux calls whenever the shared line is raised.
  * Each handler must check its own hardware to decide whether the IRQ is its.
  *
  * qedu_irq_handler() follows this flow:
@@ -37,12 +37,12 @@
  *         -> this handler records the event and wakes job_wait
  *           -> the wait condition becomes true and the task continues
  *
- * This function runs as the hard-IRQ top half. It must not sleep or take
- * qdev->lock. Factorial stays as the minimal direct-wakeup example. DMA uses
- * qedu_dma_advance_work and qedu_dma_finish_work so direction changes and the final wakeup happen in process context.
+ * This function runs as the hard-IRQ top half. It must not sleep or take qdev->lock.
+ * Factorial stays as the minimal direct-wakeup example.
+ * DMA uses qedu_dma_advance_work and qedu_dma_finish_work so direction changes and the final wakeup happen in process context.
  *
- * The timeout stops broken hardware from blocking a task forever. A signal
- * may interrupt the sleep; that error is returned to the userspace syscall.
+ * The timeout stops broken hardware from blocking a task forever.
+ * A signal may interrupt the sleep; that error is returned to the userspace syscall.
  */
 
 static irqreturn_t qedu_irq_handler(int irq, void *dev_id)
@@ -64,7 +64,8 @@ static irqreturn_t qedu_irq_handler(int irq, void *dev_id)
 	trace_qedu_irq_ack(device, io_id, engine, irq, status, status,
 					   atomic_read(&qdev->dma_stage));
 
-	if (status & QEDU_IRQ_FACTORIAL) {
+	if (status & QEDU_IRQ_FACTORIAL)
+	{
 		bits_before = READ_ONCE(qdev->completed_events);
 		set_bit(QEDU_EVENT_FACTORIAL, &qdev->completed_events);
 		trace_qedu_completion_publish(device, io_id,
@@ -96,13 +97,14 @@ int qedu_irq_init(struct qedu_dev *qdev)
 	int ret;
 
 	ret = request_irq(pdev->irq, qedu_irq_handler, IRQF_SHARED, "qedu", qdev);
-	if (ret) {
+	if (ret)
+	{
 		pr_err("qedu: request_irq failed: %d\n", ret);
 		return ret;
 	}
 
 	trace_qedu_probe_api(pci_name(pdev), "request_irq",
-						   "shared_intx_action", pdev->irq, IRQF_SHARED, 0);
+						 "shared_intx_action", pdev->irq, IRQF_SHARED, 0);
 	pr_info("qedu: IRQ %d requested\n", pdev->irq);
 	return 0;
 }

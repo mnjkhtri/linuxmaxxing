@@ -11,7 +11,6 @@
  *
  * EPT version in this file:
  *
- *   hook the same KVM tracepoints shown in the VIRT UI
  *   at each selected KVM execution, MMU, or invalidation boundary
  *     sample GFN 0-15 plus 8 pages spread evenly across the 2 MiB huge slot 1 window
  *     convert GFN to GPA

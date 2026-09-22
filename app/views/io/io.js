@@ -912,10 +912,10 @@ import {
         else if (probeApi === 'pci_enable_device') connect('driver', 'pci', label, 'resource');
         else if (probeApi === 'pci_request_regions') connect('driver', 'pci', api + ' · BAR0 ' + bytes(field(record, 'bar0_length_bytes')), 'resource');
         else if (probeApi === 'pci_iomap') connect('driver', 'pci', api + ' · ' + bytes(field(record, 'mapped_length_bytes')), 'resource');
-        else if (probeApi === 'request_irq') connect('driver', 'irq_core', api + ' · IRQ ' + field(record, 'linux_irq'), 'registration');
+        else if (probeApi === 'request_irq') connect('driver', 'irq_core', api + ' · ret=' + field(record, 'result') + ' · IRQ ' + field(record, 'linux_irq'), 'registration');
         else if (probeApi === 'dma_set_mask_and_coherent') connect('driver', 'dma_api', api + ' · ' + field(record, 'dma_mask_bits') + '-bit', 'configuration');
         else if (probeApi === 'pci_set_master') connect('driver', 'pci', api + ' · result=' + field(record, 'result'), 'configuration');
-        else if (probeApi === 'dma_alloc_coherent') connect('ram', 'driver', api + ' returned · DMA ' + field(record, 'dma_address'), 'allocation');
+        else if (probeApi === 'dma_alloc_coherent') connect('ram', 'driver', api + ' · DMA ret ' + field(record, 'dma_address'), 'allocation');
         else if (probeApi === 'alloc_ordered_workqueue') connect('driver', 'workqueue_core', label, 'registration');
         else if (probeApi === 'misc_register') connect('driver', 'misc_core', label, 'publication');
         else if (probeApi === 'debugfs_create_dir' || probeApi === 'debugfs_create_file') connect('driver', 'debugfs_core', label + ' · result=' + field(record, 'result'), 'publication')
@@ -1129,7 +1129,13 @@ import {
   function renderInspector() {
     var record = selectedEvent;
     if (!record) return;
-    renderOrigin('inspect-origin', record);
+    var selectedFlow = null;
+    if (selectedSequenceSeq === record.seq && selectedSequenceStep != null && selectedJourney) {
+      selectedFlow = recordFlow(record, selectedJourney).edges.find(function(flow) {
+        return flow.step === selectedSequenceStep
+      }) || null
+    }
+    renderOrigin('inspect-origin', record, selectedFlow && selectedFlow.evidence);
     var canonicalData = record.canonical && record.canonical.data || {},
       rawFields = canonicalData.fields || canonicalData.event_info || {},
       rawRows = flatten(rawFields, '', []).filter(function(item) {
@@ -1151,7 +1157,7 @@ import {
     return task;
   }
 
-  function renderOrigin(id, record) {
+  function renderOrigin(id, record, evidence) {
     var source = record.canonical && record.canonical.source || {},
       mechanism = mechanismLabel(source.mechanism || (record.record === 'workload_marker' ? 'workload' : '—')),
       hook = hookLabel(record.tracepoint || source.hook || 'phase', source.mechanism || (record.record === 'workload_marker' ? 'workload' : ''), source.hook),
@@ -1159,6 +1165,7 @@ import {
     var rows = [
       ['mechanism', mechanism, ''],
       ['hook', hook, ''],
+      ['evidence', evidence === 'inferred' ? 'inference' : 'trace event', evidence === 'inferred' ? 'evidence-inferred' : ''],
       ['CPU', context.cpu == null ? '—' : 'CPU ' + context.cpu, ''],
       ['task', taskContext(context), '']
     ];

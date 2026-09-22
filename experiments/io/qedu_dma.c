@@ -31,20 +31,19 @@
  * It does not serialize CPU threads, so the character-device path still uses qdev->lock around the shared buffer.
  *
  * A transfer is submitted by writing source, destination, byte count, and command registers.
- * Runtime transfers request an IRQ. The hardirq handler acknowledges the
- * device and queues the appropriate DMA work item; the worker advances or completes the transfer.
+ * Runtime transfers request an IRQ.
+ * The hardirq handler acknowledges the device and queues the appropriate DMA work item; the worker advances or completes the transfer.
  */
 
 /*
- * DMA bottom half. It runs in qedu_dma's kworker process context, so the
- * hardirq only performs the time-critical acknowledge-and-queue handoff.
+ * DMA bottom half. It runs in qedu_dma's kworker process context, so the hardirq only performs the time-critical acknowledge-and-queue handoff.
  *
  *   first IRQ  -> worker clears RAM and starts EDU -> RAM
  *   second IRQ -> worker records completion and wakes the writer
  *
- * The first worker deliberately sleeps for 20 ms before advancing DMA. This
- * is teaching code: workqueues run in schedulable process context, so a worker
- * may sleep. A hardirq, softirq, or tasklet callback cannot.
+ * The first worker deliberately sleeps for 20 ms before advancing DMA.
+ * This is teaching code: workqueues run in schedulable process context, so a worker may sleep.
+ * A hardirq, softirq, or tasklet callback cannot.
  */
 static void qedu_dma_advance_work(struct work_struct *work)
 {
@@ -119,13 +118,18 @@ void qedu_dma_irq_complete(struct qedu_dev *qdev)
 	if (!qdev->dma_wq)
 		return;
 
-	if (stage == QEDU_DMA_TO_DEVICE) {
+	if (stage == QEDU_DMA_TO_DEVICE)
+	{
 		work = &qdev->dma_advance_work;
 		work_kind = QEDU_WORK_ADVANCE;
-	} else if (stage == QEDU_DMA_FROM_DEVICE) {
+	}
+	else if (stage == QEDU_DMA_FROM_DEVICE)
+	{
 		work = &qdev->dma_finish_work;
 		work_kind = QEDU_WORK_FINISH;
-	} else {
+	}
+	else
+	{
 		return;
 	}
 
@@ -151,7 +155,8 @@ int qedu_dma_smoke_test(struct qedu_dev *qdev)
 	ret = readq_poll_timeout(qdev->bar0 + QEDU_REG_DMA_CMD, dma_cmd,
 							 !(dma_cmd & QEDU_DMA_CMD_START),
 							 10, 1000000);
-	if (ret) {
+	if (ret)
+	{
 		pr_err("qedu: DMA smoke test timed out\n");
 		return ret;
 	}
@@ -211,7 +216,8 @@ int qedu_dma_echo_job(struct qedu_dev *qdev, size_t len, u64 io_id)
 					qdev->timeout_ms, wait_ret,
 					READ_ONCE(qdev->completed_events));
 
-	if (wait_ret < 0) {
+	if (wait_ret < 0)
+	{
 		old_stage = atomic_xchg(&qdev->dma_stage, QEDU_DMA_IDLE);
 		trace_qedu_dma_stage(device, io_id, old_stage, QEDU_DMA_IDLE,
 							 QEDU_STAGE_SIGNAL);
@@ -220,7 +226,8 @@ int qedu_dma_echo_job(struct qedu_dev *qdev, size_t len, u64 io_id)
 		return wait_ret;
 	}
 
-	if (wait_ret == 0) {
+	if (wait_ret == 0)
+	{
 		old_stage = atomic_xchg(&qdev->dma_stage, QEDU_DMA_IDLE);
 		trace_qedu_dma_stage(device, io_id, old_stage, QEDU_DMA_IDLE,
 							 QEDU_STAGE_TIMEOUT);
@@ -241,33 +248,36 @@ int qedu_dma_init(struct qedu_dev *qdev)
 	int ret;
 
 	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
-	if (ret) {
+	if (ret)
+	{
 		pr_err("qedu: 32-bit DMA not supported\n");
 		return ret;
 	}
 	trace_qedu_probe_api(pci_name(pdev), "dma_set_mask_and_coherent",
-						   "coherent_dma_mask", DMA_BIT_MASK(32), 32, 0);
+						 "coherent_dma_mask", DMA_BIT_MASK(32), 32, 0);
 	pr_info("qedu: 32-bit DMA supported\n");
 
 	pci_set_master(pdev);
 	trace_qedu_probe_api(pci_name(pdev), "pci_set_master",
-						   "pci_bus_master_bit", 0, 0, 0);
+						 "pci_bus_master_bit", 0, 0, 0);
 
 	qdev->dma_cpu_addr = dma_alloc_coherent(&pdev->dev, QEDU_DMA_SIZE, &qdev->dma_addr, GFP_KERNEL);
-	if (!qdev->dma_cpu_addr) {
+	if (!qdev->dma_cpu_addr)
+	{
 		pci_clear_master(pdev);
 		return -ENOMEM;
 	}
 
 	trace_qedu_probe_api(pci_name(pdev), "dma_alloc_coherent",
-						   "coherent_dma_buffer", (u64)qdev->dma_addr,
-						   QEDU_DMA_SIZE, 0);
+						 "coherent_dma_buffer", (u64)qdev->dma_addr,
+						 QEDU_DMA_SIZE, 0);
 
 	INIT_WORK(&qdev->dma_advance_work, qedu_dma_advance_work);
 	INIT_WORK(&qdev->dma_finish_work, qedu_dma_finish_work);
 	atomic_set(&qdev->dma_stage, QEDU_DMA_IDLE);
 	qdev->dma_wq = alloc_ordered_workqueue("qedu_dma", WQ_MEM_RECLAIM);
-	if (!qdev->dma_wq) {
+	if (!qdev->dma_wq)
+	{
 		dma_free_coherent(&pdev->dev, QEDU_DMA_SIZE, qdev->dma_cpu_addr, qdev->dma_addr);
 		qdev->dma_cpu_addr = NULL;
 		pci_clear_master(pdev);
@@ -275,8 +285,8 @@ int qedu_dma_init(struct qedu_dev *qdev)
 	}
 
 	trace_qedu_probe_api(pci_name(pdev), "alloc_ordered_workqueue",
-						   "qedu_dma_ordered_workqueue",
-						   (unsigned long)qdev->dma_wq, 0, 0);
+						 "qedu_dma_ordered_workqueue",
+						 (unsigned long)qdev->dma_wq, 0, 0);
 	pr_info("qedu: DMA buffer allocated\n");
 	pr_info("qedu: DMA address = %pad\n", &qdev->dma_addr);
 
@@ -287,14 +297,16 @@ int qedu_dma_init(struct qedu_dev *qdev)
 void qedu_dma_exit(struct qedu_dev *qdev)
 {
 	atomic_set(&qdev->dma_stage, QEDU_DMA_IDLE);
-	if (qdev->dma_wq) {
+	if (qdev->dma_wq)
+	{
 		cancel_work_sync(&qdev->dma_advance_work);
 		cancel_work_sync(&qdev->dma_finish_work);
 		destroy_workqueue(qdev->dma_wq);
 		qdev->dma_wq = NULL;
 	}
 
-	if (qdev->dma_cpu_addr) {
+	if (qdev->dma_cpu_addr)
+	{
 		dma_free_coherent(&qdev->pdev->dev, QEDU_DMA_SIZE, qdev->dma_cpu_addr, qdev->dma_addr);
 		qdev->dma_cpu_addr = NULL;
 		qdev->dma_addr = 0;

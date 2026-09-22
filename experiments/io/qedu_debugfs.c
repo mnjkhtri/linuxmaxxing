@@ -75,28 +75,28 @@ void qedu_debugfs_init(struct qedu_dev *qdev)
 	qdev->debugfs_dir = debugfs_create_dir("qedu", NULL);
 	if (IS_ERR_OR_NULL(qdev->debugfs_dir)) {
 		trace_qedu_probe_api(pci_name(qdev->pdev), "debugfs_create_dir",
-				       "/sys/kernel/debug/qedu", 0, 0,
-				       qdev->debugfs_dir ? PTR_ERR(qdev->debugfs_dir) : -ENODEV);
+					   "/sys/kernel/debug/qedu", 0, 0,
+					   qdev->debugfs_dir ? PTR_ERR(qdev->debugfs_dir) : -ENODEV);
 		qdev->debugfs_dir = NULL;
 		return;
 	}
 	trace_qedu_probe_api(pci_name(qdev->pdev), "debugfs_create_dir",
-			       "/sys/kernel/debug/qedu",
-			       (unsigned long)qdev->debugfs_dir, 0, 0);
+				   "/sys/kernel/debug/qedu",
+				   (unsigned long)qdev->debugfs_dir, 0, 0);
 
 	status_file = debugfs_create_file("status", 0444, qdev->debugfs_dir, qdev, &qedu_debugfs_status_fops);
 	if (IS_ERR_OR_NULL(status_file)) {
 		trace_qedu_probe_api(pci_name(qdev->pdev), "debugfs_create_file",
-				       "/sys/kernel/debug/qedu/status", 0, 0,
-				       status_file ? PTR_ERR(status_file) : -ENODEV);
+					   "/sys/kernel/debug/qedu/status", 0, 0,
+					   status_file ? PTR_ERR(status_file) : -ENODEV);
 		debugfs_remove_recursive(qdev->debugfs_dir);
 		qdev->debugfs_dir = NULL;
 		return;
 	}
 
 	trace_qedu_probe_api(pci_name(qdev->pdev), "debugfs_create_file",
-			       "/sys/kernel/debug/qedu/status",
-			       (unsigned long)status_file, 0444, 0);
+				   "/sys/kernel/debug/qedu/status",
+				   (unsigned long)status_file, 0444, 0);
 	pr_info("qedu: debugfs status created\n");
 }
 

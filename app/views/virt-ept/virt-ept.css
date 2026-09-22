@@ -256,11 +256,11 @@ body[data-experiment="virt-ept"] .view-controls #details-toggle {
 
 .stage {
   min-height: 0;
-  padding: 9px;
+  padding: 0;
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(310px, .9fr);
   gap: 9px;
-  background: var(--panel);
+  background: transparent;
   font-family: var(--mono)
 }
 
@@ -544,7 +544,7 @@ body[data-experiment="virt-ept"] .view-controls #details-toggle {
   min-height: 0;
   margin-top: 7px;
   display: grid;
-  grid-template-rows: 52px 98px minmax(112px, 1fr) minmax(82px, .72fr);
+  grid-template-rows: 60px 98px minmax(112px, 1fr) minmax(82px, .72fr);
   gap: 7px;
   overflow: hidden
 }
@@ -584,7 +584,7 @@ body[data-experiment="virt-ept"] .view-controls #details-toggle {
 
 .translation-lifecycle {
   display: grid;
-  grid-template-rows: repeat(4, 1fr);
+  grid-template-rows: repeat(2, 1fr);
   border: 1px solid var(--line);
   border-radius: 5px;
   background: rgba(9, 15, 21, .66);
@@ -634,6 +634,15 @@ body[data-experiment="virt-ept"] .view-controls #details-toggle {
 
 .translation-lifecycle article.active b {
   color: var(--text)
+}
+
+.translation-lifecycle article.vm-exit {
+  box-shadow: inset 2px 0 var(--orange);
+  background: rgba(240, 164, 93, .055)
+}
+
+.translation-lifecycle article.vm-exit small {
+  color: var(--orange)
 }
 
 .walk-section,

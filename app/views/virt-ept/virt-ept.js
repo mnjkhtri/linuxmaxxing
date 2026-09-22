@@ -102,7 +102,7 @@ import {
   function hex(value) {
     if (!present(value)) return "—";
     if (typeof value === "string") return value.indexOf("0x") === 0 ? value : "0x" + value;
-    return "0x" + Number(value).toString(16);
+    return "0x" + Number(value).toString(16).toUpperCase();
   }
 
   function parseHex(value) {
@@ -225,6 +225,7 @@ import {
     var begin = {},
       end = {},
       trigger = {},
+      reentry = {},
       exits = [];
     ebpf.forEach(function(event) {
       var control = event.record.control;
@@ -241,11 +242,25 @@ import {
         return event.timeNs <= begin[command];
       }).pop();
       trigger[command] = preceding ? preceding.timeNs : begin[command];
+      var following = ebpf.find(function(event) {
+        return event.name === "kvm_entry" && event.timeNs > end[command];
+      });
+      if (following) reentry[command] = following.timeNs;
     });
+    if (end[3] && M.meta && M.meta.data_gfn != null) {
+      var dirtyFault = ebpf.find(function(event) {
+        return event.name === "kvm_page_fault" && event.timeNs > end[3] && event.traceInfo && String(event.traceInfo.gfn) === String(M.meta.data_gfn);
+      });
+      var mmioEntry = dirtyFault && ebpf.find(function(event) {
+        return event.name === "kvm_entry" && event.timeNs > dirtyFault.timeNs;
+      });
+      if (mmioEntry) reentry[3] = mmioEntry.timeNs;
+    }
     return {
       begin: begin,
       end: end,
-      trigger: trigger
+      trigger: trigger,
+      reentry: reentry
     };
   }
 
@@ -253,7 +268,7 @@ import {
     if (timeNs < times.trigger[1]) return "A";
     if (timeNs < times.trigger[2]) return "B";
     if (timeNs < times.trigger[3]) return "C";
-    if (timeNs <= times.end[3]) return "D";
+    if (timeNs <= (times.reentry[3] || times.end[3])) return "D";
     if (timeNs < times.trigger[4]) return "E";
     if (timeNs < times.trigger[5]) return "F";
     return "G";
@@ -712,9 +727,10 @@ import {
       var permissions = (entry.r ? "R" : "−") + (entry.w ? "W" : "−") + (entry.x ? "X" : "−") + " · " + (entry.a ? "A" : "−") + (entry.d ? "D" : "−");
       nodes.push('<article class="walk-node ' + kind + '"><small>' + names[entry.level] + " · IDX " + entry.index + "</small><b>" + stateLabel + "</b><em>" + permissions + "</em><code>" + esc(entry.spte) + "</code></article>");
     });
-    var result = record.ept_mmio ? "MMIO marker" : record.ept_mapped ? "PFN " + record.leaf_pfn : "not mapped";
+    var result = record.ept_mmio ? "MMIO" : record.ept_mapped ? "PFN " + record.leaf_pfn : "UNMAPPED",
+      leaf = record.leaf_level ? "leaf L" + record.leaf_level : "no leaf";
     $("walk-summary").textContent = "GVA " + record.gva + " · GPA " + record.gpa;
-    nodes.push('<article class="walk-node ' + (record.ept_mmio ? "mmio" : record.leaf_level > 1 ? "huge" : record.ept_mapped ? "ram" : "empty") + '"><small>RESULT</small><b>' + esc(result) + "</b><code>leaf L" + (record.leaf_level || "—") + "</code></article>");
+    nodes.push('<article class="walk-node ' + (record.ept_mmio ? "mmio" : record.leaf_level > 1 ? "huge" : record.ept_mapped ? "ram" : "empty") + '"><small>EPT RESULT</small><b>' + esc(result) + "</b><code>" + esc(leaf) + "</code></article>");
     $("walk").innerHTML = nodes.join("");
   }
 
@@ -738,7 +754,7 @@ import {
     if (event.name === "kvm_userspace_exit") return (info.reason || "userspace exit").replace(/^KVM_EXIT_/, "");
     if (event.name === "vmx_handle_exit_return") return record.disposition.meaning;
     if (event.name === "sys_enter_ioctl" || event.name === "sys_exit_ioctl") return record.ioctl.request_name + (record.ioctl.completed ? " · ret " + record.ioctl.result : "");
-    if (event.name === "kvm_page_fault") return faultAccess(info) + " GFN " + hex(info.gfn);
+    if (event.name === "kvm_page_fault") return "page fault · " + faultAccess(info) + " GFN " + hex(info.gfn);
     if (event.name === "kvm_mmu_spte_requested") return "request GFN " + hex(info.gfn);
     if (event.name === "kvm_mmu_set_spte") return "install L" + info.level + " leaf";
     if (event.name === "mark_mmio_spte") return "MMIO GFN " + hex(info.gfn);
@@ -752,18 +768,33 @@ import {
     return relation(event).label;
   }
 
+  function transitionLabel(event) {
+    if (!event) return "—";
+    var info = event.traceInfo || event.info || {},
+      record = event.record || {},
+      ioctl = record.ioctl || {},
+      control = record.control || {};
+    if (event.name === "kvm_entry") return "HOST · KVM → GUEST";
+    if (event.name === "kvm_exit") return "GUEST → HOST · KVM";
+    if (event.name === "kvm_userspace_exit") return "HOST · KVM → HOST · VMM";
+    if (event.name === "sys_enter_ioctl") return "HOST · VMM → HOST · KVM";
+    if (event.name === "sys_exit_ioctl") return "HOST · KVM → HOST · VMM";
+    if (/^(kvm_page_fault|kvm_mmu_.*|kvm_tdp_.*|tdp_spte_batch|mark_mmio_spte|handle_mmio_page_fault|check_mmio_spte|fast_page_fault)$/.test(event.name)) return "HOST · KVM → HOST · KVM";
+    if (/^(control_|memslot_)/.test(event.name)) return "HOST · VMM";
+    return "HOST · KVM";
+  }
+
   function renderLifecycle() {
     var groups = {
-      trigger: ["kvm_exit"],
-      boundary: ["kvm_userspace_exit", "vmx_handle_exit_return", "sys_enter_ioctl", "sys_exit_ioctl"],
-      mmu: ["kvm_page_fault", "kvm_mmu_spte_requested", "kvm_mmu_set_spte", "kvm_tdp_mmu_spte_changed", "tdp_spte_batch", "mark_mmio_spte", "kvm_mmu_split_huge_page", "handle_mmio_page_fault", "check_mmio_spte", "fast_page_fault"],
-      coherence: ["kvm_unmap_hva_range", "kvm_flush_remote_tlbs"]
+      transition: ["kvm_entry", "kvm_exit", "kvm_userspace_exit", "sys_enter_ioctl", "sys_exit_ioctl", "control_begin", "control_end", "memslot_begin", "memslot_end", "kvm_page_fault", "kvm_mmu_spte_requested", "kvm_mmu_set_spte", "kvm_tdp_mmu_spte_changed", "tdp_spte_batch", "mark_mmio_spte", "kvm_mmu_split_huge_page", "handle_mmio_page_fault", "check_mmio_spte", "fast_page_fault"],
+      reason: ["kvm_entry", "kvm_exit", "kvm_userspace_exit", "sys_enter_ioctl", "sys_exit_ioctl", "control_begin", "control_end", "memslot_begin", "memslot_end", "kvm_page_fault", "kvm_mmu_spte_requested", "kvm_mmu_set_spte", "kvm_tdp_mmu_spte_changed", "tdp_spte_batch", "mark_mmio_spte", "kvm_mmu_split_huge_page", "handle_mmio_page_fault", "check_mmio_spte", "fast_page_fault"]
     };
     Object.keys(groups).forEach(function(key) {
-      var event = latestBefore(groups[key]),
+      var event = (key === "transition" || key === "reason") && M.selected !== null && M.events[M.selected] && M.events[M.selected].phase === M.phase ? M.events[M.selected] : latestBefore(groups[key]),
         article = $("life-" + key);
-      $("life-" + key + "-value").textContent = lifecycleLabel(event);
+      $("life-" + key + "-value").textContent = key === "transition" ? transitionLabel(event) : lifecycleLabel(event);
       article.classList.toggle("active", !!event && event.index === M.selected);
+      article.classList.toggle("vm-exit", key === "transition" && !!event && event.name === "kvm_exit");
     });
   }
 
@@ -795,7 +826,7 @@ import {
     $("focus-gfn").textContent = hex(M.focusGfn);
     $("gfn-map").innerHTML = state.gfns.map(function(record) {
       var kind = record.ept_mmio ? "mmio" : record.ept_mapped && record.leaf_level > 1 ? "huge" : record.ept_mapped ? "ram" : "empty";
-      return '<button class="gfn-cell ' + kind + (Number(record.gfn) === Number(M.focusGfn) ? " focus" : "") + '" data-gfn="' + record.gfn + '" title="GPA ' + esc(record.gpa) + '">GFN ' + Number(record.gfn).toString(16) + "</button>";
+      return '<button class="gfn-cell ' + kind + (Number(record.gfn) === Number(M.focusGfn) ? " focus" : "") + '" data-gfn="' + record.gfn + '" title="GPA ' + esc(record.gpa) + '">GFN ' + Number(record.gfn).toString(16).toUpperCase() + "</button>";
     }).join("");
     $("gfn-map").querySelectorAll("[data-gfn]").forEach(function(cell) {
       cell.addEventListener("click", function() {
@@ -1034,7 +1065,7 @@ import {
     renderInspector(event);
     renderToolbar();
     $("flow-kind").textContent = event ? eventKind(event) : "NO RECORD";
-    $("flow-caption").textContent = event ? relation(event).label : "No captured boundary in this phase.";
+    $("flow-caption").textContent = event ? relation(event).label : "No trace boundary in this phase.";
   }
 
   function selectPhase(phase) {

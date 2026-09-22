@@ -111,7 +111,11 @@ export function hookLabel(name, mechanism, explicitHook) {
   if (!type && source === 'sysfs') type = 'sysfs';
   if (!type && source === 'module') type = 'module';
   if (!type) type = 'unknown';
-  return type + ' · ' + hook;
+  const displayHook = hook
+    .replace(/_return\b/gi, '_ret')
+    .replace(/\breturned\b/gi, 'ret')
+    .replace(/\breturn\b/gi, 'ret');
+  return type + ' · ' + displayHook;
 }
 
 export function reportState(state, message = '') {

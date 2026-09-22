@@ -1246,9 +1246,9 @@ import {
       rows.push(stateRow("TX BUFFER", tx.address || "—", tx.length ? formatBytes(tx.length) + " · DMA_TO_DEVICE" : ""));
       rows.push(stateRow("TX OWNER", txOwner, txUnmap ? "mapping released" : (txMap ? "CPU must not touch until unmap" : "not mapped")));
       rows.push(stateRow("RX BUFFER", rx.address || "—", rx.length ? formatBytes(rx.length) + " · DMA_FROM_DEVICE" : ""));
-      rows.push(stateRow("RX OWNER", rxOwner, rxCpu ? "sync_for_cpu observed" + (rxDevice ? " · returned to device" : "") : "prior RX mapping not captured"));
+      rows.push(stateRow("RX OWNER", rxOwner, rxCpu ? "sync_for_cpu" + (rxDevice ? " · ret to device" : "") : "prior RX mapping unavailable"));
       rows.push(stateRow("TRANSLATION", translated ? addressInfo(translated).iova + " → " + addressInfo(translated).hpa : "—", translated ? formatBytes(addressInfo(translated).size) + " IOMMU leaf" : "no containing leaf"));
-      rows.push(stateRow("COMPLETION", cycleComplete ? dmaInfo(completion).completed + " descriptors" : "—", cycleComplete ? "frame patterns verified" : "not yet observed"));
+      rows.push(stateRow("COMPLETION", cycleComplete ? dmaInfo(completion).completed + " descriptors" : "—", cycleComplete ? "frame patterns verified" : "pending"));
     } else if (["IXGBE OPEN", "OFFLINE DIAG", "INTR TEST", "RESTORE OPEN"].indexOf(group) >= 0) {
       var phase = selectedExecution.phase || "none";
       var phaseRecords = guestSeen.filter(function(record) {
@@ -1266,10 +1266,10 @@ import {
       var selectedContext = semanticRecord && semanticRecord.context ? semanticRecord.context : {};
 
       title = "GUEST DRIVER PHASE";
-      caption = "Observed ixgbe diagnostic phase and its execution context.";
+      caption = "ixgbe diagnostic phase and execution context.";
       status = group;
       rows.push(stateRow("FUNCTION", item ? item.label : "—", semanticRecord ? eventInfo(semanticRecord).hook : ""));
-      rows.push(stateRow("PHASE", phase === "none" ? group : phase, "captured driver phase"));
+      rows.push(stateRow("PHASE", phase === "none" ? group : phase, "driver phase"));
       rows.push(stateRow("CONTEXT", selectedContext.comm || "—", selectedContext.cpu != null ? "CPU " + selectedContext.cpu + " · PID " + selectedContext.pid : ""));
       rows.push(stateRow("IRQ EPISODES", phaseIrqs.length, phaseIrqs.length ? phaseIrqs.map(function(record) {
         return "#" + executionInfo(record).episode_id;

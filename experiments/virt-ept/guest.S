@@ -1,6 +1,11 @@
 /*
  * The guest starts in real mode, enters flat 32-bit protected mode, then performs the EPT memory workload.
- * Each 0xe9 command asks the VMM to reshape the EPT (MADV_DONTNEED, slot replacement, dirty-log clear, one 2 MiB THP-backed slot, and its dirty-logging split);
+ * Each 0xe9 command asks the VMM to reshape the EPT:
+ * - MADV_DONTNEED,
+ * - slot replacement,
+ * - dirty-log clear,
+ * - one 2 MiB THP-backed slot, and
+ * - its dirty-logging split;
  * writing GFN 7 / the huge slot between commands faults in and walks the EPT.  Port 0x82 ends the run.
  */
 .code16

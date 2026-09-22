@@ -46,11 +46,11 @@ TRACE_EVENT(qedu_probe_api,
 			TP_ARGS(device, api, resource, address, size, result),
 			TP_STRUCT__entry(
 				__string(device, device)
-				__string(api, api)
-				__string(resource, resource)
-				__field(u64, address)
-				__field(u64, size)
-				__field(s32, result)),
+					__string(api, api)
+						__string(resource, resource)
+								__field(u64, address)
+									__field(u64, size)
+										__field(s32, result)),
 			TP_fast_assign(
 				__assign_str(device);
 				__assign_str(api);
@@ -63,43 +63,40 @@ TRACE_EVENT(qedu_probe_api,
 					  __entry->address, __entry->size, __entry->result));
 
 TRACE_EVENT(qedu_file_op,
-	TP_PROTO(const char *device, u64 io_id, u8 operation, u8 phase, unsigned long file, u64 count, s64 offset, s64 result, u8 engine),
-	TP_ARGS(device, io_id, operation, phase, file, count, offset, result, engine),
-	TP_STRUCT__entry(
-		__string(device, device)
-		__field(u64, io_id)
-		__field(u8, operation)
-		__field(u8, phase)
-		__field(unsigned long, file)
-		__field(u64, count)
-		__field(s64, offset)
-		__field(s64, result)
-		__field(u8, engine)
-	),
-	TP_fast_assign(
-		__assign_str(device);
-		__entry->io_id = io_id;
-		__entry->operation = operation;
-		__entry->phase = phase;
-		__entry->file = file;
-		__entry->count = count;
-		__entry->offset = offset;
-		__entry->result = result;
-		__entry->engine = engine;
-	),
-	TP_printk("device=%s io_id=%llu operation=%s phase=%s file=%p count=%llu offset=%lld result=%lld engine=%s",
-		__get_str(device), __entry->io_id,
-		__print_symbolic(__entry->operation,
-			{ QEDU_FILE_OPEN, "OPEN" },
-			{ QEDU_FILE_READ, "READ" },
-			{ QEDU_FILE_WRITE, "WRITE" },
-			{ QEDU_FILE_RELEASE, "RELEASE" }),
-		__print_symbolic(__entry->phase,
-			{ QEDU_FILE_ENTER, "ENTER" },
-			{ QEDU_FILE_EXIT, "EXIT" }),
-		(void *)__entry->file, __entry->count, __entry->offset,
-		__entry->result, qedu_engine_name(__entry->engine))
-);
+			TP_PROTO(const char *device, u64 io_id, u8 operation, u8 phase, unsigned long file, u64 count, s64 offset, s64 result, u8 engine),
+			TP_ARGS(device, io_id, operation, phase, file, count, offset, result, engine),
+			TP_STRUCT__entry(
+				__string(device, device)
+					__field(u64, io_id)
+						__field(u8, operation)
+							__field(u8, phase)
+								__field(unsigned long, file)
+									__field(u64, count)
+										__field(s64, offset)
+											__field(s64, result)
+												__field(u8, engine)),
+			TP_fast_assign(
+				__assign_str(device);
+				__entry->io_id = io_id;
+				__entry->operation = operation;
+				__entry->phase = phase;
+				__entry->file = file;
+				__entry->count = count;
+				__entry->offset = offset;
+				__entry->result = result;
+				__entry->engine = engine;),
+			TP_printk("device=%s io_id=%llu operation=%s phase=%s file=%p count=%llu offset=%lld result=%lld engine=%s",
+					  __get_str(device), __entry->io_id,
+					  __print_symbolic(__entry->operation,
+									   {QEDU_FILE_OPEN, "OPEN"},
+									   {QEDU_FILE_READ, "READ"},
+									   {QEDU_FILE_WRITE, "WRITE"},
+									   {QEDU_FILE_RELEASE, "RELEASE"}),
+					  __print_symbolic(__entry->phase,
+									   {QEDU_FILE_ENTER, "ENTER"},
+									   {QEDU_FILE_EXIT, "EXIT"}),
+					  (void *)__entry->file, __entry->count, __entry->offset,
+					  __entry->result, qedu_engine_name(__entry->engine)));
 
 TRACE_EVENT(qedu_cpu_buffer_io,
 			TP_PROTO(const char *device, u64 io_id, u8 operation, u64 offset,

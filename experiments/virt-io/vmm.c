@@ -337,6 +337,7 @@ int main(void)
 		return 1;
 	}
 
+	/* KVM_RUN uses this shared area to report why guest execution stops and to expose exit data such as MMIO details. */
 	struct kvm_run *run = mmap(NULL, (size_t)run_size, PROT_READ | PROT_WRITE, MAP_SHARED, vcpu, 0);
 	if (run == MAP_FAILED)
 	{

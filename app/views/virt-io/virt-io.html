@@ -47,17 +47,17 @@
             <code class="address" id="rip-head">RIP —</code>
           </header>
           <div id="exec-html" class="exec-html" role="img" aria-label="KVM virtual I/O lifelines"></div>
-          <footer class="region-foot"><strong id="flow-kind">captured message</strong><span id="flow-caption">Select a message boundary.</span></footer>
+          <footer class="region-foot"><strong id="flow-kind">trace event</strong><span id="flow-caption">Select a message boundary.</span></footer>
         </section>
 
         <div class="support-stack">
         <section class="region interrupts">
           <header class="region-title">
-            <div><b>INTERRUPT ROUTE</b><span>captured request, routing, and LAPIC state progression</span></div>
+            <div><b>INTERRUPT ROUTE</b><span>request, routing, and LAPIC state</span></div>
             <code class="address" id="irq-address">GSI — → VEC —</code>
           </header>
           <div class="irq-body">
-            <div class="irq-lifecycle" aria-label="Captured interrupt delivery state">
+            <div class="irq-lifecycle" aria-label="Interrupt delivery state">
               <div class="irq-life-head"><b id="irq-life-mode">no delivery</b><span id="irq-life-summary">waiting for an interrupt request</span></div>
               <div class="irq-life-steps">
                 <span id="irq-step-request"><b>request</b><small>—</small></span>
@@ -93,7 +93,7 @@
 
         <section class="region dma">
           <header class="region-title">
-            <div><b>DMA / GPA OBSERVATIONS</b><span>only addresses and directions actually captured by the eBPF DMA event</span></div>
+            <div><b>DMA / GPA OBSERVATIONS</b><span>addresses and directions from the eBPF DMA event</span></div>
             <code class="address" id="dma-xfer">64 B / transfer</code>
           </header>
           <div class="rt-timeline">
@@ -106,7 +106,7 @@
             <div class="rt-dev">
               <h3>TOY DEVICE</h3>
               <strong id="device-state">256 B buffer</strong>
-              <small id="device-detail">returns the stored bytes (echo)</small>
+              <small id="device-detail">ret stored bytes (echo)</small>
             </div>
             <div class="rt-edge" id="dma-edge-from"></div>
             <div class="rt-end rt-dst" id="rt-dst">
@@ -122,7 +122,7 @@
     </section>
 
     <aside class="notebook inspector-pane panel">
-      <header class="panel-head inspector-head"><div><h2>Transition internals</h2><span>selected capture boundary</span></div><code id="source-badge">trace + eBPF</code></header>
+      <header class="panel-head inspector-head"><div><h2>Transition internals</h2><span>trace boundary</span></div><code id="source-badge">trace + eBPF</code></header>
       <div class="note-body inspector-body">
         <div class="type selected-kind"><i class="trace-dot"></i><span id="detail-type">VM entry</span></div>
         <h2 id="detail-title">kvm_entry</h2>

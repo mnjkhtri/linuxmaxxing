@@ -705,7 +705,7 @@ import {
     if (e.name === 'kvm_userspace_exit') return (e.userspace_reason || 'userspace exit').replace('KVM_EXIT_', '');
     if (e.name === 'vmx_handle_exit_return') return e.disposition_meaning || 'exit disposition';
     if (e.name === 'sys_enter_ioctl') return e.ioctl_name || 'ioctl';
-    if (e.name === 'sys_exit_ioctl') return (e.ioctl_name || 'ioctl') + ' return';
+    if (e.name === 'sys_exit_ioctl') return (e.ioctl_name || 'ioctl') + ' ret';
     if (e.name === 'device_mmio_write') return (e.mmio_register || 'MMIO') + ' write';
     if (e.name === 'device_execute_command') return e.command_name || 'execute command';
     if (e.name === 'device_execute_command_return') return (e.command_name || 'command') + ' complete';
@@ -1015,9 +1015,9 @@ import {
     } else if (e.kind === 'exit') {
       $('flow-caption').textContent = (e.reason || 'VM exit') + ' transfers control from guest to KVM' + (e.rip ? ' at ' + e.rip : '');
     } else if (e.kind === 'handoff') {
-      $('flow-caption').textContent = (e.userspace_reason || 'KVM exit') + ' returns KVM_RUN to the VMM';
+      $('flow-caption').textContent = (e.userspace_reason || 'KVM exit') + ' · ret KVM_RUN to the VMM';
     } else if (e.kind === 'disposition') {
-      $('flow-caption').textContent = 'vmx_handle_exit returned ' + e.disposition_result + ' · ' + e.disposition_meaning;
+      $('flow-caption').textContent = 'vmx_handle_exit ret ' + e.disposition_result + ' · ' + e.disposition_meaning;
     } else if (e.kind === 'ioctl_enter' || e.kind === 'ioctl_return') {
       $('flow-caption').textContent = (e.ioctl_name || 'ioctl') + ' · fd ' + e.ioctl_fd + (e.ioctl_completed ? ' · ret ' + e.ioctl_result + ' · ' + e.ioctl_duration_ns + ' ns' : '');
     } else if (e.name === 'device_dma_transfer' || e.name === 'device_dma_transfer_return') {
@@ -1328,28 +1328,28 @@ import {
       (e.dma_dir === 'to_device' ? to : from).classList.add('hot');
       $(e.dma_dir === 'to_device' ? 'rt-src' : 'rt-dst').classList.add('hot');
       $('device-state').textContent = e.dma_dir === 'to_device' ? 'receiving ' + D.meta.dma_xfer_size + ' B' : 'sending ' + D.meta.dma_xfer_size + ' B';
-      $('device-detail').textContent = e.dma_dir === 'to_device' ? 'storing the guest bytes for the return copy' : 'returning the stored bytes (echo)';
+      $('device-detail').textContent = e.dma_dir === 'to_device' ? 'storing guest bytes for the ret copy' : 'ret stored bytes (echo)';
       $('dma-state').textContent = e.dma_dir.replace('_', ' ');
       $('dma-caption').textContent = D.meta.dma_xfer_size + ' B at ' + e.dma_gpa + ' · ' + e.dma_dir;
     } else if (D.dmaFrom != null && cursor >= D.dmaFrom) {
       from.className = 'rt-edge dim';
       $('rt-dst').classList.add('hot');
-      $('device-state').textContent = 'round trip returned';
-      $('device-detail').textContent = 'guest compares returned bytes to the source';
+      $('device-state').textContent = 'round trip ret';
+      $('device-detail').textContent = 'guest compares ret bytes to the source';
       $('dma-state').textContent = 'round-trip · verifying';
       $('dma-caption').textContent = 'one-shot round-trip verification runs after DMA_FROM';
     } else if (D.dmaTo != null && cursor >= D.dmaTo) {
       to.className = 'rt-edge dim';
       $('rt-src').classList.add('hot');
       $('device-state').textContent = 'outbound copy complete';
-      $('device-detail').textContent = 'awaiting the return copy · no DMA running';
-      $('dma-state').textContent = 'staged · awaiting return';
+      $('device-detail').textContent = 'awaiting the ret copy · no DMA running';
+      $('dma-state').textContent = 'staged · awaiting ret';
       $('dma-caption').textContent = 'no DMA in progress between the two transfer hooks';
     } else {
       $('device-state').textContent = D.meta.device_buffer_size + ' B buffer';
       $('device-detail').textContent = 'no transfer in this phase';
       $('dma-state').textContent = 'not present';
-      $('dma-caption').textContent = 'two device_dma_transfer calls are observed at entry and return';
+      $('dma-caption').textContent = 'two device_dma_transfer calls are observed at entry and ret';
     }
   }
 

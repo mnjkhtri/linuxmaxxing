@@ -52,45 +52,52 @@
 #define QEDU_DMA_CMD_IRQ 0x04
 
 #define QEDU_DEFAULT_TIMEOUT_MS 1000 /* Initial hardware-job timeout. */
-#define QEDU_MAX_TIMEOUT_MS 60000 /* Largest timeout accepted through sysfs. */
+#define QEDU_MAX_TIMEOUT_MS 60000	 /* Largest timeout accepted through sysfs. */
 
-enum qedu_completion_event {
+enum qedu_completion_event
+{
 	QEDU_EVENT_FACTORIAL,
 	QEDU_EVENT_DMA,
 };
 
-enum qedu_dma_stage {
+enum qedu_dma_stage
+{
 	QEDU_DMA_IDLE,
 	QEDU_DMA_TO_DEVICE,
 	QEDU_DMA_FROM_DEVICE,
 };
 
 /* Stable numeric values carried by qedu trace events. */
-enum qedu_io_engine {
+enum qedu_io_engine
+{
 	QEDU_ENGINE_NONE,
 	QEDU_ENGINE_FACTORIAL,
 	QEDU_ENGINE_DMA,
 };
 
-enum qedu_cpu_buffer_operation {
+enum qedu_cpu_buffer_operation
+{
 	QEDU_BUFFER_COPY_FROM_USER,
 	QEDU_BUFFER_CLEAR_FOR_DMA_RETURN,
 	QEDU_BUFFER_COPY_TO_USER,
 };
 
-enum qedu_file_operation {
+enum qedu_file_operation
+{
 	QEDU_FILE_OPEN,
 	QEDU_FILE_READ,
 	QEDU_FILE_WRITE,
 	QEDU_FILE_RELEASE,
 };
 
-enum qedu_file_phase {
+enum qedu_file_phase
+{
 	QEDU_FILE_ENTER,
 	QEDU_FILE_EXIT,
 };
 
-enum qedu_dma_stage_reason {
+enum qedu_dma_stage_reason
+{
 	QEDU_STAGE_SUBMIT,
 	QEDU_STAGE_ADVANCE_WORK,
 	QEDU_STAGE_FINISH_WORK,
@@ -98,23 +105,27 @@ enum qedu_dma_stage_reason {
 	QEDU_STAGE_TIMEOUT,
 };
 
-enum qedu_dma_direction {
+enum qedu_dma_direction
+{
 	QEDU_DMA_DIR_TO_DEVICE,
 	QEDU_DMA_DIR_FROM_DEVICE,
 };
 
-enum qedu_dma_address_space {
+enum qedu_dma_address_space
+{
 	QEDU_ADDR_DMA,
 	QEDU_ADDR_EDU_LOCAL,
 };
 
-enum qedu_dma_work_kind {
+enum qedu_dma_work_kind
+{
 	QEDU_WORK_NONE,
 	QEDU_WORK_ADVANCE,
 	QEDU_WORK_FINISH,
 };
 
-enum qedu_wait_phase {
+enum qedu_wait_phase
+{
 	QEDU_WAIT_BEGIN,
 	QEDU_WAIT_END,
 };
@@ -126,14 +137,15 @@ enum qedu_wait_phase {
 struct attribute_group;
 struct dentry;
 
-struct qedu_dev {
+struct qedu_dev
+{
 	struct pci_dev *pdev; /* Bound PCI function. */
-	void __iomem *bar0; /* Kernel mapping of BAR0 MMIO. */
-	void *dma_cpu_addr; /* CPU address of the coherent DMA buffer. */
-	dma_addr_t dma_addr; /* Device address of the coherent DMA buffer. */
-	size_t result_size; /* Bytes currently available to read(). */
-	int tx; /* Bytes returned to userspace. */
-	int rx; /* Bytes accepted from userspace. */
+	void __iomem *bar0;	  /* Kernel mapping of BAR0 MMIO. */
+	void *dma_cpu_addr;	  /* CPU address of the coherent DMA buffer. */
+	dma_addr_t dma_addr;  /* Device address of the coherent DMA buffer. */
+	size_t result_size;	  /* Bytes currently available to read(). */
+	int tx;				  /* Bytes returned to userspace. */
+	int rx;				  /* Bytes accepted from userspace. */
 	unsigned int timeout_ms;
 	struct mutex lock; /* Serializes jobs and shared result state. */
 	wait_queue_head_t job_wait;

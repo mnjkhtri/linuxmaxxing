@@ -22,7 +22,7 @@ MODULE_PARM_DESC(selftest, "Run probe-time MMIO, IRQ, and DMA self-tests");
  *   qedu_debugfs.c developer-only multi-line diagnostic state
  *   qedu.h         private state, register definitions, and declarations
  *
- * Together they demonstrate PCI discovery and resource ownership, BAR MMIO, shared interrupts, coherent DMA, wait queues, a misc character device, and reverse-order cleanup.
+ * Together they demonstrate PCI discovery and resource ownership, BAR MMIO, shared interrupts, DMA, wait queues, a misc character device, and cleanup.
  *
  * Build from the repository root:
  *   make -C experiments/io
@@ -74,7 +74,8 @@ static int qedu_test_registers(struct qedu_dev *qdev)
 
 	iowrite32(10, qdev->bar0 + QEDU_REG_FACTORIAL);
 	ret = readl_poll_timeout(qdev->bar0 + QEDU_REG_STATUS, status, !(status & QEDU_STATUS_FACTORIAL_BUSY), 10, 1000000);
-	if (ret) {
+	if (ret)
+	{
 		pr_err("qedu: factorial operation timed out\n");
 		return ret;
 	}
@@ -122,7 +123,8 @@ int qedu_factorial_job(struct qedu_dev *qdev, u32 input, u32 *result, u64 io_id)
 	if (wait_ret < 0)
 		return wait_ret;
 
-	if (wait_ret == 0) {
+	if (wait_ret == 0)
+	{
 		pr_err("qedu: factorial job timed out\n");
 		return -ETIMEDOUT;
 	}
@@ -133,10 +135,9 @@ int qedu_factorial_job(struct qedu_dev *qdev, u32 input, u32 *result, u64 io_id)
 }
 
 /*
- * When selftest=1, identification/liveness MMIO and the factorial engine are
- * checked by polling. A software-raised IRQ then checks the registered handler,
- * and a one-way RAM-to-EDU transfer checks DMA. Normal module loads skip this
- * extra device activity so workload traces contain only the requested jobs.
+ * When selftest=1, identification/liveness MMIO and the factorial engine are checked by polling.
+ * A software-raised IRQ then checks the registered handler, and a one-way RAM-to-EDU transfer checks DMA.
+ * Normal module loads skip this extra device activity so workload traces contain only the requested jobs.
  */
 static int qedu_selftest(struct qedu_dev *qdev)
 {
@@ -159,7 +160,8 @@ static int qedu_selftest(struct qedu_dev *qdev)
 }
 
 /*
- * Initialize the PCI resources used by this qedu_dev. Its job is to enable the PCI device, claim its BAR regions, inspect BAR0, and map BAR0 into the kernel virtual address space.
+ * Initialize the PCI resources used by this qedu_dev.
+ * Its job is to enable the PCI device, claim its BAR regions, inspect BAR0, and map BAR0 into the kernel virtual address space.
  *
  * Those steps happen in dependency order:
  *
@@ -177,38 +179,41 @@ static int qedu_pci_init(struct qedu_dev *qdev)
 	int ret;
 
 	ret = pci_enable_device(pdev);
-	if (ret) {
+	if (ret)
+	{
 		pr_err("qedu: failed to enable PCI device: %d\n", ret);
 		return ret;
 	}
 
 	trace_qedu_probe_api(pci_name(pdev), "pci_enable_device",
-						   "struct_pci_dev", (unsigned long)pdev, 0, 0);
+						 "struct_pci_dev", (unsigned long)pdev, 0, 0);
 
 	ret = pci_request_regions(pdev, "qedu");
-	if (ret) {
+	if (ret)
+	{
 		pr_err("qedu: pci_request_regions failed: %d\n", ret);
 		goto err_disable;
 	}
 
 	trace_qedu_probe_api(pci_name(pdev), "pci_request_regions",
-						   "pci_bar_regions", pci_resource_start(pdev, 0),
-						   pci_resource_len(pdev, 0), 0);
+						 "pci_bar_regions", pci_resource_start(pdev, 0),
+						 pci_resource_len(pdev, 0), 0);
 
 	bar0_start = pci_resource_start(pdev, 0);
 	bar0_len = pci_resource_len(pdev, 0);
 	pr_info("qedu: BAR0 start=%pa len=%pa\n", &bar0_start, &bar0_len);
 
 	qdev->bar0 = pci_iomap(pdev, 0, 0);
-	if (!qdev->bar0) {
+	if (!qdev->bar0)
+	{
 		ret = -ENOMEM;
 		pr_err("qedu: failed to map BAR0\n");
 		goto err_regions;
 	}
 
 	trace_qedu_probe_api(pci_name(pdev), "pci_iomap",
-						   "bar0_mmio_mapping", (unsigned long)qdev->bar0,
-						   bar0_len, 0);
+						 "bar0_mmio_mapping", (unsigned long)qdev->bar0,
+						 bar0_len, 0);
 
 	return 0;
 
@@ -283,7 +288,8 @@ static void qedu_clear_device_data(struct qedu_dev *qdev)
  *             -> qedu_chrdev_init()
  *               -> qedu_debugfs_init()
  *
- * Teardown first stops new IRQ-driven work, then drains the workqueue and releases the remaining resources. Probe's error labels release only layers initialized before the failure.
+ * Teardown first stops new IRQ-driven work, then drains the workqueue and releases the remaining resources.
+ * Probe's error labels release only layers initialized before the failure.
  */
 static int qedu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
@@ -291,16 +297,16 @@ static int qedu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	int ret;
 
 	trace_qedu_probe_api(pci_name(pdev), "qedu_probe",
-						   "pci_driver_probe", (unsigned long)pdev,
-						   sizeof(*pdev), 0);
+						 "pci_driver_probe", (unsigned long)pdev,
+						 sizeof(*pdev), 0);
 
 	ret = qedu_alloc_device(pdev, &qdev);
 	if (ret)
 		return ret;
 
 	trace_qedu_probe_api(pci_name(pdev), "devm_kzalloc",
-						   "struct_qedu_dev", (unsigned long)qdev,
-						   sizeof(*qdev), 0);
+						 "struct_qedu_dev", (unsigned long)qdev,
+						 sizeof(*qdev), 0);
 
 	ret = qedu_pci_init(qdev);
 	if (ret)
@@ -314,7 +320,8 @@ static int qedu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	if (ret)
 		goto err_irq;
 
-	if (selftest) {
+	if (selftest)
+	{
 		ret = qedu_selftest(qdev);
 		if (ret)
 			goto err_irq_dma;
@@ -327,8 +334,9 @@ static int qedu_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	qedu_debugfs_init(qdev);
 
 	trace_qedu_probe_api(pci_name(pdev), "qedu_probe",
-						   "bound_qedu_device", (unsigned long)qdev,
-						   sizeof(*qdev), 0);
+						 "bound_qedu_device", (unsigned long)qdev,
+						 sizeof(*qdev), 0);
+
 	pr_info("qedu: probe completed; device is ready\n");
 	return 0;
 

@@ -210,8 +210,8 @@ import {
   function targetEvidence(o) {
     const addr = objectAddress(o);
     const r = targetRegionForObject(o);
-    if (!addr) return 'no returned KVA';
-    return r ? 'KVA ' + addr + ' inside ' + r.fields.id : 'KVA ' + addr + ' outside observed regions';
+    if (!addr) return 'KVA unavailable';
+    return r ? 'KVA ' + addr + ' inside ' + r.fields.id : 'KVA ' + addr + ' outside traced regions';
   }
 
   /* ---- selection ------------------------------------------------------- */

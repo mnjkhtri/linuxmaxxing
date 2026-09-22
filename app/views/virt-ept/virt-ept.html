@@ -21,7 +21,7 @@
     <nav id="roadmap" class="roadmap panel experiment-selector" aria-label="EPT phases"></nav>
 
     <section class="workbench">
-        <section class="machine panel">
+        <section class="machine">
             <div class="stage">
                 <section class="lifeline-region region">
                     <header class="region-title">
@@ -29,12 +29,12 @@
                         <code>TIME ↓</code>
                     </header>
                     <div class="actor-head">
-                        <article data-actor="vmm"><small>USER</small><b>VMM</b><em>ioctl</em></article>
-                        <article data-actor="kvmcore"><small>HOST</small><b>KVM CORE</b><em>KVM_RUN</em></article>
+                        <article data-actor="vmm"><small>HOST</small><b>VMM</b><em>ioctl</em></article>
+                        <article data-actor="kvmcore"><small>HOST</small><b>KVM</b><em>KVM_RUN</em></article>
                         <article data-actor="guest"><small>GUEST</small><b>vCPU 0</b><em>access</em></article>
                         <article data-actor="kvmmmu"><small>HOST</small><b>KVM MMU</b><em>fault</em></article>
-                        <article data-actor="ept"><small>EPT</small><b>EPT</b><em>SPTE</em></article>
-                        <article data-actor="hostmm"><small>MEMORY</small><b>HOST MM</b><em>HVA</em></article>
+                        <article data-actor="ept"><small>HOST</small><b>EPT</b><em>SPTE</em></article>
+                        <article data-actor="hostmm"><small>HOST</small><b>MM</b><em>HVA</em></article>
                     </div>
                     <div id="timeline" class="timeline" aria-label="EPT phase lifelines"></div>
                     <footer class="region-foot"><b id="flow-kind">LOADING</b><span id="flow-caption">reading capture…</span></footer>
@@ -51,11 +51,9 @@
                             <article><small>MMIO MARKERS</small><b id="mmio-count">—</b></article>
                             <article><small>FOCUS GFN</small><b id="focus-gfn">—</b></article>
                         </div>
-                        <div class="translation-lifecycle" aria-label="Captured EPT lifecycle">
-                            <article id="life-trigger"><small>TRIGGER</small><b id="life-trigger-value">—</b></article>
-                            <article id="life-boundary"><small>KVM CONTROL</small><b id="life-boundary-value">—</b></article>
-                            <article id="life-mmu"><small>MMU UPDATE</small><b id="life-mmu-value">—</b></article>
-                            <article id="life-coherence"><small>COHERENCE</small><b id="life-coherence-value">—</b></article>
+                        <div class="translation-lifecycle" aria-label="EPT lifecycle">
+                            <article id="life-transition"><small>TRANSITION</small><b id="life-transition-value">—</b></article>
+                            <article id="life-reason"><small>REASON</small><b id="life-reason-value">—</b></article>
                         </div>
                         <section class="walk-section">
                             <header><b>GPA → EPT WALK → HPA</b><span id="walk-summary">select a sampled GFN</span></header>
@@ -83,7 +81,7 @@
                 </section>
             </div>
             <footer class="inspector-footer playback-bar">
-                <button id="prev" title="Previous observation">Prev</button><button id="play" title="Play or pause">Play</button><button id="next" title="Next observation">Next</button>
+                <button id="prev" title="Previous event">Prev</button><button id="play" title="Play or pause">Play</button><button id="next" title="Next event">Next</button>
                 <input id="scrub" type="range" min="0" value="0" aria-label="Phase observation scrubber" /><span id="counter">— / —</span>
             </footer>
         </aside>
