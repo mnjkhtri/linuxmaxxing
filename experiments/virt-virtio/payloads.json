@@ -113,9 +113,6 @@
       "backend_location": {
         "type": "string"
       },
-      "vmx_disposition_available": {
-        "type": "boolean"
-      },
       "structured_event_types": {
         "type": "integer64"
       }
@@ -158,8 +155,7 @@
       "used_bytes",
       "used_gpa",
       "virtio_mmio_base",
-      "virtio_version",
-      "vmx_disposition_available"
+      "virtio_version"
     ]
   },
   "ebpf:ioeventfd_kick": {
@@ -523,17 +519,6 @@
               "completed",
               "present"
             ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
           }
         },
         "required": [
@@ -541,7 +526,6 @@
           "buffer_preview",
           "descriptor",
           "device",
-          "disposition",
           "ioctl",
           "queue",
           "used"
@@ -917,17 +901,6 @@
               "completed",
               "present"
             ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
           }
         },
         "required": [
@@ -935,7 +908,6 @@
           "buffer_preview",
           "descriptor",
           "device",
-          "disposition",
           "ioctl",
           "queue",
           "used"
@@ -1314,17 +1286,6 @@
               "completed",
               "present"
             ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
           }
         },
         "required": [
@@ -1332,7 +1293,6 @@
           "buffer_preview",
           "descriptor",
           "device",
-          "disposition",
           "ioctl",
           "queue",
           "used"
@@ -1710,17 +1670,6 @@
               "completed",
               "present"
             ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
           }
         },
         "required": [
@@ -1728,7 +1677,6 @@
           "buffer_preview",
           "descriptor",
           "device",
-          "disposition",
           "ioctl",
           "queue",
           "used"
@@ -2109,17 +2057,6 @@
               "completed",
               "present"
             ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
           }
         },
         "required": [
@@ -2127,7 +2064,6 @@
           "buffer_preview",
           "descriptor",
           "device",
-          "disposition",
           "ioctl",
           "queue",
           "used"
@@ -2508,17 +2444,6 @@
               "completed",
               "present"
             ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
           }
         },
         "required": [
@@ -2526,7 +2451,6 @@
           "buffer_preview",
           "descriptor",
           "device",
-          "disposition",
           "ioctl",
           "queue",
           "used"
@@ -2898,17 +2822,6 @@
               "request_name",
               "result"
             ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
           }
         },
         "required": [
@@ -2916,7 +2829,6 @@
           "buffer_preview",
           "descriptor",
           "device",
-          "disposition",
           "ioctl",
           "queue",
           "used"
@@ -3288,17 +3200,6 @@
               "request_name",
               "result"
             ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
           }
         },
         "required": [
@@ -3306,7 +3207,6 @@
           "buffer_preview",
           "descriptor",
           "device",
-          "disposition",
           "ioctl",
           "queue",
           "used"
@@ -3689,17 +3589,6 @@
               "completed",
               "present"
             ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
           }
         },
         "required": [
@@ -3707,7 +3596,6 @@
           "buffer_preview",
           "descriptor",
           "device",
-          "disposition",
           "ioctl",
           "queue",
           "used"
@@ -4088,17 +3976,6 @@
               "completed",
               "present"
             ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
           }
         },
         "required": [
@@ -4106,381 +3983,6 @@
           "buffer_preview",
           "descriptor",
           "device",
-          "disposition",
-          "ioctl",
-          "queue",
-          "used"
-        ]
-      },
-      "producer_sequence": {
-        "type": "integer64"
-      }
-    },
-    "required": [
-      "event_info",
-      "producer_sequence",
-      "state"
-    ]
-  },
-  "ebpf:vmx_handle_exit_return": {
-    "type": "object",
-    "fields": {
-      "event_info": {
-        "type": "object",
-        "fields": {
-          "event": {
-            "type": "integer64"
-          },
-          "event_name": {
-            "type": "string"
-          },
-          "phase": {
-            "type": "string"
-          },
-          "call_id": {
-            "type": "integer64"
-          },
-          "operation_id": {
-            "type": "integer64"
-          },
-          "duration_ns": {
-            "type": "integer64"
-          },
-          "mmio": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "address": {
-                "type": "null",
-                "nullable": true
-              },
-              "offset": {
-                "type": "null",
-                "nullable": true
-              },
-              "register": {
-                "type": "null",
-                "nullable": true
-              },
-              "direction": {
-                "type": "null",
-                "nullable": true
-              },
-              "length": {
-                "type": "null",
-                "nullable": true
-              },
-              "value": {
-                "type": "null",
-                "nullable": true
-              }
-            },
-            "required": [
-              "address",
-              "direction",
-              "length",
-              "offset",
-              "present",
-              "register",
-              "value"
-            ]
-          },
-          "ioeventfd": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "count": {
-                "type": "null",
-                "nullable": true
-              },
-              "address": {
-                "type": "null",
-                "nullable": true
-              },
-              "length": {
-                "type": "null",
-                "nullable": true
-              },
-              "datamatch": {
-                "type": "null",
-                "nullable": true
-              }
-            },
-            "required": [
-              "address",
-              "count",
-              "datamatch",
-              "length",
-              "present"
-            ]
-          },
-          "irqfd": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "count": {
-                "type": "null",
-                "nullable": true
-              },
-              "gsi": {
-                "type": "null",
-                "nullable": true
-              }
-            },
-            "required": [
-              "count",
-              "gsi",
-              "present"
-            ]
-          },
-          "return_value": {
-            "type": "null",
-            "nullable": true
-          }
-        },
-        "required": [
-          "call_id",
-          "duration_ns",
-          "event",
-          "event_name",
-          "ioeventfd",
-          "irqfd",
-          "mmio",
-          "operation_id",
-          "phase",
-          "return_value"
-        ]
-      },
-      "state": {
-        "type": "object",
-        "fields": {
-          "device": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "status": {
-                "type": "null",
-                "nullable": true
-              },
-              "interrupt_status": {
-                "type": "null",
-                "nullable": true
-              },
-              "device_features_sel": {
-                "type": "null",
-                "nullable": true
-              },
-              "driver_features_sel": {
-                "type": "null",
-                "nullable": true
-              },
-              "driver_features_word0": {
-                "type": "null",
-                "nullable": true
-              },
-              "driver_features_word1": {
-                "type": "null",
-                "nullable": true
-              },
-              "queue_sel": {
-                "type": "null",
-                "nullable": true
-              }
-            },
-            "required": [
-              "device_features_sel",
-              "driver_features_sel",
-              "driver_features_word0",
-              "driver_features_word1",
-              "interrupt_status",
-              "present",
-              "queue_sel",
-              "status"
-            ]
-          },
-          "queue": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "size": {
-                "type": "null",
-                "nullable": true
-              },
-              "ready": {
-                "type": "null",
-                "nullable": true
-              },
-              "last_avail_idx": {
-                "type": "null",
-                "nullable": true
-              },
-              "desc_gpa": {
-                "type": "null",
-                "nullable": true
-              },
-              "driver_gpa": {
-                "type": "null",
-                "nullable": true
-              },
-              "device_gpa": {
-                "type": "null",
-                "nullable": true
-              }
-            },
-            "required": [
-              "desc_gpa",
-              "device_gpa",
-              "driver_gpa",
-              "last_avail_idx",
-              "present",
-              "ready",
-              "size"
-            ]
-          },
-          "descriptor": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "entries": {
-                "type": "null",
-                "nullable": true
-              }
-            },
-            "required": [
-              "entries",
-              "present"
-            ]
-          },
-          "avail": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "flags": {
-                "type": "null",
-                "nullable": true
-              },
-              "idx": {
-                "type": "null",
-                "nullable": true
-              },
-              "ring": {
-                "type": "null",
-                "nullable": true
-              }
-            },
-            "required": [
-              "flags",
-              "idx",
-              "present",
-              "ring"
-            ]
-          },
-          "used": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "flags": {
-                "type": "null",
-                "nullable": true
-              },
-              "idx": {
-                "type": "null",
-                "nullable": true
-              },
-              "ring": {
-                "type": "null",
-                "nullable": true
-              }
-            },
-            "required": [
-              "flags",
-              "idx",
-              "present",
-              "ring"
-            ]
-          },
-          "buffer_preview": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "meaning": {
-                "type": "string"
-              },
-              "length": {
-                "type": "null",
-                "nullable": true
-              },
-              "bytes": {
-                "type": "null",
-                "nullable": true
-              }
-            },
-            "required": [
-              "bytes",
-              "length",
-              "meaning",
-              "present"
-            ]
-          },
-          "ioctl": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "completed": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "completed",
-              "present"
-            ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "result": {
-                "type": "integer64"
-              },
-              "meaning": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "meaning",
-              "present",
-              "result"
-            ]
-          }
-        },
-        "required": [
-          "avail",
-          "buffer_preview",
-          "descriptor",
-          "device",
-          "disposition",
           "ioctl",
           "queue",
           "used"

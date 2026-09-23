@@ -16,7 +16,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
-#include "backend.h"
+#include "rng_virtqueue.h"
 #include "virtio.h"
 
 /* read_register() is the complete readable side of this experiment's virtio-mmio transport. */

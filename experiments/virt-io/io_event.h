@@ -36,12 +36,11 @@ enum io_event_type
 	IO_EVENT_KVM_MSI_SET_IRQ = 9,
 	IO_EVENT_SYS_ENTER_IOCTL = 10,
 	IO_EVENT_SYS_EXIT_IOCTL = 11,
-	IO_EVENT_VMX_HANDLE_EXIT_RETURN = 12,
-	IO_EVENT_DEVICE_MMIO_WRITE = 13,
-	IO_EVENT_DEVICE_EXECUTE_COMMAND = 14,
-	IO_EVENT_DEVICE_EXECUTE_COMMAND_RETURN = 15,
-	IO_EVENT_DEVICE_DMA_TRANSFER_RETURN = 16,
-	IO_EVENT_COUNT = 17,
+	IO_EVENT_DEVICE_MMIO_WRITE = 12,
+	IO_EVENT_DEVICE_EXECUTE_COMMAND = 13,
+	IO_EVENT_DEVICE_EXECUTE_COMMAND_RETURN = 14,
+	IO_EVENT_DEVICE_DMA_TRANSFER_RETURN = 15,
+	IO_EVENT_COUNT = 16,
 };
 
 /* Which boundary this snapshot belongs to. */
@@ -104,12 +103,6 @@ struct vio_ioctl
 	unsigned char completed;
 };
 
-struct vio_disposition
-{
-	int result;
-	unsigned char present;
-};
-
 struct vio_mmio
 {
 	unsigned int offset;
@@ -139,7 +132,6 @@ struct vio_state
 	struct vio_msi msi;
 	struct vio_dma dma;
 	struct vio_ioctl ioctl;
-	struct vio_disposition disposition;
 	struct vio_mmio mmio;
 	struct vio_command command;
 };

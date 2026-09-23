@@ -926,7 +926,7 @@ import {
       var left = Math.min(from, to),
         width = Math.abs(to - from),
         direction = to > from ? 'forward' : 'reverse';
-      return '<button type="button" class="component-row' + selected + '" data-index="' + item.global + '"><i class="component-arrow ' + direction + kind + '" style="left:' + left + '%;width:' + width + '%"></i><i class="component-point" style="left:' + from + '%"></i><i class="component-point" style="left:' + to + '%"></i><code style="left:' + ((from + to) / 2) + '%" title="' + esc(item.event.raw) + '">' + esc(flow.label) + '</code></button>';
+      return '<button type="button" class="component-row' + selected + '" data-index="' + item.global + '"><i class="component-arrow ' + direction + kind + '" style="left:' + left + '%;width:' + width + '%"></i><code style="left:' + ((from + to) / 2) + '%" title="' + esc(item.event.raw) + '">' + esc(flow.label) + '</code></button>';
     }).join('');
     var previous = host.querySelector('.component-track'),
       previousTop = previous ? previous.scrollTop : null;
@@ -1290,7 +1290,7 @@ import {
       $('device-state').textContent = D.meta.device_buffer_size + ' B buffer';
       $('device-detail').textContent = 'no transfer in this phase';
       $('dma-state').textContent = 'not present';
-      $('dma-caption').textContent = 'two device_dma_transfer calls are observed at entry and ret';
+      $('dma-caption').textContent = 'device_dma_transfer · entry + ret';
     }
   }
 

@@ -1,14 +1,11 @@
 /*
  * Guest for the IO-virtualization experiment.
  *
- * Starts in real mode, enters flat 32-bit protected mode with paging disabled
- * (GVA == GPA), then teaches interrupt virtualization over a tiny MMIO virtual
- * device.  Phase markers go through the 0xe9 control port (PIO is only a marker,
- * not the subject); port 0x82 terminates the run.
+ * Starts in real mode, enters flat 32-bit protected mode with paging disabled (GVA == GPA),
+ * then teaches interrupt virtualization over a tiny MMIO virtual device.
+ * Phase markers go through the 0xe9 control port (PIO is only a marker, not the subject); port 0x82 terminates the run.
  *
- * Layout and interrupt objects are reserved at fixed GPAs with .org so the
- * assembler both documents and pre-fills them:
- *
+ * Layout and interrupt objects are reserved at fixed GPAs with .org so the assembler both documents and pre-fills them:
  *   0x0000  code + GDT + IDT
  *   0x4000  irq_count
  *   0x6000  DMA source buffer (pre-filled 0..63)
@@ -79,9 +76,8 @@
 
 /*
  * Wait until the delivered ISR raises irq_count to \expect.
- * Each phase waits for its exact value (1,2,3,4) so the timeline can
- * unambiguously prove the interrupt actually ran.  If it never arrives,
- * \expect spins down to 0 and hlt guarantees the guest stops instead of hanging.
+ * Each phase waits for its exact value (1,2,3,4) so the timeline can unambiguously prove the interrupt actually ran.
+ * If it never arrives, expect spins down to 0 and hlt guarantees the guest stops instead of hanging.
  */
 .macro WAIT_IRQ_COUNT expect
 	movl $400000, %ecx

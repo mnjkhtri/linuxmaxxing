@@ -17,7 +17,6 @@
 
 static unsigned int record_count;
 static unsigned int seq_counter;
-static bool vmx_disposition_available;
 static volatile sig_atomic_t exiting;
 
 static void on_signal(int signo)
@@ -44,8 +43,6 @@ static const char *event_name(unsigned int event)
 		return "sys_enter_ioctl";
 	case VIRTIO_EVENT_SYS_EXIT_IOCTL:
 		return "sys_exit_ioctl";
-	case VIRTIO_EVENT_VMX_HANDLE_EXIT_RETURN:
-		return "vmx_handle_exit_return";
 	case VIRTIO_EVENT_MMIO_RETURN:
 		return "virtio_mmio_return";
 	case VIRTIO_EVENT_IOEVENTFD_KICK_RETURN:
@@ -68,7 +65,6 @@ static const char *event_hook(unsigned int event)
 	case VIRTIO_EVENT_IRQFD_SIGNAL: return "uprobe/build/vmm:signal_irqfd_completion";
 	case VIRTIO_EVENT_SYS_ENTER_IOCTL: return "tracepoint/syscalls/sys_enter_ioctl";
 	case VIRTIO_EVENT_SYS_EXIT_IOCTL: return "tracepoint/syscalls/sys_exit_ioctl";
-	case VIRTIO_EVENT_VMX_HANDLE_EXIT_RETURN: return "kretprobe/vmx_handle_exit";
 	case VIRTIO_EVENT_MMIO_RETURN: return "uretprobe/build/vmm:do_mmio";
 	case VIRTIO_EVENT_IOEVENTFD_KICK_RETURN: return "uretprobe/build/vmm:process_ioeventfd_kick";
 	case VIRTIO_EVENT_IRQFD_SIGNAL_RETURN: return "uretprobe/build/vmm:signal_irqfd_completion";
@@ -96,33 +92,6 @@ static const char *ioctl_request_name(unsigned long long request)
 	case KVM_RUN: return "KVM_RUN";
 	default: return "UNKNOWN_IOCTL";
 	}
-}
-
-static const char *exit_disposition_name(int result)
-{
-	if (result > 0) return "resume guest";
-	if (result == 0) return "return userspace";
-	return "error";
-}
-
-static bool kallsyms_has_symbol(const char *wanted)
-{
-	FILE *stream = fopen("/proc/kallsyms", "r");
-	char line[512];
-	char symbol[256];
-	bool found = false;
-
-	if (!stream) return false;
-	while (fgets(line, sizeof(line), stream))
-	{
-		if (sscanf(line, "%*s %*c %255s", symbol) == 1 && strcmp(symbol, wanted) == 0)
-		{
-			found = true;
-			break;
-		}
-	}
-	fclose(stream);
-	return found;
 }
 
 static const char *register_name(unsigned int offset)
@@ -187,8 +156,6 @@ static const char *phase_name(const struct virtio_event *event)
 			return "D";
 		return "A";
 	}
-	if (event->event_info.event == VIRTIO_EVENT_VMX_HANDLE_EXIT_RETURN)
-		return "A"; /* The frontend aligns this kernel event to the nearest tracefs phase boundary. */
 	if (event->event_info.event != VIRTIO_EVENT_MMIO && event->event_info.event != VIRTIO_EVENT_MMIO_RETURN)
 	{
 		if (event->state.avail.present && event->state.avail.idx == VIRTIO_TOTAL_REQUEST_COUNT)
@@ -251,8 +218,7 @@ static void write_meta(struct json_writer *jw)
 	json_u32(jw, "ioeventfd_datamatch", VIRTIO_RNG_QUEUE_INDEX);
 	json_u32(jw, "irqfd_gsi", VIRTIO_IRQ_GSI);
 	json_string(jw, "backend_location", "userspace");
-	json_bool(jw, "vmx_disposition_available", vmx_disposition_available);
-	json_u32(jw, "structured_event_types", 11);
+	json_u32(jw, "structured_event_types", 10);
 	json_object_end(jw);
 	json_newline(jw);
 }
@@ -506,18 +472,6 @@ static void write_ioctl(struct json_writer *jw, const struct virtio_ioctl_state 
 	json_object_end(jw);
 }
 
-static void write_disposition(struct json_writer *jw, const struct virtio_disposition_state *disposition)
-{
-	json_object_begin_field(jw, "disposition");
-	json_bool(jw, "present", disposition->present != 0);
-	if (disposition->present)
-	{
-		json_i64(jw, "result", disposition->result);
-		json_string(jw, "meaning", exit_disposition_name(disposition->result));
-	}
-	json_object_end(jw);
-}
-
 static void write_state(struct json_writer *jw, const struct virtio_state *state)
 {
 	json_object_begin_field(jw, "state");
@@ -528,7 +482,6 @@ static void write_state(struct json_writer *jw, const struct virtio_state *state
 	write_used(jw, &state->used);
 	write_buffer_preview(jw, &state->buffer_preview);
 	write_ioctl(jw, &state->ioctl);
-	write_disposition(jw, &state->disposition);
 	json_object_end(jw);
 }
 
@@ -580,12 +533,6 @@ int main(void)
 	{
 		fprintf(stderr, "virtio: failed to open BPF skeleton\n");
 		return 1;
-	}
-	vmx_disposition_available = kallsyms_has_symbol("vmx_handle_exit");
-	if (!vmx_disposition_available)
-	{
-		bpf_program__set_autoload(skel->progs.observe_vmx_handle_exit_return, false);
-		fprintf(stderr, "virtio: vmx_handle_exit unavailable; disposition probe disabled\n");
 	}
 	if (virtio_bpf__load(skel) != 0 || virtio_bpf__attach(skel) != 0)
 	{

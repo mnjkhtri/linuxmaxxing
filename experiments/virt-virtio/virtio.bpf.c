@@ -369,20 +369,6 @@ int observe_ioctl_exit(struct trace_event_raw_sys_exit *ctx)
 	return 0;
 }
 
-/* This optional kretprobe records whether KVM resumes the guest or returns KVM_RUN to userspace. */
-SEC("kretprobe/vmx_handle_exit")
-int BPF_KRETPROBE(observe_vmx_handle_exit_return, int result)
-{
-	struct virtio_event *event = new_event(VIRTIO_EVENT_VMX_HANDLE_EXIT_RETURN);
-
-	if (!event)
-		return 0;
-	event->state.disposition.present = 1;
-	event->state.disposition.result = result;
-	emit_event(event);
-	return 0;
-}
-
 SEC("uprobe/build/vmm:do_mmio")
 int BPF_UPROBE(observe_do_mmio, void *dev, void *guest_mem, struct observed_kvm_run *run)
 {

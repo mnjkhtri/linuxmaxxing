@@ -657,21 +657,6 @@ int observe_mmap_exit(struct trace_event_raw_sys_exit *ctx)
 	return 0;
 }
 
-/* Optional: distinguish exits handled inside KVM from exits returned by KVM_RUN. */
-SEC("kretprobe/vmx_handle_exit")
-int BPF_KRETPROBE(observe_vmx_handle_exit_return, int result)
-{
-	struct ept_event *event = new_event(EPT_EVENT_VMX_HANDLE_EXIT_RETURN);
-
-	if (!event)
-		return 0;
-	event->disposition.present = 1;
-	event->disposition.result = result;
-	sample_current_state(event);
-	emit_event(event);
-	return 0;
-}
-
 /* Snapshot vCPU MM/EPT state from the same KVM tracepoint events that the UI displays. */
 static __always_inline int snapshot_vcpu_mm(struct kvm_vcpu *vcpu, enum ept_event_type event_type)
 {

@@ -35,8 +35,8 @@ all: $(VMM) $(GUEST_BIN) $(OBSERVER)
 $(BUILD_DIR):
 	mkdir -p $@
 
-$(VMM): $(DIR)vmm.c $(DIR)backend.c $(DIR)backend.h $(CONTRACT) | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -pthread -I$(DIR) $(DIR)vmm.c $(DIR)backend.c -o $@
+$(VMM): $(DIR)vmm.c $(DIR)rng_virtqueue.c $(DIR)rng_virtqueue.h $(CONTRACT) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -pthread -I$(DIR) $(DIR)vmm.c $(DIR)rng_virtqueue.c -o $@
 	@nm -an $@ | grep -Eq ' [tT] do_mmio$$' || { echo "VMM lacks do_mmio symbol" >&2; exit 1; }
 	@nm -an $@ | grep -Eq ' [tT] process_queue$$' || { echo "VMM lacks process_queue symbol" >&2; exit 1; }
 	@nm -an $@ | grep -Eq ' [tT] process_ioeventfd_kick$$' || { echo "VMM lacks process_ioeventfd_kick symbol" >&2; exit 1; }

@@ -110,7 +110,7 @@ import {
         context: e.context,
         state: r.state,
         phase: r.event_info?.phase,
-        info: r.event_info,
+        info: r.event_info || {},
         raw: JSON.stringify(e),
         traceInfo: null
       };
@@ -157,18 +157,12 @@ import {
     var kick = ebpf.find(function(event) {
       return event.name === "ioeventfd_kick";
     });
-    if (kick) {
-      var phaseCEnds = ebpf.filter(function(event) {
-        return event.name === "queue_backend_end" && event.phase === "C";
-      });
-      firstD = kick.timeNs;
-      if (phaseCEnds.length > 1)
-        for (var index = 1; index < trace.length; index++)
-          if (trace[index].name === "kvm_entry" && trace[index].timeNs >= phaseCEnds[1].timeNs && trace[index].timeNs <= kick.timeNs && trace[index - 1].name === "kvm_exit" && trace[index - 1].info.reason === "EPT_VIOLATION") {
-            firstD = trace[index].timeNs;
-            break;
-          }
-    }
+    var phaseDSetup = ebpf.find(function(event) {
+      var ioctl = event.state && event.state.ioctl;
+      return event.name === "sys_enter_ioctl" && ioctl && ioctl.request_name === "KVM_IOEVENTFD";
+    });
+    if (phaseDSetup) firstD = phaseDSetup.timeNs;
+    else if (kick) firstD = kick.timeNs;
     trace.forEach(function(event) {
       event.phase = firstD !== null && event.timeNs >= firstD ? "D" : firstC !== null && event.timeNs >= firstC ? "C" : firstB !== null && event.timeNs >= firstB ? "B" : "A";
     });
@@ -176,14 +170,13 @@ import {
 
   function lane(event) {
     if (event.source === "ebpf" && event.name === "sys_enter_ioctl") return "KVM REQUEST";
-    if (event.source === "ebpf" && event.name === "sys_exit_ioctl") return "KVM RETURN";
-    if (event.source === "ebpf" && event.name === "vmx_handle_exit_return") return "EXIT DISPOSITION";
+    if (event.source === "ebpf" && event.name === "sys_exit_ioctl") return "KVM RET";
     if (event.source === "ebpf" && event.name === "queue_backend_begin") return "BACKEND CALL";
-    if (event.source === "ebpf" && event.name === "queue_backend_end") return "BACKEND RETURN";
+    if (event.source === "ebpf" && event.name === "queue_backend_end") return "BACKEND END";
     if (event.source === "ebpf" && event.name === "ioeventfd_kick") return "IOEVENTFD WAKE";
     if (event.source === "ebpf" && event.name === "irqfd_signal") return "IRQFD SIGNAL";
-    if (event.source === "ebpf" && event.name === "virtio_mmio_return") return "VMM MMIO RETURN";
-    if (event.source === "ebpf" && /_(kick|signal)_return$/.test(event.name)) return "BACKEND RETURN";
+    if (event.source === "ebpf" && event.name === "virtio_mmio_return") return "VMM MMIO RET";
+    if (event.source === "ebpf" && /_(kick|signal)_return$/.test(event.name)) return "BACKEND RET";
     if (event.source === "ebpf") return "VMM MMIO";
     if (event.name === "kvm_entry") return "KVM ENTRY";
     if (event.name === "kvm_exit") return "VM EXIT";
@@ -205,21 +198,15 @@ import {
 
   function componentActors(event) {
     var ioctlState = event.state && event.state.ioctl;
-    var disposition = event.state && event.state.disposition;
     if (event.name === "sys_enter_ioctl") return {
       from: "vmm",
       to: "kvm",
       label: (ioctlState && ioctlState.request_name) || "ioctl"
     };
     if (event.name === "sys_exit_ioctl") return {
-      from: "vmm",
-      to: "vmm",
-      label: ((ioctlState && ioctlState.request_name) || "ioctl") + " ret " + (ioctlState && ioctlState.result)
-    };
-    if (event.name === "vmx_handle_exit_return") return {
       from: "kvm",
-      to: "kvm",
-      label: (disposition && disposition.meaning) || "exit handled"
+      to: "vmm",
+      label: ((ioctlState && ioctlState.request_name) || "ioctl") + " · ret " + (ioctlState && ioctlState.result)
     };
     if (event.name === "kvm_entry") return {
       from: "kvm",
@@ -279,11 +266,19 @@ import {
         label: register || "MMIO handler"
       };
     }
-    if (event.source === "ebpf" && event.name === "virtio_mmio_return") return {
-      from: "vmm",
-      to: "vmm",
-      label: "MMIO ret " + event.info.return_value
-    };
+    if (event.source === "ebpf" && event.name === "virtio_mmio_return") {
+      var returnedRegister = event.info.mmio && event.info.mmio.register;
+      if (returnedRegister === "QueueNotify") return {
+        from: "backend",
+        to: "vmm",
+        label: "QueueNotify · ret " + event.info.return_value
+      };
+      return {
+        from: "vmm",
+        to: "vmm",
+        label: "MMIO · ret " + event.info.return_value
+      };
+    }
     if (event.source === "ebpf" && event.name === "queue_backend_begin") return {
       from: "backend",
       to: "memory",
@@ -304,10 +299,15 @@ import {
       to: "kvm",
       label: "irqfd signal"
     };
-    if (event.source === "ebpf" && (event.name === "ioeventfd_kick_return" || event.name === "irqfd_signal_return")) return {
+    if (event.source === "ebpf" && event.name === "ioeventfd_kick_return") return {
       from: "backend",
+      to: "kvm",
+      label: "ioeventfd kick · ret " + event.info.return_value
+    };
+    if (event.source === "ebpf" && event.name === "irqfd_signal_return") return {
+      from: "kvm",
       to: "backend",
-      label: event.name.replace(/_return$/, "") + " ret " + event.info.return_value
+      label: "irqfd signal · ret " + event.info.return_value
     };
     if (event.source === "tracefs") return {
       from: "kvm",
@@ -327,7 +327,7 @@ import {
     if (event.name === "kvm_userspace_exit" || event.name === "virtio_mmio") return "handoff";
     if (/^kvm_(set_irq|ioapic_set_irq|apic_accept_irq|inj_virq|eoi|msi_set_irq)$/.test(event.name) || event.name === "irqfd_signal") return "interrupt";
     if (/^queue_backend_/.test(event.name) || event.name === "ioeventfd_kick") return "queue";
-    if (event.name === "sys_enter_ioctl" || event.name === "sys_exit_ioctl" || event.name === "vmx_handle_exit_return") return "run";
+    if (event.name === "sys_enter_ioctl" || event.name === "sys_exit_ioctl") return "run";
     return "handoff";
   }
 
@@ -343,31 +343,27 @@ import {
       kind = componentKind(event),
       from = componentPoint(relation.from),
       to = componentPoint(relation.to),
-      dom =
-      '<i class="component-life vmm"></i><i class="component-life kvm"></i><i class="component-life guest"></i><i class="component-life irqchip"></i><i class="component-life backend"></i><i class="component-life memory"></i>';
+      dom = "";
     if (from === to) {
       dom += '<i class="component-local ' + kind + '" style="left:' + from + '%"></i>';
-      dom += '<span class="component-arrow-label local" style="left:' + from + '%">' + esc(relation.label) + '</span>';
+      dom += '<code class="local" style="left:' + from + '%" title="' + esc(event.raw) + '">' + esc(relation.label) + '</code>';
     } else {
       var left = Math.min(from, to),
         width = Math.abs(to - from),
         direction = to > from ? "forward" : "reverse";
       dom += '<i class="component-arrow ' + direction + ' ' + kind + '" style="left:' + left + '%;width:' + width + '%"></i>';
-      dom += '<span class="component-arrow-label" style="left:' + ((from + to) / 2) + '%">' + esc(relation.label) + '</span>';
-
+      dom += '<code style="left:' + ((from + to) / 2) + '%" title="' + esc(event.raw) + '">' + esc(relation.label) + '</code>';
     }
     return dom;
   }
 
   function title(event) {
     var ioctlState = event.state && event.state.ioctl;
-    var disposition = event.state && event.state.disposition;
     if (event.source === "ebpf" && event.name === "sys_enter_ioctl") return (ioctlState && ioctlState.request_name) || "ioctl";
-    if (event.source === "ebpf" && event.name === "sys_exit_ioctl") return ((ioctlState && ioctlState.request_name) || "ioctl") + " · return";
-    if (event.source === "ebpf" && event.name === "vmx_handle_exit_return") return "vmx_handle_exit · " + ((disposition && disposition.meaning) || "unknown");
+    if (event.source === "ebpf" && event.name === "sys_exit_ioctl") return ((ioctlState && ioctlState.request_name) || "ioctl") + " · ret";
     if (event.source === "ebpf" && event.name === "virtio_mmio") return "do_mmio · " + ((event.info.mmio && event.info.mmio.register) || "MMIO");
-    if (event.source === "ebpf" && event.name === "virtio_mmio_return") return "do_mmio return · " + ((event.info.mmio && event.info.mmio.register) || "MMIO") + " · " + event.info.return_value;
-    if (event.source === "ebpf" && (event.name === "ioeventfd_kick_return" || event.name === "irqfd_signal_return")) return event.name.replace(/_return$/, "") + " · return " + event.info.return_value;
+    if (event.source === "ebpf" && event.name === "virtio_mmio_return") return "do_mmio · ret " + ((event.info.mmio && event.info.mmio.register) || "MMIO") + " · " + event.info.return_value;
+    if (event.source === "ebpf" && (event.name === "ioeventfd_kick_return" || event.name === "irqfd_signal_return")) return event.name.replace(/_return$/, "") + " · ret " + event.info.return_value;
     if (event.source === "ebpf") return event.name;
     if (event.name === "kvm_exit") return "kvm_exit · " + (event.info.reason || "unknown");
     if (event.name === "kvm_userspace_exit") return event.info.reason || event.name;
@@ -386,10 +382,18 @@ import {
 
   /* Fuse both monotonic sources without inventing events for untrapped guest-memory stores. */
   function buildModel(ebpf, trace) {
+    M.landmarks = {
+      kicks: [],
+      begins: [],
+      ends: []
+    };
+    M.notifyMmio = 0;
+    M.ioeventfdKicks = 0;
+    M.irqfdSignals = 0;
     classifyTracePhases(trace, ebpf);
     ebpf.forEach(function(event) {
       var ioctlState = event.state && event.state.ioctl;
-      if (event.name === "vmx_handle_exit_return" || (ioctlState && ioctlState.request_name === "KVM_RUN")) event.phase = tracePhaseAt(trace, event.timeNs);
+      if (ioctlState && ioctlState.request_name === "KVM_RUN") event.phase = tracePhaseAt(trace, event.timeNs);
       if (ioctlState && (ioctlState.request_name === "KVM_IOEVENTFD" || ioctlState.request_name === "KVM_IRQFD")) event.phase = "D";
     });
     M.events = ebpf.concat(trace).sort(function(a, b) {
@@ -421,37 +425,6 @@ import {
           break;
         }
     });
-  }
-
-  function statusDecode(raw) {
-    var value = hexNumber(raw);
-    if (value === null || isNaN(value)) return "not sampled";
-    if (value === 0) return "reset";
-    var bits = [];
-    if (value & 1) bits.push("ACKNOWLEDGE");
-    if (value & 2) bits.push("DRIVER");
-    if (value & 8) bits.push("FEATURES_OK");
-    if (value & 4) bits.push("DRIVER_OK");
-    return bits.join(" | ") || "0";
-  }
-
-  function dlRows(host, rows) {
-    host.innerHTML = rows
-      .map(function(row) {
-        var miss = missing(row[1]);
-        return (
-          "<dt>" +
-          esc(row[0]) +
-          '</dt><dd class="' +
-          (miss ? "not-sampled" : "") +
-          '" title="' +
-          esc(shown(row[1])) +
-          '">' +
-          esc(shown(row[1])) +
-          "</dd>"
-        );
-      })
-      .join("");
   }
 
   function stateGroup(event, name) {
@@ -498,27 +471,27 @@ import {
       start: metaNumber(meta, "guest_code_gpa"),
       size: metaNumber(meta, "guest_code_size"),
       kind: "context",
-      name: "guest code region",
+      name: "guest code",
     }, {
       start: metaNumber(meta, "guest_stack_bottom"),
       size: metaNumber(meta, "guest_stack_top") - metaNumber(meta, "guest_stack_bottom"),
       kind: "context",
-      name: "stack range",
+      name: "stack",
     }, {
       start: metaNumber(meta, "guest_idt_gpa"),
       size: metaNumber(meta, "guest_idt_size"),
       kind: "context",
-      name: "IDT + completion flag",
+      name: "IDT + flag",
     }, {
       start: metaNumber(meta, "descriptor_gpa"),
       size: pageSize,
       kind: "descriptor",
-      name: "VIRTQUEUE DESCRIPTOR TABLE",
+      name: "DESC TABLE",
     }, {
       start: metaNumber(meta, "avail_gpa"),
       size: pageSize,
       kind: "avail",
-      name: "AVAILABLE RING",
+      name: "AVAIL RING",
     }, {
       start: metaNumber(meta, "used_gpa"),
       size: pageSize,
@@ -528,7 +501,7 @@ import {
       start: metaNumber(meta, "rng_buffer_gpa"),
       size: metaNumber(meta, "rng_buffer_stride") * (metaNumber(meta, "total_request_count") - 1) + metaNumber(meta, "rng_request_length"),
       kind: "buffer",
-      name: "RNG BUFFERS",
+      name: "RNG BUF",
     }, ].sort(function(a, b) {
       return a.start - b.start;
     });
@@ -559,12 +532,13 @@ import {
     });
     if (cursor < memoryEnd) items.push(memoryContext(cursor, memoryEnd - 1, "UNREPORTED", true));
     $("guest-memory-summary").textContent =
-      "slot " + slot + " · " + byteCount(memorySize) + " · GPA " + gpa(memoryStart) + "–" + gpa(memoryEnd - 1) + " · increasing GPA ↓";
+      "slot " + slot + " · " + byteCount(memorySize) + " · GPA " + gpa(memoryStart) + "–" + gpa(memoryEnd - 1);
     $("queue-summary").textContent = "queue " + meta.queue_index + " · " + meta.queue_size + " entries";
     $("memory-map").innerHTML = items.join("");
   }
 
   function slotCells(entries, renderEntry) {
+    if (!Array.isArray(entries)) return '<div class="queue-slots-empty">not sampled</div>';
     var count = M.meta ? metaNumber(M.meta, "queue_size") : 8;
     return Array.from({
       length: count
@@ -585,39 +559,25 @@ import {
       queue = stateGroup(event, "queue"),
       preview = stateGroup(event, "buffer_preview"),
       sampled = Boolean(queue && avail && used),
-      pending = sampled ? (avail.idx - queue.last_avail_idx) & 0xffff : null,
-      previous = previousSample(event),
-      previousQueue = stateGroup(previous, "queue"),
-      previousAvail = stateGroup(previous, "avail"),
-      previousUsed = stateGroup(previous, "used"),
-      previousPending = previousQueue && previousAvail ? (previousAvail.idx - previousQueue.last_avail_idx) & 0xffff : null;
-    $("queue-avail").textContent = sampled ? avail.idx : "—";
-    $("queue-consumed").textContent = sampled ? queue.last_avail_idx : "—";
-    $("queue-used").textContent = sampled ? used.idx : "—";
-    $("queue-pending").textContent = sampled ? pending : "—";
+      pending = sampled ? (avail.idx - queue.last_avail_idx) & 0xffff : null;
+    $("queue-state-line").innerHTML = sampled ?
+      '<span>AVAIL ' + avail.idx + '</span><span>CONSUMED ' + queue.last_avail_idx + '</span><span>USED ' + used.idx + '</span><span>PENDING ' + pending + '</span>' :
+      '<span class="queue-unsampled">not sampled</span>';
     $("queue-sample-state").textContent = sampled ? event.name : "not sampled at this boundary";
-    document.querySelectorAll("[data-queue-counter]").forEach(function(counter) {
-      var changed = false;
-      if (sampled && counter.dataset.queueCounter === "avail") changed = Boolean(previousAvail) && avail.idx !== previousAvail.idx;
-      if (sampled && counter.dataset.queueCounter === "consumed") changed = Boolean(previousQueue) && queue.last_avail_idx !== previousQueue.last_avail_idx;
-      if (sampled && counter.dataset.queueCounter === "used") changed = Boolean(previousUsed) && used.idx !== previousUsed.idx;
-      if (sampled && counter.dataset.queueCounter === "pending") changed = previousPending !== null && pending !== previousPending;
-      counter.classList.toggle("changed", changed);
-    });
     $("desc-fields").innerHTML = slotCells(descriptor && descriptor.entries, function(entry, index) {
       if (!entry) return emptySlot(index);
       var populated = hexNumber(entry.addr) !== 0 || entry.len !== 0 || hexNumber(entry.flags) !== 0;
-      return '<div class="queue-slot ' + (populated ? "populated" : "empty") + '"><b>desc ' + index + '</b><code>' + esc(entry.addr) + '</code><span>' + entry.len + " B · " + (entry.device_writable ? "WRITE" : "—") + " · next " + entry.next + "</span></div>";
+      return '<div class="queue-slot ' + (populated ? "populated" : "empty") + '"><b>desc ' + index + '</b><code>' + esc(entry.addr) + '</code><span>' + entry.len + "B " + (entry.device_writable ? "WR" : "—") + " n" + entry.next + "</span></div>";
     });
     $("avail-fields").innerHTML = slotCells(avail && avail.ring, function(descriptorId, index) {
       if (!avail) return emptySlot(index);
       var published = index < avail.idx;
-      return '<div class="queue-slot ' + (published ? "published" : "empty") + '"><b>slot ' + index + '</b><code>' + (published ? "descriptor " : "raw ") + descriptorId + '</code><span>' + (published ? "published" : "not published") + "</span></div>";
+      return '<div class="queue-slot ' + (published ? "published" : "empty") + '"><b>slot ' + index + '</b><code>' + (published ? "desc " : "raw ") + descriptorId + '</code><span>' + (published ? "pub" : "—") + "</span></div>";
     });
     $("used-fields").innerHTML = slotCells(used && used.ring, function(entry, index) {
       if (!entry) return emptySlot(index);
       var completed = index < used.idx;
-      return '<div class="queue-slot ' + (completed ? "completed" : "empty") + '"><b>slot ' + index + '</b><code>' + (completed ? "descriptor " : "raw id ") + entry.id + '</code><span>' + (completed ? entry.len + " B completed" : "not published") + "</span></div>";
+      return '<div class="queue-slot ' + (completed ? "completed" : "empty") + '"><b>slot ' + index + '</b><code>' + (completed ? "desc " : "raw ") + entry.id + '</code><span>' + (completed ? entry.len + " B done" : "—") + "</span></div>";
     });
     var bytes =
       preview && Array.isArray(preview.bytes) ?
@@ -630,86 +590,104 @@ import {
     $("buffer-fields").innerHTML = slotCells(descriptor && descriptor.entries, function(entry, index) {
       if (!entry) return emptySlot(index);
       var populated = hexNumber(entry.addr) !== 0;
-      return '<div class="queue-slot ' + (populated ? "populated" : "empty") + '"><b>buffer ' + index + '</b><code>' + esc(entry.addr) + '</code><span>' + (index === 0 && bytes ? bytes : populated ? entry.len + " B" : "unused") + "</span></div>";
+      return '<div class="queue-slot ' + (populated ? "populated" : "empty") + '"><b>buf ' + index + '</b><code>' + esc(entry.addr) + '</code><span>' + (index === 0 && bytes ? bytes : populated ? entry.len + " B" : "—") + "</span></div>";
     });
   }
 
   function eventRows(event) {
-    var canonical = event.record && event.record.canonical,
-      source = canonical && canonical.source || {},
-      mechanism = source.mechanism === "ebpf" ? "eBPF" : source.mechanism || event.source;
-    var rows = [
+    var info = event.info || {},
+      rows = [
       ["phase", event.phase],
-      ["mechanism", mechanism],
-      ["hook", hookLabel(event.name, mechanism, source.hook)],
       ["time", event.timeUs.toFixed(3) + " µs"],
       ["event", event.name],
     ];
-    if (event.source === "ebpf" && event.info.mmio.present)
+    if (event.source === "ebpf" && info.mmio && info.mmio.present)
       rows.push(
-        ["MMIO address", event.info.mmio.address],
-        ["offset", event.info.mmio.offset],
-        ["register", event.info.mmio.register],
-        ["direction", event.info.mmio.direction],
-        ["value", event.info.mmio.value],
+        ["MMIO address", info.mmio.address],
+        ["offset", info.mmio.offset],
+        ["register", info.mmio.register],
+        ["direction", info.mmio.direction],
+        ["value", info.mmio.value],
       );
-    if (event.source === "ebpf" && event.info.ioeventfd && event.info.ioeventfd.present)
+    if (event.source === "ebpf" && info.ioeventfd && info.ioeventfd.present)
       rows.push(
-        ["ioeventfd address", event.info.ioeventfd.address],
-        ["length", event.info.ioeventfd.length],
-        ["datamatch", event.info.ioeventfd.datamatch],
-        ["counter", event.info.ioeventfd.count],
+        ["ioeventfd address", info.ioeventfd.address],
+        ["length", info.ioeventfd.length],
+        ["datamatch", info.ioeventfd.datamatch],
+        ["counter", info.ioeventfd.count],
       );
-    if (event.source === "ebpf" && event.info.irqfd && event.info.irqfd.present) rows.push(["irqfd counter", event.info.irqfd.count], ["GSI", event.info.irqfd.gsi]);
-    if (event.source === "ebpf" && event.info.operation_id) rows.push(["operation ID", event.info.operation_id]);
-    if (event.source === "ebpf" && event.info.duration_ns) rows.push(["duration", event.info.duration_ns + " ns"]);
-    if (event.source === "ebpf" && !missing(event.info.return_value)) rows.push(["return", event.info.return_value]);
+    if (event.source === "ebpf" && info.irqfd && info.irqfd.present) rows.push(["irqfd counter", info.irqfd.count], ["GSI", info.irqfd.gsi]);
+    if (event.source === "ebpf" && info.operation_id) rows.push(["operation ID", info.operation_id]);
+    if (event.source === "ebpf" && info.duration_ns) rows.push(["duration", info.duration_ns + " ns"]);
+    if (event.source === "ebpf" && !missing(info.return_value)) rows.push(["ret", info.return_value]);
     var ioctlState = event.state && event.state.ioctl;
-    var disposition = event.state && event.state.disposition;
     if (ioctlState && ioctlState.present) {
       rows.push(["request", ioctlState.request_name], ["fd", ioctlState.fd], ["argument", ioctlState.argument]);
       if (ioctlState.completed) rows.push(["result", ioctlState.result], ["duration", ioctlState.duration_ns + " ns"]);
     }
-    if (disposition && disposition.present) rows.push(["disposition", disposition.meaning], ["handler result", disposition.result]);
     if (event.source === "tracefs") {
-      if (event.info.reason) rows.push(["reason", event.info.reason]);
-      if (event.info.rip) rows.push(["guest RIP", event.info.rip]);
-      if (event.info.address) rows.push(["MMIO GPA", event.info.address]);
-      if (event.info.offset !== undefined) rows.push(["offset", "0x" + event.info.offset.toString(16)]);
-      if (event.info.value) rows.push(["raw value", event.info.value]);
-      if (!missing(event.info.gsi)) rows.push(["GSI", event.info.gsi], ["level", event.info.level], ["source", event.info.irqSource]);
-      if (event.info.vector) rows.push(["vector", event.info.vector], ["reinjected", event.info.reinjected]);
+      if (info.reason) rows.push(["reason", info.reason]);
+      if (info.rip) rows.push(["guest RIP", info.rip]);
+      if (info.address) rows.push(["MMIO GPA", info.address]);
+      if (info.offset !== undefined) rows.push(["offset", "0x" + info.offset.toString(16)]);
+      if (info.value) rows.push(["raw value", info.value]);
+      if (!missing(info.gsi)) rows.push(["GSI", info.gsi], ["level", info.level], ["source", info.irqSource]);
+      if (info.vector) rows.push(["vector", info.vector], ["reinjected", info.reinjected]);
     }
     return rows;
   }
 
-  /* One field table keeps event metadata, execution context, and sampled state tied to one boundary. */
+  function mechanismLabel(value) {
+    return value === "ebpf" ? "eBPF" : value || "—";
+  }
+
+  function originContext(event) {
+    var context = event.context || {},
+      task = context.comm || "—",
+      tid = context.tid != null ? "TID " + context.tid : context.pid != null ? "PID " + context.pid : "";
+    return tid ? task + " · " + tid : task;
+  }
+
+  function renderOrigin(event) {
+    var canonical = event.record && event.record.canonical,
+      source = canonical && canonical.source || {},
+      mechanism = source.mechanism || event.source,
+      rows = [
+        ["mechanism", mechanismLabel(mechanism)],
+        ["hook", hookLabel(event.name, mechanism, source.hook)],
+        ["CPU", event.context && event.context.cpu != null ? "CPU " + event.context.cpu : "—"],
+        ["task", originContext(event)]
+      ];
+    $("event-origin").innerHTML = rows.map(function(row) {
+      return '<div><small>' + esc(row[0]) + '</small><b title="' + esc(row[1]) + '">' + esc(row[1]) + '</b></div>';
+    }).join("");
+  }
+
+  function rawFieldRows(event) {
+    var canonical = event.record && event.record.canonical,
+      fields = canonical && canonical.data && canonical.data.fields,
+      rows = [];
+    function append(value, prefix) {
+      if (value && typeof value === "object" && !Array.isArray(value)) {
+        Object.keys(value).forEach(function(key) {
+          append(value[key], prefix ? prefix + "." + key : key);
+        });
+      } else if (!missing(value) && value !== "") {
+        rows.push([prefix, Array.isArray(value) ? JSON.stringify(value) : value]);
+      }
+    }
+    if (fields && typeof fields === "object") Object.keys(fields).forEach(function(key) {
+      append(fields[key], key);
+    });
+    return rows.length ? rows : eventRows(event);
+  }
+
+  /* Keep the inspector identical across the flow views: origin first, raw fields second. */
   function renderInspector(event) {
-    $("source-badge").textContent = event.source;
-    $("event-kind").textContent = event.lane + " · PHASE " + event.phase;
-    $("event-title").textContent = event.title;
-    var device = stateGroup(event, "device"),
-      queue = stateGroup(event, "queue"),
-      descriptor = stateGroup(event, "descriptor"),
-      avail = stateGroup(event, "avail"),
-      used = stateGroup(event, "used");
-    var rows = eventRows(event).concat([
-      ["pid", event.context.pid],
-      ["cpu", event.context.cpu],
-      ["comm", event.context.comm],
-      ["status", device ? device.status : null],
-      ["status decode", device ? statusDecode(device.status) : null],
-      ["interrupt_status", device ? device.interrupt_status : null],
-      ["queue ready", queue ? queue.ready : null],
-      ["last_avail_idx", queue ? queue.last_avail_idx : null],
-      ["descriptor entries", descriptor && Array.isArray(descriptor.entries) ? descriptor.entries.filter(function(entry) {
-        return hexNumber(entry.addr) !== 0;
-      }).length : null],
-      ["avail.idx", avail ? avail.idx : null],
-      ["used.idx", used ? used.idx : null],
-      ["pending", queue && avail ? (avail.idx - queue.last_avail_idx) & 0xffff : null],
-    ]);
-    dlRows($("observation-fields"), rows);
+    renderOrigin(event);
+    $("fields").innerHTML = rawFieldRows(event).map(function(row) {
+      return '<div><small>' + esc(row[0]) + '</small><b title="' + esc(shown(row[1])) + '">' + esc(shown(row[1])) + '</b></div>';
+    }).join("");
   }
 
   /* Card highlights compare structured samples and never predict a later state transition. */
@@ -749,6 +727,7 @@ import {
   function renderMachine(event) {
     highlightChanges(event);
     activateComponentActors(event);
+    $("flow-kind").textContent = event.source === "ebpf" ? "eBPF" : "tracefs";
     $("machine-caption").textContent = event.state ?
       "Highlights show fields changed since the preceding sampled boundary." :
       "Raw chronology boundary; queue fields are not sampled or highlighted.";
@@ -758,34 +737,28 @@ import {
     var filtered = M.events.filter(function(event) {
       return event.phase === M.phase;
     });
-    $("timeline-scope").textContent = "Phase " + M.phase + " · " + filtered.length + " observed messages";
-    $("timeline").style.setProperty("--rows", filtered.length);
-    $("timeline").innerHTML = filtered
-      .map(function(event) {
-        var previous = event.index > 0 ? M.events[event.index - 1] : null,
-          delta = previous ? ((event.timeNs - previous.timeNs) / 1000).toFixed(3) : "0.000",
-          lifelines = componentFlowMarkup(event);
-        return (
-          '<button class="timeline-row ' +
-          (event.index === cursor ? "active" : "") +
-          '" data-index="' +
-          event.index +
-          '"><span class="life-space">' +
-          lifelines +
-          '</span><span class="component-time">+' +
-          delta +
-          "µs</span></button>"
-        );
-      })
-      .join("");
+    $("timeline-scope").textContent = "Phase " + M.phase;
+    var current = M.events[cursor],
+      currentRelation = current ? componentActors(current) : null,
+      lifelines = '<div class="component-lifelines">' +
+      ["vmm", "kvm", "guest", "irqchip", "backend", "memory"].map(function(actor) {
+        var active = currentRelation && (currentRelation.from === actor || currentRelation.to === actor);
+        return '<i class="' + (active ? "active" : "") + '" style="left:' + componentPoint(actor) + '%"></i>';
+      }).join("") +
+      '</div>';
+    $("timeline").innerHTML = '<div class="component-body" style="--rows:' + Math.max(filtered.length, 1) + '">' + lifelines + filtered.map(function(event) {
+      var relation = componentActors(event),
+        local = relation.from === relation.to;
+      return '<button type="button" class="component-row' + (local ? " local" : "") + (event.index === cursor ? " current" : "") + '" data-index="' + event.index + '">' + componentFlowMarkup(event) + '</button>';
+    }).join("") + '</div>';
     $("timeline")
-      .querySelectorAll(".timeline-row")
+      .querySelectorAll(".component-row")
       .forEach(function(row) {
         row.addEventListener("click", function() {
           select(Number(row.dataset.index), false);
         });
       });
-    var active = $("timeline").querySelector(".active");
+    var active = $("timeline").querySelector(".current");
     if (active) active.scrollIntoView({
       block: "nearest"
     });
@@ -796,25 +769,20 @@ import {
       A: "BRING-UP",
       B: "QUEUE CONFIG",
       C: "MMIO POLL",
-      D: "EVENTFD + IRQFD"
+      D: "EVENTFD"
     };
     $("roadmap").innerHTML = ["A", "B", "C", "D"]
       .map(function(phase) {
         return (
-          '<button class="phase-zone selector-option ' +
+          '<button type="button" class="phase-button selector-option ' +
           (phase === M.phase ? "active" : "") +
-          '" data-phase="' +
-          phase +
-          '"><span class="phase-label">PHASE ' +
-          phase +
-          " · " +
-          definitions[phase] +
-          "</span></button>"
+          '" data-phase="' + phase + '"><span class="selector-kicker">PHASE ' + phase +
+          '</span><span class="selector-label">' + definitions[phase] + '</span></button>'
         );
       })
       .join("");
     $("roadmap")
-      .querySelectorAll(".phase-zone")
+      .querySelectorAll(".phase-button")
       .forEach(function(zone) {
         zone.addEventListener("click", function() {
           choosePhase(zone.dataset.phase);
@@ -827,9 +795,18 @@ import {
     cursor = Math.max(0, Math.min(M.events.length - 1, index));
     var event = M.events[cursor];
     if (changePhase !== false) M.phase = event.phase;
-    $("selected-time").textContent = "t = " + event.timeUs.toFixed(3) + " µs";
+    var scoped = M.events.filter(function(item) {
+        return item.phase === M.phase;
+      }),
+      local = scoped.findIndex(function(item) {
+        return item.index === cursor;
+      }),
+      first = scoped.length ? scoped[0].index : 0,
+      last = scoped.length ? scoped[scoped.length - 1].index : M.events.length - 1;
+    $("scrub").min = first;
+    $("scrub").max = last;
     $("scrub").value = cursor;
-    $("counter").textContent = cursor + 1 + " / " + M.events.length;
+    $("counter").textContent = (local + 1) + " / " + scoped.length;
     renderRoadmap();
     renderQueue(event);
     renderMachine(event);

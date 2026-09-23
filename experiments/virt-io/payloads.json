@@ -28,9 +28,6 @@
       },
       "lapic_available": {
         "type": "boolean"
-      },
-      "vmx_disposition_available": {
-        "type": "boolean"
       }
     },
     "required": [
@@ -42,8 +39,7 @@
       "events",
       "ioapic_available",
       "lapic_available",
-      "msi_vector",
-      "vmx_disposition_available"
+      "msi_vector"
     ]
   },
   "ebpf:device_dma_transfer": {
@@ -259,17 +255,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -301,7 +287,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -534,17 +519,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -576,7 +551,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -810,17 +784,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -876,7 +840,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -1110,17 +1073,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -1176,7 +1129,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -1410,17 +1362,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -1464,7 +1406,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -1698,17 +1639,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -1740,7 +1671,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -1974,17 +1904,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -2016,7 +1936,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -2250,17 +2169,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -2292,7 +2201,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -2526,17 +2434,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -2568,7 +2466,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -2802,17 +2699,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -2844,7 +2731,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -3106,17 +2992,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -3148,7 +3024,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -3382,17 +3257,7 @@
               "present"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -3424,7 +3289,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -3686,17 +3550,7 @@
               "result"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -3728,7 +3582,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -3990,17 +3843,7 @@
               "result"
             ]
           },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
+
           "mmio": {
             "type": "object",
             "fields": {
@@ -4032,7 +3875,6 @@
           "apic",
           "command",
           "controller",
-          "disposition",
           "dma",
           "ioapic",
           "ioctl",
@@ -4052,290 +3894,7 @@
       "state"
     ]
   },
-  "ebpf:vmx_handle_exit_return": {
-    "type": "object",
-    "fields": {
-      "event_info": {
-        "type": "object",
-        "fields": {
-          "event": {
-            "type": "integer64"
-          },
-          "event_name": {
-            "type": "string"
-          },
-          "vmexit_id": {
-            "type": "integer64"
-          },
-          "operation_id": {
-            "type": "integer64"
-          },
-          "call_id": {
-            "type": "integer64"
-          }
-        },
-        "required": [
-          "call_id",
-          "event",
-          "event_name",
-          "operation_id",
-          "vmexit_id"
-        ]
-      },
-      "state": {
-        "type": "object",
-        "fields": {
-          "vcpu": {
-            "type": "hex"
-          },
-          "kvm": {
-            "type": "hex"
-          },
-          "apic": {
-            "type": "hex"
-          },
-          "ioapic": {
-            "type": "hex"
-          },
-          "controller": {
-            "type": "object",
-            "fields": {
-              "rte": {
-                "type": "hex"
-              },
-              "tpr": {
-                "type": "hex"
-              },
-              "svr": {
-                "type": "hex"
-              },
-              "irr": {
-                "type": "object",
-                "fields": {
-                  "b0": {
-                    "type": "hex"
-                  },
-                  "b1": {
-                    "type": "hex"
-                  },
-                  "b2": {
-                    "type": "hex"
-                  },
-                  "b3": {
-                    "type": "hex"
-                  },
-                  "b4": {
-                    "type": "hex"
-                  },
-                  "b5": {
-                    "type": "hex"
-                  },
-                  "b6": {
-                    "type": "hex"
-                  },
-                  "b7": {
-                    "type": "hex"
-                  }
-                },
-                "required": [
-                  "b0",
-                  "b1",
-                  "b2",
-                  "b3",
-                  "b4",
-                  "b5",
-                  "b6",
-                  "b7"
-                ]
-              },
-              "isr": {
-                "type": "object",
-                "fields": {
-                  "b0": {
-                    "type": "hex"
-                  },
-                  "b1": {
-                    "type": "hex"
-                  },
-                  "b2": {
-                    "type": "hex"
-                  },
-                  "b3": {
-                    "type": "hex"
-                  },
-                  "b4": {
-                    "type": "hex"
-                  },
-                  "b5": {
-                    "type": "hex"
-                  },
-                  "b6": {
-                    "type": "hex"
-                  },
-                  "b7": {
-                    "type": "hex"
-                  }
-                },
-                "required": [
-                  "b0",
-                  "b1",
-                  "b2",
-                  "b3",
-                  "b4",
-                  "b5",
-                  "b6",
-                  "b7"
-                ]
-              }
-            },
-            "required": [
-              "irr",
-              "isr",
-              "rte",
-              "svr",
-              "tpr"
-            ]
-          },
-          "msi": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
-          "dma": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "completed": {
-                "type": "boolean"
-              },
-              "gpa": {
-                "type": "hex"
-              },
-              "guest_hva": {
-                "type": "null",
-                "nullable": true
-              },
-              "dir": {
-                "type": "string"
-              },
-              "len": {
-                "type": "integer64"
-              },
-              "result": {
-                "type": "integer64"
-              },
-              "checksum": {
-                "type": "integer64"
-              },
-              "duration_ns": {
-                "type": "integer64"
-              }
-            },
-            "required": [
-              "checksum",
-              "completed",
-              "dir",
-              "duration_ns",
-              "gpa",
-              "guest_hva",
-              "len",
-              "present",
-              "result"
-            ]
-          },
-          "ioctl": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "completed": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "completed",
-              "present"
-            ]
-          },
-          "disposition": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "result": {
-                "type": "integer64"
-              },
-              "meaning": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "meaning",
-              "present",
-              "result"
-            ]
-          },
-          "mmio": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "present"
-            ]
-          },
-          "command": {
-            "type": "object",
-            "fields": {
-              "present": {
-                "type": "boolean"
-              },
-              "completed": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "completed",
-              "present"
-            ]
-          }
-        },
-        "required": [
-          "apic",
-          "command",
-          "controller",
-          "disposition",
-          "dma",
-          "ioapic",
-          "ioctl",
-          "kvm",
-          "mmio",
-          "msi",
-          "vcpu"
-        ]
-      },
-      "producer_sequence": {
-        "type": "integer64"
-      }
-    },
-    "required": [
-      "event_info",
-      "producer_sequence",
-      "state"
-    ]
-  },
+
   "tracefs:kvm_apic": {
     "type": "object",
     "fields": {

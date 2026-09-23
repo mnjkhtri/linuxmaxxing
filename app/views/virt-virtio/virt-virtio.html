@@ -5,8 +5,8 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
         <title>Virtio I/O</title>
-        <link rel="stylesheet" href="virt-virtio.css" />
-    <link rel="stylesheet" href="../../theme.css">
+        <link rel="stylesheet" href="virt-virtio.css?v=ui-76" />
+        <link rel="stylesheet" href="../../theme.css?v=ui-76" />
 </head>
     <body>
         <main class="virt-virtio">
@@ -22,84 +22,65 @@
                 <nav id="roadmap" class="roadmap panel experiment-selector" aria-label="Virtio phases"></nav>
 
                 <section class="workbench">
-                    <section class="machine panel">
-                        <header class="panel-head">
-                            <div>
-                                <h2>Virtio component path</h2>
-                                <span id="machine-caption">Selected capture boundary drives every active state.</span>
-                            </div>
-                            <code id="selected-time">t = —</code>
-                        </header>
-
+                    <section class="topology">
                         <div class="topology-stage">
                             <section class="execution-region region">
                                 <header class="region-title">
                                     <div><b>LIFELINES</b><span id="timeline-scope">Phase A</span></div>
-                                    <code>TIME ↓</code>
                                 </header>
-                                <div class="lane-head">
-                                    <article class="component-actor" data-component-actor="vmm"><small>USERSPACE</small><b>VMM</b><em>do_mmio</em></article>
-                                    <article class="component-actor" data-component-actor="kvm"><small>HOST KERNEL</small><b>KVM</b><em>KVM_RUN</em></article>
+                                <div class="component-head">
+                                    <article class="component-actor" data-component-actor="vmm"><small>HOST</small><b>VMM</b><em>do_mmio</em></article>
+                                    <article class="component-actor" data-component-actor="kvm"><small>HOST</small><b>KVM</b><em>KVM_RUN</em></article>
                                     <article class="component-actor" data-component-actor="guest"><small>GUEST</small><b>vCPU 0</b><em>virtio driver</em></article>
-                                    <article class="component-actor" data-component-actor="irqchip"><small>KVM IRQCHIP</small><b>PIC</b><em>GSI 5</em></article>
-                                    <article class="component-actor" data-component-actor="backend"><small>USERSPACE</small><b>BACKEND</b><em>process_queue</em></article>
-                                    <article class="component-actor" data-component-actor="memory"><small>GUEST MEMORY</small><b>VIRTQUEUE</b><em>desc · avail · used</em></article>
+                                    <article class="component-actor" data-component-actor="irqchip"><small>HOST</small><b>KVM IRQCHIP</b><em>PIC · GSI 5</em></article>
+                                    <article class="component-actor" data-component-actor="backend"><small>HOST</small><b>VIRTQUEUE</b><em>process_queue</em></article>
+                                    <article class="component-actor" data-component-actor="memory"><small>GUEST</small><b>MEMORY</b><em>queue state</em></article>
                                 </div>
                                 <div id="timeline" class="timeline"></div>
-                                <footer class="region-foot"><b>SELECTED BOUNDARY</b><span>Captured state changes are highlighted.</span></footer>
+                                <footer class="region-foot"><b id="flow-kind">BOUNDARY</b><span id="machine-caption">Selected capture boundary drives the active state.</span></footer>
                             </section>
 
-                            <div class="support-stack">
-                                <section class="queue-region region">
-                                    <header class="region-title">
-                                        <div><b>SPLIT VIRTQUEUE</b><span>publication · consumption · completion</span></div>
-                                        <code id="queue-summary">waiting for capture metadata</code>
-                                    </header>
-                                    <div class="queue-state">
-                                        <div class="queue-ledger" aria-label="Selected split virtqueue state">
-                                            <article data-queue-counter="avail"><small>DRIVER PUBLISHED</small><b>avail.idx</b><code id="queue-avail">—</code></article>
-                                            <article data-queue-counter="consumed"><small>BACKEND CONSUMED</small><b>last_avail_idx</b><code id="queue-consumed">—</code></article>
-                                            <article data-queue-counter="used"><small>DEVICE COMPLETED</small><b>used.idx</b><code id="queue-used">—</code></article>
-                                            <article data-queue-counter="pending"><small>READY TO CONSUME</small><b>avail − consumed</b><code id="queue-pending">—</code></article>
-                                        </div>
-                                        <section class="guest-memory">
-                                            <header>
-                                                <div><b>GUEST RAM · KVM MEMORY SLOT</b><span id="guest-memory-summary">waiting for capture metadata</span></div>
-                                                <small id="queue-sample-state">not sampled</small>
-                                            </header>
-                                            <div id="memory-map" class="memory-map"></div>
-                                        </section>
+                            <section class="queue-region region">
+                                <header class="region-title">
+                                    <div><b>SPLIT VIRTQUEUE</b><span>publication · consumption · completion</span></div>
+                                    <code id="queue-summary">waiting for capture metadata</code>
+                                </header>
+                                <div class="queue-state">
+                                    <div class="queue-ledger" aria-label="Selected split virtqueue state">
+                                        <article class="queue-summary"><code id="queue-state-line"><span>AVAIL —</span><span>CONSUMED —</span><span>USED —</span><span>PENDING —</span></code></article>
                                     </div>
-                                </section>
-                            </div>
+                                    <section class="guest-memory">
+                                        <header>
+                                            <div><b>GUEST RAM · KVM MEMORY SLOT</b><span id="guest-memory-summary">waiting for capture metadata</span></div>
+                                            <small id="queue-sample-state">not sampled</small>
+                                        </header>
+                                        <div id="memory-map" class="memory-map"></div>
+                                    </section>
+                                </div>
+                                <footer class="region-foot"><b>QUEUE</b><span>sampled descriptor, avail, used, and buffer state</span></footer>
+                            </section>
                         </div>
                     </section>
-                </section>
 
-                <aside class="inspector panel">
-                    <header class="panel-head">
-                        <div>
-                            <h2>Observation notebook</h2>
-                            <span>one record · one sampled state</span>
-                        </div>
-                        <code id="source-badge">—</code>
-                    </header>
+                <aside class="inspector inspector-pane panel">
                     <div class="inspector-body">
-                        <div class="selected-kind"><i class="trace-dot"></i><span id="event-kind">—</span></div>
-                        <h2 id="event-title">Select an observation</h2>
-                        <section>
-                            <h3>SELECTED BOUNDARY</h3>
-                            <dl id="observation-fields"></dl>
+                        <section class="origin-card inspector-section">
+                            <h3>Origin</h3>
+                            <div class="origin-grid" id="event-origin"></div>
+                        </section>
+                        <section class="field-card">
+                            <h3>Fields</h3>
+                            <div class="origin-grid" id="fields"></div>
                         </section>
                     </div>
-                    <footer class="toolbar">
-                        <button id="prev" title="Previous observation">←</button><button id="play" title="Play or pause">▶</button
-                        ><button id="next" title="Next observation">→</button>
-                        <input id="scrub" type="range" min="0" value="0" aria-label="Observation scrubber" /><span id="counter">0 / 0</span>
+                    <footer class="inspector-footer playback-bar">
+                        <button id="prev" title="Previous event">Prev</button><button id="play" title="Play or pause">Play</button><button id="next" title="Next event">Next</button>
+                        <input id="scrub" class="playback-scrub" type="range" min="0" value="0" aria-label="Phase observation scrubber" /><span id="counter" class="playback-counter">— / —</span>
                     </footer>
                 </aside>
+                </section>
             </section>
         </main>
-        <script type="module" src="virt-virtio.js"></script>
+        <script type="module" src="virt-virtio.js?v=ui-76"></script>
     </body>
 </html>

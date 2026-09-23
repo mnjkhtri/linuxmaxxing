@@ -418,8 +418,7 @@ import {
       memslot = record.memslot || {},
       ioctl = record.ioctl || {},
       madvise = record.madvise || {},
-      mmap = record.mmap || {},
-      disposition = record.disposition || {};
+      mmap = record.mmap || {};
     if (event.name === "kvm_entry") return {
       from: "kvmcore",
       to: "guest",
@@ -437,11 +436,6 @@ import {
       from: "kvmcore",
       to: "vmm",
       label: (info.reason || "userspace exit").replace(/^KVM_EXIT_/, "")
-    };
-    if (event.name === "vmx_handle_exit_return") return {
-      from: "kvmcore",
-      to: "kvmcore",
-      label: disposition.meaning || "exit disposition"
     };
     if (event.name === "sys_enter_ioctl") return {
       from: "vmm",
@@ -574,7 +568,7 @@ import {
     if (event.source === "tracefs") return event.name === "tdp_spte_batch" ? "TRACEPOINT BATCH" : "TRACEPOINT";
     if (/^(control|memslot)_/.test(event.name)) return "UPROBE";
     if (/^sys_(enter|exit)_/.test(event.name)) return "SYSCALL TRACEPOINT";
-    if (event.name === "kvm_flush_remote_tlbs" || event.name === "vmx_handle_exit_return") return "KPROBE";
+    if (event.name === "kvm_flush_remote_tlbs") return "KPROBE";
     return "eBPF TRACEPOINT";
   }
 
@@ -682,7 +676,6 @@ import {
       $("walk").innerHTML = '<article class="walk-node"><small>GPA</small><b>' + hex(M.focusGfn * 4096) + "</b><code>not sampled</code></article>";
       return;
     }
-    nodes.push('<article class="walk-node"><small>GPA</small><b>' + esc(record.gpa) + '</b><code>GFN ' + hex(record.gfn) + "</code></article>");
     var names = {
       4: "PML4",
       3: "PDPT",
@@ -693,7 +686,7 @@ import {
       var kind = entryClass(entry),
         stateLabel = entry.mmio ? "MMIO" : entry.leaf ? (entry.level > 1 ? "2 MiB leaf" : "4 KiB leaf") : entry.present ? "table" : "empty";
       var permissions = (entry.r ? "R" : "−") + (entry.w ? "W" : "−") + (entry.x ? "X" : "−") + " · " + (entry.a ? "A" : "−") + (entry.d ? "D" : "−");
-      nodes.push('<article class="walk-node ' + kind + '"><small>' + names[entry.level] + " · IDX " + entry.index + "</small><b>" + stateLabel + "</b><em>" + permissions + "</em><code>" + esc(entry.spte) + "</code></article>");
+      nodes.push('<article class="walk-node ' + kind + '"><small>' + names[entry.level] + '</small><small>IDX ' + entry.index + "</small><b>" + stateLabel + "</b><em>" + permissions + "</em><code>" + esc(entry.spte) + "</code></article>");
     });
     var result = record.ept_mmio ? "MMIO" : record.ept_mapped ? "PFN " + record.leaf_pfn : "UNMAPPED",
       leaf = record.leaf_level ? "leaf L" + record.leaf_level : "no leaf";
@@ -720,7 +713,6 @@ import {
       return decoded ? decoded.label : info.reason || "VM exit";
     }
     if (event.name === "kvm_userspace_exit") return (info.reason || "userspace exit").replace(/^KVM_EXIT_/, "");
-    if (event.name === "vmx_handle_exit_return") return record.disposition.meaning;
     if (event.name === "sys_enter_ioctl" || event.name === "sys_exit_ioctl") return record.ioctl.request_name + (record.ioctl.completed ? " · ret " + record.ioctl.result : "");
     if (event.name === "kvm_page_fault") return "page fault · " + faultAccess(info) + " GFN " + hex(info.gfn);
     if (event.name === "kvm_mmu_spte_requested") return "request GFN " + hex(info.gfn);

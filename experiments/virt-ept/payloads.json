@@ -32,9 +32,6 @@
       "control_port": {
         "type": "integer64"
       },
-      "vmx_disposition_available": {
-        "type": "boolean"
-      },
       "split_snapshot_available": {
         "type": "boolean"
       },
@@ -73,8 +70,7 @@
       "mmio_gfn",
       "mmio_snapshot_available",
       "slot0_gfn_samples",
-      "split_snapshot_available",
-      "vmx_disposition_available"
+      "split_snapshot_available"
     ]
   },
   "ebpf:control_begin": {

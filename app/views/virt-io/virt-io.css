@@ -280,7 +280,7 @@ body[data-experiment="virt-io"] .view-controls #details-toggle {
 
 .interrupts {
   --region: var(--yellow);
-  grid-template-rows: auto auto auto
+  grid-template-rows: auto minmax(0, 1fr) auto
 }
 
 .dma {
@@ -343,6 +343,7 @@ body[data-experiment="virt-io"] .view-controls #details-toggle {
 .interrupts > .region-foot,
 .dma > .region-foot {
   min-width: 0;
+  padding-top: 6px;
   white-space: nowrap
 }
 
@@ -365,7 +366,7 @@ body[data-experiment="virt-io"] .view-controls #details-toggle {
   min-height: 0;
   margin: 6px 0;
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px;
   overflow: hidden
 }
@@ -374,7 +375,7 @@ body[data-experiment="virt-io"] .view-controls #details-toggle {
   min-height: 0;
   padding: 6px 8px;
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto minmax(0, 1fr);
   border: 1px solid var(--line);
   border-radius: 5px;
   background: rgba(9, 15, 21, .72)
@@ -411,7 +412,8 @@ body[data-experiment="virt-io"] .view-controls #details-toggle {
 .irq-life-steps {
   min-height: 0;
   display: grid;
-  grid-template-rows: repeat(7, 18px);
+  grid-template-rows: repeat(7, minmax(18px, 1fr));
+  row-gap: 3px;
   padding-left: 5px
 }
 
@@ -449,7 +451,7 @@ body[data-experiment="virt-io"] .view-controls #details-toggle {
 
 .irq-life-steps b {
   color: var(--muted);
-  font: 700 8.2px var(--mono);
+  font: 700 9px var(--mono);
   letter-spacing: .025em;
   text-transform: uppercase
 }
@@ -457,7 +459,7 @@ body[data-experiment="virt-io"] .view-controls #details-toggle {
 .irq-life-steps small {
   margin: 0;
   color: var(--muted);
-  font: 8.2px var(--mono)
+  font: 9px var(--mono)
 }
 
 .irq-life-steps>span.seen {
@@ -964,18 +966,6 @@ body[data-experiment="virt-io"] .view-controls #details-toggle {
 
 .component-arrow.run {
   color: var(--muted)
-}
-
-.component-point {
-  position: absolute;
-  top: 50%;
-  z-index: 4;
-  width: 6px;
-  height: 6px;
-  transform: translate(-50%, -50%);
-  border: 1px solid rgba(151, 166, 178, .72);
-  border-radius: 50%;
-  background: var(--panel-2)
 }
 
 .component-local {

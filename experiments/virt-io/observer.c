@@ -3,7 +3,6 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h>
 #include <linux/kvm.h>
 #include <bpf/libbpf.h>
@@ -34,7 +33,6 @@
 
 static unsigned int record_count;
 static unsigned int seq_counter;
-static bool vmx_disposition_available;
 
 static volatile sig_atomic_t exiting;
 
@@ -73,8 +71,6 @@ static const char *event_name(unsigned int event)
 		return "sys_enter_ioctl";
 	case IO_EVENT_SYS_EXIT_IOCTL:
 		return "sys_exit_ioctl";
-	case IO_EVENT_VMX_HANDLE_EXIT_RETURN:
-		return "vmx_handle_exit_return";
 	case IO_EVENT_DEVICE_MMIO_WRITE:
 		return "device_mmio_write";
 	case IO_EVENT_DEVICE_EXECUTE_COMMAND:
@@ -104,7 +100,6 @@ static const char *event_hook(unsigned int event)
 	case IO_EVENT_KVM_MSI_SET_IRQ: return "raw_tp/kvm_msi_set_irq";
 	case IO_EVENT_SYS_ENTER_IOCTL: return "tracepoint/syscalls/sys_enter_ioctl";
 	case IO_EVENT_SYS_EXIT_IOCTL: return "tracepoint/syscalls/sys_exit_ioctl";
-	case IO_EVENT_VMX_HANDLE_EXIT_RETURN: return "kretprobe/vmx_handle_exit";
 	case IO_EVENT_DEVICE_MMIO_WRITE: return "uprobe/build/vmm:device_mmio_write";
 	case IO_EVENT_DEVICE_EXECUTE_COMMAND: return "uprobe/build/vmm:device_execute_command";
 	case IO_EVENT_DEVICE_EXECUTE_COMMAND_RETURN: return "uretprobe/build/vmm:device_execute_command";
@@ -184,36 +179,6 @@ static const char *device_register_name(unsigned int offset)
 	}
 }
 
-static const char *exit_disposition_name(int result)
-{
-	if (result > 0)
-		return "resume guest";
-	if (result == 0)
-		return "return userspace";
-	return "error";
-}
-
-static bool kallsyms_has_symbol(const char *wanted)
-{
-	FILE *stream = fopen("/proc/kallsyms", "r");
-	char line[512];
-	char symbol[256];
-	bool found = false;
-
-	if (!stream)
-		return false;
-	while (fgets(line, sizeof(line), stream))
-	{
-		if (sscanf(line, "%*s %*c %255s", symbol) == 1 && strcmp(symbol, wanted) == 0)
-		{
-			found = true;
-			break;
-		}
-	}
-	fclose(stream);
-	return found;
-}
-
 /* The public schema carries the DMA direction as a readable word; the ABI carries the command integer. */
 static const char *dma_direction_name(unsigned int dir)
 {
@@ -250,7 +215,6 @@ static void write_meta(struct json_writer *jw)
 	json_u32(jw, "events", IO_EVENT_COUNT);
 	json_bool(jw, "ioapic_available", READ_KVM_IOAPIC_RTE_AVAILABLE != 0);
 	json_bool(jw, "lapic_available", READ_KVM_LAPIC_REGS_AVAILABLE != 0);
-	json_bool(jw, "vmx_disposition_available", vmx_disposition_available);
 	json_object_end(jw);
 	json_newline(jw);
 }
@@ -342,14 +306,6 @@ static void write_state(struct json_writer *jw, const struct vio_state *state)
 		json_u64(jw, "duration_ns", state->ioctl.duration_ns);
 	}
 	json_object_end(jw);
-	json_object_begin_field(jw, "disposition");
-	json_bool(jw, "present", state->disposition.present != 0);
-	if (state->disposition.present)
-	{
-		json_i64(jw, "result", state->disposition.result);
-		json_string(jw, "meaning", exit_disposition_name(state->disposition.result));
-	}
-	json_object_end(jw);
 	json_object_begin_field(jw, "mmio");
 	json_bool(jw, "present", state->mmio.present != 0);
 	if (state->mmio.present)
@@ -432,12 +388,6 @@ int main(void)
 	{
 		fprintf(stderr, "io: failed to open IO BPF skeleton\n");
 		return 1;
-	}
-	vmx_disposition_available = kallsyms_has_symbol("vmx_handle_exit");
-	if (!vmx_disposition_available)
-	{
-		bpf_program__set_autoload(skel->progs.vmx_handle_exit_return, false);
-		fprintf(stderr, "io: vmx_handle_exit unavailable; disposition probe disabled\n");
 	}
 	if (io_bpf__load(skel) != 0)
 	{

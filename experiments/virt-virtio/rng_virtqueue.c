@@ -10,7 +10,7 @@
 #include <sys/random.h>
 #include <unistd.h>
 
-#include "backend.h"
+#include "rng_virtqueue.h"
 
 /* process_queue() consumes every newly published descriptor and publishes each completion through the used ring. */
 __attribute__((noinline)) int process_queue(struct virtio_mmio_device *dev, uint8_t *guest_mem)

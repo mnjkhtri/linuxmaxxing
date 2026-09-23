@@ -680,7 +680,7 @@ body[data-experiment="virt-ept"] .view-controls #details-toggle {
   height: calc(100% - 18px);
   margin-top: 6px;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   align-items: stretch;
   gap: 10px
 }
@@ -732,6 +732,10 @@ body[data-experiment="virt-ept"] .view-controls #details-toggle {
 .walk-node small {
   color: var(--faint);
   font: 700 8px var(--mono)
+}
+
+.walk-node small + small {
+  margin-top: 2px
 }
 
 .walk-node b {

@@ -3,7 +3,6 @@
  * KVM virtual-I/O observer.
  *
  * Existing KVM tracepoints capture VM transitions, handler boundaries, and interrupt routing.
- * Syscall tracepoints pair KVM ioctls, a VMX kretprobe captures KVM's exit disposition when available, and uprobes observe calls into the toy userspace device model.
  * Each record carries event metadata plus a best-effort snapshot of the controller state.
  * The controller snapshot covers the IOAPIC redirection entry for the device GSI and the LAPIC IRR/ISR bit for the vector that the boundary actually concerns.
  *
@@ -106,14 +105,14 @@ struct vio_dma_call
 	unsigned int len;
 };
 
-#define VIO_HASH_MAP(name, value_type) \
-struct \
-{ \
-	__uint(type, BPF_MAP_TYPE_HASH); \
-	__uint(max_entries, 64); \
-	__type(key, __u64); \
-	__type(value, value_type); \
-} name SEC(".maps")
+#define VIO_HASH_MAP(name, value_type)   \
+	struct                               \
+	{                                    \
+		__uint(type, BPF_MAP_TYPE_HASH); \
+		__uint(max_entries, 64);         \
+		__type(key, __u64);              \
+		__type(value, value_type);       \
+	} name SEC(".maps")
 
 VIO_HASH_MAP(ioctl_calls, struct vio_ioctl_call);
 VIO_HASH_MAP(ioctl_counters, __u64);
@@ -459,26 +458,6 @@ int sys_exit_ioctl_snapshot(struct trace_event_raw_sys_exit *ctx)
 	event->state.ioctl.duration_ns = event->time_ns - call->started_ns;
 	lab_output(&events, event, sizeof(*event), 0);
 	bpf_map_delete_elem(&ioctl_calls, &pid_tgid);
-	return 0;
-}
-
-/* The VMX handler return states whether KVM resumes the guest or returns KVM_RUN to userspace. */
-SEC("kretprobe/vmx_handle_exit")
-int BPF_KRETPROBE(vmx_handle_exit_return, int result)
-{
-	__u32 zero = 0;
-	struct vio_event *event = bpf_map_lookup_elem(&scratch, &zero);
-	struct kvm_vcpu *vcpu = vcpu_from_map();
-
-	if (!event || !vcpu)
-		return 0;
-	snapshot_base(event, vcpu);
-	if (!is_vmm_comm(event->context.comm))
-		return 0;
-	event->event_info.event = IO_EVENT_VMX_HANDLE_EXIT_RETURN;
-	event->state.disposition.present = 1;
-	event->state.disposition.result = result;
-	lab_output(&events, event, sizeof(*event), 0);
 	return 0;
 }
 

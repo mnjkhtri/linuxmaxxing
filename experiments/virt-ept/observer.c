@@ -32,7 +32,6 @@
 
 static unsigned int record_count;
 static unsigned int seq_counter;
-static bool vmx_disposition_available;
 static bool split_snapshot_available;
 static bool mmio_snapshot_available;
 
@@ -99,8 +98,6 @@ static const char *event_name(unsigned int event)
 		return "sys_enter_ioctl";
 	case EPT_EVENT_SYS_EXIT_IOCTL:
 		return "sys_exit_ioctl";
-	case EPT_EVENT_VMX_HANDLE_EXIT_RETURN:
-		return "vmx_handle_exit_return";
 	case EPT_EVENT_KVM_PAGE_FAULT:
 		return "kvm_page_fault";
 	case EPT_EVENT_KVM_MMU_SPLIT_HUGE_PAGE:
@@ -137,7 +134,6 @@ static const char *event_hook(unsigned int event)
 	case EPT_EVENT_MEMSLOT_END: return "uretprobe/build/vmm:set_memory_region";
 	case EPT_EVENT_SYS_ENTER_IOCTL: return "tracepoint/syscalls/sys_enter_ioctl";
 	case EPT_EVENT_SYS_EXIT_IOCTL: return "tracepoint/syscalls/sys_exit_ioctl";
-	case EPT_EVENT_VMX_HANDLE_EXIT_RETURN: return "kretprobe/vmx_handle_exit";
 	case EPT_EVENT_KVM_PAGE_FAULT: return "tp/kvm/kvm_page_fault";
 	case EPT_EVENT_KVM_MMU_SPLIT_HUGE_PAGE: return "tp/kvmmmu/kvm_mmu_split_huge_page";
 	case EPT_EVENT_MARK_MMIO_SPTE: return "tp/kvmmmu/mark_mmio_spte";
@@ -178,13 +174,6 @@ static const char *madvise_name(int advice)
 	}
 }
 
-static const char *exit_disposition_name(int result)
-{
-	if (result > 0) return "resume guest";
-	if (result == 0) return "return userspace";
-	return "error";
-}
-
 static bool tracepoint_exists(const char *group, const char *event)
 {
 	char path[512];
@@ -221,7 +210,6 @@ static void write_meta(struct json_writer *jw)
 	json_u32(jw, "data_gfn", 7);
 	json_u32(jw, "mmio_gfn", 10);
 	json_u32(jw, "control_port", 0xe9);
-	json_bool(jw, "vmx_disposition_available", vmx_disposition_available);
 	json_bool(jw, "split_snapshot_available", split_snapshot_available);
 	json_bool(jw, "mmio_snapshot_available", mmio_snapshot_available);
 	json_array_begin_field(jw, "control_commands");
@@ -368,11 +356,6 @@ static void write_disposition(struct json_writer *jw, const struct ept_dispositi
 {
 	json_object_begin_field(jw, "disposition");
 	json_bool(jw, "present", disposition->present != 0);
-	if (disposition->present)
-	{
-		json_i64(jw, "result", disposition->result);
-		json_string(jw, "meaning", exit_disposition_name(disposition->result));
-	}
 	json_object_end(jw);
 }
 
@@ -494,11 +477,8 @@ int main(void)
 		goto out;
 	}
 	skel->rodata->page_offset_base_address = page_offset_base;
-	vmx_disposition_available = symbol_address("/proc/kallsyms", "vmx_handle_exit") != 0;
 	split_snapshot_available = tracepoint_exists("kvmmmu", "kvm_mmu_split_huge_page");
 	mmio_snapshot_available = tracepoint_exists("kvmmmu", "mark_mmio_spte");
-	if (!vmx_disposition_available)
-		bpf_program__set_autoload(skel->progs.observe_vmx_handle_exit_return, false);
 	if (!split_snapshot_available)
 		bpf_program__set_autoload(skel->progs.kvm_mmu_split_huge_page_snapshot, false);
 	if (!mmio_snapshot_available)

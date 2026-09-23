@@ -14,10 +14,9 @@ enum virtio_event_type
 	VIRTIO_EVENT_IRQFD_SIGNAL = 4,
 	VIRTIO_EVENT_SYS_ENTER_IOCTL = 5,
 	VIRTIO_EVENT_SYS_EXIT_IOCTL = 6,
-	VIRTIO_EVENT_VMX_HANDLE_EXIT_RETURN = 7,
-	VIRTIO_EVENT_MMIO_RETURN = 8,
-	VIRTIO_EVENT_IOEVENTFD_KICK_RETURN = 9,
-	VIRTIO_EVENT_IRQFD_SIGNAL_RETURN = 10,
+	VIRTIO_EVENT_MMIO_RETURN = 7,
+	VIRTIO_EVENT_IOEVENTFD_KICK_RETURN = 8,
+	VIRTIO_EVENT_IRQFD_SIGNAL_RETURN = 9,
 };
 
 struct virtio_event_info
@@ -135,13 +134,6 @@ struct virtio_ioctl_state
 	unsigned long long duration_ns;
 };
 
-struct virtio_disposition_state
-{
-	unsigned char present;
-	unsigned char reserved[3];
-	int result;
-};
-
 struct virtio_state
 {
 	struct virtio_device_state device;
@@ -151,7 +143,6 @@ struct virtio_state
 	struct virtio_used_state used;
 	struct virtio_buffer_preview buffer_preview;
 	struct virtio_ioctl_state ioctl;
-	struct virtio_disposition_state disposition;
 };
 
 struct virtio_event
