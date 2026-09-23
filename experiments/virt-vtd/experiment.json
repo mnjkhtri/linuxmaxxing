@@ -2,6 +2,7 @@
   "name": "virt-vtd",
   "source": "experiments/virt-vtd",
   "environment": "host",
+  "scratch_parent": "build",
   "observer": "build/vtd",
   "workload": [],
   "required": [
@@ -9,14 +10,12 @@
     "vfio_dma_map_enter",
     "iommu_map",
     "vfio_dma_map_exit",
-    "irte_alloc",
     "irte_activate",
     "interrupt_remap_msi_message",
     "kvm_pi_irte_update",
     "iommu_domain_attach_exit",
-    "iommu_iotlb_invalidate",
     "iommu_qi_complete",
-    "guest_ixgbe_run_loopback_exit",
+    "guest_nic_run_loopback_exit",
     "guest_dma_map_exit",
     "guest_irq_handler_entry"
   ],
@@ -24,7 +23,7 @@
     "required": [],
     "optional": []
   },
-  "question": "Observe isolated ixgbe PCI assignment, VT-d DMA mappings, guest offline loopback, interrupt remapping, and complete ownership restoration.",
+  "question": "Observe isolated Intel NIC assignment, VT-d DMA mappings, guest offline loopback, interrupt remapping, and complete ownership restoration.",
   "timeouts": {
     "ready_s": 20,
     "workload_s": 180,

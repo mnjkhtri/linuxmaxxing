@@ -1134,7 +1134,45 @@ body[data-experiment="virt-virtio"] .view-controls #details-toggle {
 }
 
 body[data-experiment="virt-vtd"] .laboratory {
-  grid-template-columns: 150px minmax(0, 1fr) 300px;
+  grid-template-columns: 138px minmax(0, 1fr) 298px;
+}
+
+body[data-experiment="virt-vtd"] .laboratory > .experiment-selector {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+body[data-experiment="virt-vtd"] .laboratory > .machine {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+body[data-experiment="virt-vtd"] .laboratory > .inspector {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+@media (min-width: 1440px) {
+  body[data-experiment="virt-vtd"] .laboratory {
+    grid-template-columns: 138px minmax(0, 1fr) 236px;
+  }
+}
+
+html[data-capture-state="unavailable"] body[data-experiment="virt-vtd"] .machine-body {
+  display: grid;
+  place-items: center;
+}
+
+html[data-capture-state="unavailable"] body[data-experiment="virt-vtd"] .machine-body > * {
+  display: none;
+}
+
+html[data-capture-state="unavailable"] body[data-experiment="virt-vtd"] .machine-body::after {
+  content: "No capture available\A Collect and fetch this experiment first.";
+  white-space: pre;
+  color: var(--muted);
+  font: 10px/1.7 var(--mono);
+  text-align: center;
 }
 
 @media (min-width:1440px) {

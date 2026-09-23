@@ -16,6 +16,7 @@ from framework.core.runtime import (
     atomic_bytes,
     atomic_json,
     command,
+    load_experiment_run,
     lock,
     manifest,
     signals,
@@ -34,8 +35,12 @@ def parser():
     mode.add_argument("--guest", action="store_true", help=argparse.SUPPRESS)
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     sub = p.add_subparsers(dest="action", required=True)
-    for action in ("setup", "doctor", "console", "list", "prepare-vtd"):
+    for action in ("setup", "doctor", "list"):
         sub.add_parser(action)
+    console = sub.add_parser("console")
+    console.add_argument("experiment", choices=NAMES)
+    prepare = sub.add_parser("prepare")
+    prepare.add_argument("experiment", choices=NAMES)
     for action in ("build", "run", "fetch", "validate"):
         cmd = sub.add_parser(action)
         cmd.add_argument("experiment", choices=(*NAMES, "all"))
@@ -54,15 +59,16 @@ def ownership(name):
 
 
 def local_worker(args, name):
-    from framework.core.runtime import Session
-
     result = (
         Path(os.environ["LAB_SHARED_SCRATCH"]) / "guest-result.json"
         if args.guest
         else None
     )
     try:
-        Session(name, "guest" if args.guest else "host").execute()
+        run_module = load_experiment_run(name)
+        if not hasattr(run_module, "main"):
+            raise LabError("experiment has no local entry point: " + name)
+        run_module.main("guest" if args.guest else "host")
         if result is not None:
             atomic_json(result, {"success": True, "error": ""})
     except BaseException as exc:
@@ -97,18 +103,20 @@ def main(argv=None):
             print("%s: validated %d records" % (name, len(events)))
         return
     if args.host:
-        from framework.lab.environment import build, doctor, prepare_vtd, setup
+        from framework.lab.environment import build, doctor, prepare, setup
         from framework.core import runtime as guest
 
         if args.action == "setup":
             setup()
         elif args.action == "doctor":
             print(doctor())
-        elif args.action == "prepare-vtd":
-            prepare_vtd()
+        elif args.action == "prepare":
+            prepare(args.experiment)
         elif args.action == "console":
-            build("scheduler")
-            guest.run("scheduler", console=True)
+            if manifest(args.experiment)["environment"] != "guest":
+                raise LabError("console mode is only available for guest experiments")
+            build(args.experiment)
+            guest.run(args.experiment, console=True)
         else:
             for name in names:
                 build(name)

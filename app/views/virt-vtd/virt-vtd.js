@@ -1,25 +1,30 @@
 import {
   hookLabel,
   mountView,
-  observation
+  observation,
+  playback
 } from '../../common.js';
 (function() {
   "use strict";
 
   var assignmentRecords = [];
+  var lifecycleRecords = [];
   var ebpfRecords = [];
   var guestRecords = [];
-  var hostMeta = null;
-  var guestMeta = null;
-  var setupFacts = {};
+  var clockAnchors = {};
   var mapTransactions = [];
   var selectedTransaction = 0;
   var workloadTransaction = -1;
   var selectedChunk = 0;
   var phaseItems = [];
+  var visibleLanes = [];
+  var lanePositions = {};
+  var eventsByPhase = {};
   var selectedIndex = 0;
-  var selectedPhase = "A";
-  var skippedLines = 0;
+  var transport;
+  var selectedPhase = "S";
+  var eventScope = "workload";
+  var workloadEventsByPhase = {};
   var LANE = {
     GUEST: 0,
     NET: 1,
@@ -33,47 +38,47 @@ import {
   };
   var actors = [{
     id: "guest",
-    role: "GUEST · DRIVER",
-    name: "IXGBE",
+    role: "GUEST",
+    name: "DRIVER",
     scope: "guest"
   }, {
     id: "guest-net",
-    role: "GUEST · KERNEL",
-    name: "NET_RX · NAPI",
+    role: "GUEST",
+    name: "NET_RX",
     scope: "guest"
   }, {
     id: "guest-dma",
-    role: "GUEST · KERNEL",
+    role: "GUEST",
     name: "DMA API",
     scope: "guest"
   }, {
     id: "qemu",
-    role: "HOST · USERSPACE",
+    role: "HOST",
     name: "QEMU",
     scope: "outside"
   }, {
     id: "kvm",
-    role: "HOST · KERNEL",
-    name: "KVM · APICv",
+    role: "HOST",
+    name: "KVM",
     scope: "outside"
   }, {
     id: "vfio",
-    role: "HOST · KERNEL",
+    role: "HOST",
     name: "VFIO",
     scope: "outside"
   }, {
     id: "memory",
-    role: "HOST · MEMORY",
-    name: "HOST MM",
+    role: "HOST",
+    name: "MM",
     scope: "outside"
   }, {
     id: "iommu",
-    role: "DMA · TRANSLATION",
-    name: "IOMMU · VT-d",
+    role: "HOST",
+    name: "IOMMU",
     scope: "outside"
   }, {
     id: "nic",
-    role: "PCIe · REQUESTER",
+    role: "DEVICE",
     name: "PCIe NIC",
     scope: "outside"
   }];
@@ -101,6 +106,20 @@ import {
 
   function recordState(record) {
     return record && record.state ? record.state : {};
+  }
+
+  function deviceInfo(record) {
+    var source = record || assignmentRecords.find(function(candidate) {
+      return candidate.host_bdf;
+    }) || {};
+    var attach = ebpfRecords.find(function(candidate) {
+      return candidate.kind === "iommu_device_attach";
+    });
+
+    return {
+      bdf: source.host_bdf || (attach ? addressInfo(attach).device : null) || "—",
+      driver: source.host_driver || "—"
+    };
   }
 
   function addressInfo(record) {
@@ -188,9 +207,28 @@ import {
     return recordState(record).fault || {};
   }
 
-  // Publication order preserves causal grouping without aligning independent clocks.
+  // Captures contain host and guest monotonic clocks; compare their aligned wall-clock estimates.
   function compareRecords(left, right) {
-    return (left.orderRecord || left.record).seq - (right.orderRecord || right.record).seq;
+    var leftRecord = left.record || left;
+    var rightRecord = right.record || right;
+    var leftTime = left.alignedTime != null ? left.alignedTime : alignedTime(leftRecord);
+    var rightTime = right.alignedTime != null ? right.alignedTime : alignedTime(rightRecord);
+
+    return leftTime < rightTime ? -1 : (leftTime > rightTime ? 1 : leftRecord.seq - rightRecord.seq);
+  }
+
+  function alignedTime(record) {
+    var canonical = record && record.canonical;
+    var domain = canonical && canonical.source && canonical.source.domain;
+    var anchor = clockAnchors[domain];
+
+    if (!canonical || !anchor)
+      return BigInt(canonical && canonical.timestamp_ns || 0);
+    return BigInt(canonical.timestamp_ns) - anchor.monotonic + anchor.realtime;
+  }
+
+  function anchoredTime(record) {
+    return alignedTime(record);
   }
 
   function guestEvent(kind) {
@@ -232,14 +270,6 @@ import {
       2: "FROM_DEVICE",
       3: "NONE"
     } [value] || null;
-  }
-
-  function irqDisposition(value) {
-    return {
-      0: "IRQ_NONE",
-      1: "IRQ_HANDLED",
-      2: "IRQ_WAKE_THREAD"
-    } [value] || "ret " + value;
   }
 
   function hexLimit(start, size) {
@@ -288,7 +318,6 @@ import {
 
   function workloadMapIndex() {
     var dmaRecord = guestEvent("guest_dma_map_exit");
-    var runtimeRecord = runtimeMmioRecord();
     var dmaAddress;
     var cutoff;
     var lastBoundary;
@@ -296,7 +325,9 @@ import {
     if (!dmaRecord || !dmaInfo(dmaRecord).address)
       return -1;
     dmaAddress = dmaInfo(dmaRecord).address;
-    cutoff = runtimeRecord ? runtimeRecord.time_ns : Number.POSITIVE_INFINITY;
+    // Link the guest-returned IOVA to a successful host VFIO map that covers it.
+    // Address coverage is not proof that the device performed a DMA transfer.
+    cutoff = Number.POSITIVE_INFINITY;
     lastBoundary = ebpfRecords.filter(function(record) {
       var address = addressInfo(record);
       return (record.kind === "vfio_dma_map_exit" || record.kind === "vfio_dma_unmap_exit") &&
@@ -366,31 +397,198 @@ import {
     selectedChunk = workloadChunkIndex(mapTransactions[selectedTransaction]);
   }
 
-  function preludeItems() {
-    var order = ["host_owns_device", "vfio_bound", "qemu_attached", "guest_visible", "host_reclaims_device"];
-    return order.map(function(kind) {
-      var record = assignmentRecords.find(function(candidate) {
-        return candidate.kind === kind;
+  function eventLane(record) {
+    var canonical = record.canonical || {};
+    var domain = canonical.source && canonical.source.domain;
+    var kind = record.kind || "";
+
+    if (domain === "guest")
+      return LANE.GUEST;
+    if (/iommu|irte|interrupt_remap|qi_/.test(kind))
+      return LANE.IOMMU;
+    if (/vfio|host_owns_device|host_reclaims_device/.test(kind))
+      return LANE.VFIO;
+    if (/kvm|memory_region/.test(kind))
+      return LANE.KVM;
+    if (/qemu|capture_|collector_|workload_/.test(kind))
+      return LANE.QEMU;
+    if (canonical.source && canonical.source.mechanism === "sysfs")
+      return LANE.VFIO;
+    return LANE.QEMU;
+  }
+
+  function eventDetail(record) {
+    var info = eventInfo(record);
+    var address = addressInfo(record);
+    var details = [];
+
+    if (info.request_id && info.request_id !== "0") details.push("req " + info.request_id);
+    if (address.iova && address.iova !== "0x0") details.push("IOVA " + address.iova);
+    if (address.size && address.size !== "0x0") details.push(formatBytes(address.size));
+    if (info.result != null && info.result !== "0") details.push("ret " + info.result);
+    if (record.context && record.context.comm) details.push(record.context.comm);
+    return details.join(" · ");
+  }
+
+  function makeCapturedItem(record, phase) {
+    var lane = eventLane(record);
+    var canonical = record.canonical || {};
+    var domain = canonical.source && canonical.source.domain;
+    var item = {
+      label: record.kind,
+      detail: eventDetail(record),
+      group: phase,
+      record: record,
+      from: lane,
+      to: lane,
+      scope: domain === "guest" ? "guest" : "outside",
+      alignedTime: alignedTime(record),
+      captured: true
+    };
+
+    return item;
+  }
+
+  function workloadBounds() {
+    // These are observer-gate timestamps; guest interface-up happens after the begin marker.
+    var begin = guestEvent("workload_begin");
+    var end = guestEvent("workload_end");
+
+    if (!begin)
+      begin = lifecycleRecords.find(function(record) {
+        return record.kind === "guest_workload_begin" || (record.kind === "workload_started" && record.canonical.source.domain === "guest");
       });
-      return record ? {
-        label: titleFor(record),
-        group: "ASSIGNMENT",
-        record: record
-      } : null;
-    }).filter(Boolean);
+    if (!end)
+      end = lifecycleRecords.find(function(record) {
+        return record.kind === "guest_workload_end" || (record.kind === "workload_finished" && record.canonical.source.domain === "guest");
+      });
+    return { begin: begin && alignedTime(begin), end: end && alignedTime(end) };
+  }
+
+  function buildCapturedItems(events) {
+    var bounds = workloadBounds();
+    var phaseByCode = { S: [], W: [], C: [] };
+    var allItems;
+
+    allItems = events.filter(function(event) {
+      return !event.kind.startsWith("collector_metadata") && !event.kind.startsWith("collector_summary");
+    }).map(function(event) {
+      return observation({ origins: new Map([[event.clock_domain, 0n]]) }, event);
+    }).sort(compareRecords);
+    allItems.forEach(function(record) {
+      var time = alignedTime(record);
+      var phase = bounds.begin != null && time >= bounds.begin && (bounds.end == null || time <= bounds.end) ? "W" :
+        (bounds.begin != null && time > bounds.end ? "C" : "S");
+      var item = makeCapturedItem(record, phase);
+
+      phaseByCode[phase].push(item);
+    });
+    eventsByPhase = phaseByCode;
+  }
+
+  function phaseItemsFor(phase) {
+    return eventsByPhase[phase] || [];
+  }
+
+  function visibleItemsFor(phase) {
+    return eventScope === "workload" ? (workloadEventsByPhase[phase] || []) : phaseItemsFor(phase);
+  }
+
+  function recordSequence(record) {
+    return record && record.canonical ? String(record.canonical.sequence) : null;
+  }
+
+  function addRecordSequence(set, record) {
+    var sequence = recordSequence(record);
+    if (sequence != null)
+      set.add(sequence);
+  }
+
+  function buildWorkloadScope() {
+    var setupSequences = new Set();
+    var cleanupSequences = new Set();
+    var transaction = mapTransactions[workloadTransaction];
+    var workloadDma = guestEvent("guest_dma_map_exit");
+    var dmaAddress = workloadDma && dmaInfo(workloadDma).address;
+    var region = transaction && matchingKvmRegion(transaction);
+    var regionExit = region && matchingExit(region, "kvm_memory_region_exit");
+    var route = postedInterruptRoute();
+    var bounds = workloadBounds();
+    var lifecycleSetup = ["host_owns_device", "vfio_bound", "qemu_started", "qemu_attached", "guest_visible", "iommu_domain_attach_enter", "iommu_domain_attach_exit", "iommu_device_attach", "workload_started", "guest_workload_begin"];
+    var lifecycleCleanup = ["guest_workload_end", "workload_finished", "cleanup_begin", "qemu_stopped", "host_reclaims_device"];
+
+    capturedRecords().forEach(function(record) {
+      if (lifecycleSetup.indexOf(record.kind) >= 0)
+        addRecordSequence(setupSequences, record);
+      if (lifecycleCleanup.indexOf(record.kind) >= 0)
+        addRecordSequence(cleanupSequences, record);
+    });
+
+    // Setup is the linked ownership + KVM slot + VFIO map path, not every QEMU startup event.
+    if (transaction) {
+      [transaction.enter, transaction.exit].concat(transaction.chunks, transaction.pins, transaction.type1).forEach(function(record) {
+        addRecordSequence(setupSequences, record);
+      });
+    }
+    [region, regionExit].forEach(function(record) {
+      addRecordSequence(setupSequences, record);
+    });
+    if (route) {
+      [route.enter, route.exit, route.allocation, route.activation, route.message, route.update].forEach(function(record) {
+        addRecordSequence(setupSequences, record);
+      });
+    }
+
+    if (dmaAddress && bounds.end != null) {
+      ebpfRecords.filter(function(record) {
+        var address = addressInfo(record);
+        return record.kind === "vfio_dma_unmap_enter" && anchoredTime(record) >= bounds.end &&
+          rangeContains(address.iova, address.size, dmaAddress, "0x1");
+      }).forEach(function(enter) {
+        requestRecords(eventInfo(enter).request_id).forEach(function(record) {
+          addRecordSequence(cleanupSequences, record);
+        });
+      });
+    }
+
+    workloadEventsByPhase = { S: [], W: [], C: [] };
+    eventsByPhase.S.forEach(function(item) {
+      if (setupSequences.has(recordSequence(item.record)))
+        workloadEventsByPhase.S.push(item);
+    });
+    eventsByPhase.W.forEach(function(item) {
+      var source = item.record.canonical.source || {};
+      var inWorkload = bounds.begin == null || bounds.end == null ||
+        (item.alignedTime >= bounds.begin && item.alignedTime <= bounds.end);
+      var marker = source.domain === "guest" &&
+        (item.record.kind === "workload_started" || item.record.kind === "workload_finished");
+
+      if (inWorkload || marker)
+        workloadEventsByPhase.W.push(item);
+    });
+    // Cleanup is brief; keep its linked events at the end of the workload phase.
+    eventsByPhase.C.forEach(function(item) {
+      if (cleanupSequences.has(recordSequence(item.record)))
+        workloadEventsByPhase.W.push(Object.assign({}, item, { group: "W" }));
+    });
+    workloadEventsByPhase.W.sort(compareRecords);
+  }
+
+  function capturedRecords() {
+    return Object.keys(eventsByPhase).reduce(function(records, phase) {
+      return records.concat(eventsByPhase[phase].map(function(item) { return item.record; }));
+    }, []);
   }
 
   function candidateAttach() {
-    var candidate = setupFacts.candidate_device || {};
     return ebpfRecords.find(function(record) {
-      return record.kind === "iommu_device_attach" && addressInfo(record).device === candidate.bdf;
-    }) || ebpfRecords.find(function(record) {
       return record.kind === "iommu_device_attach";
     });
   }
 
   function matchingKvmRegion(transaction) {
     var mapping = transaction ? addressInfo(transaction.enter) : {};
+    // Match the earlier KVM slot by its host-virtual backing range, not event proximity alone.
     var candidates = ebpfRecords.filter(function(record) {
       var memory = addressInfo(record);
       return record.kind === "kvm_memory_region_enter" && record.time_ns <= transaction.enter.time_ns &&
@@ -431,65 +629,6 @@ import {
     } : null;
   }
 
-  function pinEventsForChunk(transaction, chunkRecord) {
-    var mapping = transaction ? addressInfo(transaction.enter) : {};
-    var chunk = addressInfo(chunkRecord);
-    var expectedHva;
-    var enter;
-    var exit;
-
-    if (!transaction || !chunkRecord)
-      return [];
-    expectedHva = big(mapping.hva) + big(chunk.iova) - big(mapping.iova);
-    enter = transaction.pins.find(function(record) {
-      return record.kind === "vfio_page_pin_enter" && big(addressInfo(record).hva) === expectedHva;
-    });
-    exit = enter && transaction.pins.find(function(record) {
-      return record.kind === "vfio_page_pin_exit" && record.time_ns >= enter.time_ns;
-    });
-    return [enter, exit].filter(Boolean);
-  }
-
-  function teardownEventsForChunk(teardown, chunkRecord) {
-    var chunk = addressInfo(chunkRecord);
-    var unmap;
-    var invalidation;
-    var qiSubmit;
-    var qiComplete;
-    var unpinEnter;
-    var unpinExit;
-
-    if (!teardown || !chunkRecord)
-      return teardown ? [teardown.enter, teardown.exit].filter(Boolean) : [];
-    unmap = teardown.unmaps.find(function(record) {
-        return sameRange(addressInfo(record), chunk);
-      }) ||
-      teardown.unmaps.find(function(record) {
-        return rangesOverlap(addressInfo(record), chunk);
-      });
-    invalidation = teardown.invalidations.find(function(record) {
-      var iommu = iommuInfo(record);
-      return rangesOverlap({
-        iova: iommu.iova,
-        size: iommu.size
-      }, chunk);
-    });
-    qiSubmit = invalidation && teardown.qi.find(function(record) {
-      return record.kind === "iommu_qi_submit" && record.time_ns >= invalidation.time_ns;
-    });
-    qiComplete = qiSubmit && teardown.qi.find(function(record) {
-      return record.kind === "iommu_qi_complete" && record.time_ns >= qiSubmit.time_ns;
-    });
-    unpinEnter = teardown.unpins.find(function(record) {
-      return record.kind === "vfio_page_unpin_enter" && big(addressInfo(record).iova) === big(chunk.iova);
-    });
-    unpinExit = unpinEnter && teardown.unpins.find(function(record) {
-      return record.kind === "vfio_page_unpin_exit" && record.time_ns >= unpinEnter.time_ns;
-    });
-    return [teardown.enter, unmap, invalidation, qiSubmit, qiComplete, unpinEnter, unpinExit, teardown.exit].filter(Boolean);
-  }
-
-
   function message(group, label, detail, from, to, record, architectural, scope, orderRecord) {
     var domain = scope || (record && record.source === "guest-ebpf" ? "guest" : "outside");
 
@@ -506,55 +645,8 @@ import {
     };
   }
 
-  function guestBarForGpa(gpa) {
-    var visible = assignmentRecords.find(function(record) {
-      return record.kind === "guest_visible";
-    });
-    var bars = visible && recordState(visible).guest_device ? recordState(visible).guest_device.bars : [];
-    var target = big(gpa);
-
-    return (Array.isArray(bars) ? bars : []).map(parseBar).find(function(bar) {
-      var start = big(String(bar.address).indexOf("0x") === 0 ? bar.address : "0x" + bar.address);
-      var sizeMatch = String(bar.size).match(/^(\d+)([KMG])$/i);
-      var multiplier = sizeMatch ? {
-        K: 1024n,
-        M: 1048576n,
-        G: 1073741824n
-      } [sizeMatch[2].toUpperCase()] : 1n;
-      var size = sizeMatch ? BigInt(sizeMatch[1]) * multiplier : 0n;
-
-      return target >= start && target < start + size;
-    }) || null;
-  }
-
-  function runtimeMmioRecord() {
-    return ebpfRecords.find(function(record) {
-      var mmio = mmioInfo(record);
-      return record.kind === "kvm_mmio" && mmio.type === 2 && guestBarForGpa(mmio.gpa);
-    }) || null;
-  }
-
-  function msixTableWrites() {
-    var writes = ebpfRecords.filter(function(record) {
-      var mmio = mmioInfo(record);
-      var bar = record.kind === "kvm_mmio" ? guestBarForGpa(mmio.gpa) : null;
-      return bar && bar.region === "4" && mmio.type === 2;
-    });
-    var address = writes.find(function(record) {
-      var mmio = mmioInfo(record);
-      return big(mmio.gpa) % 16n === 0n && (big(mmio.value) & 0xfff00000n) === 0xfee00000n;
-    });
-    var data = address && writes.find(function(record) {
-      return record.time_ns >= address.time_ns && big(mmioInfo(record).gpa) === big(mmioInfo(address).gpa) + 8n;
-    });
-
-    return {
-      address: address || null,
-      data: data || null
-    };
-  }
-
   function postedInterruptRoute() {
+    // Join VFIO IRQ_SET, IRTE/MSI programming, and the KVM posted-interrupt update by IRQ and time.
     var update = ebpfRecords.find(function(record) {
       return record.kind === "kvm_pi_irte_update" && interruptInfo(record).posted;
     });
@@ -611,8 +703,6 @@ import {
     var kvmEnter = transaction && matchingKvmRegion(transaction);
     var kvmExit = kvmEnter && matchingExit(kvmEnter, "kvm_memory_region_exit");
     var teardown = transaction && matchingUnmap(transaction);
-    var selectedPins = pinEventsForChunk(transaction, selectedMap);
-    var msix = msixTableWrites();
     var route = postedInterruptRoute();
     var preparation = [];
     var mapping = [];
@@ -634,26 +724,19 @@ import {
     preparation.sort(compareRecords);
 
     if (transaction) {
-      mapping = [transaction.enter].concat(transaction.type1, selectedPins, selectedMap || [], transaction.exit || []).filter(Boolean).map(function(record) {
-        var address = addressInfo(record);
-        var entering;
-
-        if (record.kind === "vfio_dma_map_enter")
-          return message("MAP", "VFIO_IOMMU_MAP_DMA", "IOVA " + address.iova + " · " + formatBytes(address.size), LANE.QEMU, LANE.VFIO, record);
-        if (record.kind === "vfio_type1_map_enter")
-          return message("MAP", "validate map", "VFIO type1 backend", LANE.VFIO, LANE.VFIO, record);
-        if (record.kind === "vfio_type1_map_exit")
-          return message("MAP", "ret", "ret " + eventInfo(record).result, LANE.VFIO, LANE.VFIO, record);
-        if (record.kind.indexOf("vfio_page_pin_") === 0) {
-          entering = record.kind === "vfio_page_pin_enter";
-          return message("MAP", entering ? "pin pages" : "ret", entering ? "HVA " + address.hva + " · " + address.page_count + " pages" : eventInfo(record).result + " pages", entering ? LANE.VFIO : LANE.MEMORY, entering ? LANE.MEMORY : LANE.VFIO, record);
-        }
-        if (record.kind === "iommu_map")
-          return message("MAP", "iommu:map", "IOVA " + address.iova + " → HPA " + address.hpa + " · " + formatBytes(address.size), LANE.VFIO, LANE.IOMMU, record);
-        return message("MAP", "ret", "ret " + eventInfo(record).result, LANE.VFIO, LANE.QEMU, record);
-      });
-      if (!selectedPins.length)
-        mapping.splice(1, 0, message("MAP", "vfio_pin_pages_remote", "QEMU HVA → resident host pages", LANE.VFIO, LANE.MEMORY, null, true, "outside", transaction.enter));
+      /*
+       * iommu:map is a leaf-level tracepoint.  Keep every leaf in the
+       * address-space browser, but make the timeline speak in transactions:
+       * one VFIO request, one grouped translation step, and its ret.
+       */
+      mapping = [message("MAP", "VFIO_IOMMU_MAP_DMA", "IOVA " + addressInfo(transaction.enter).iova + " · " + formatBytes(addressInfo(transaction.enter).size), LANE.QEMU, LANE.VFIO, transaction.enter)];
+      if (selectedMap) {
+        var leafSummary = message("MAP", "IOMMU leaves", transaction.chunks.length + " leaves · selected " + addressInfo(selectedMap).iova, LANE.VFIO, LANE.IOMMU, selectedMap);
+        leafSummary.leafSummary = true;
+        mapping.push(leafSummary);
+      }
+      if (transaction.exit)
+        mapping.push(message("MAP", "ret", "ret " + eventInfo(transaction.exit).result, LANE.VFIO, LANE.QEMU, transaction.exit));
       mapping.sort(compareRecords);
     }
 
@@ -661,10 +744,6 @@ import {
       var allocation = interruptInfo(route.allocation);
       irqSetup.push(message("IRQ SETUP", "alloc_irte", "host IRQ " + allocation.irq + " · IRTE " + allocation.irte_index, LANE.VFIO, LANE.IOMMU, route.allocation));
     }
-    if (msix.address)
-      irqSetup.push(message("IRQ SETUP", "write MSI-X address", mmioInfo(msix.address).gpa + " ← " + mmioInfo(msix.address).value, LANE.GUEST, LANE.KVM, msix.address));
-    if (msix.data)
-      irqSetup.push(message("IRQ SETUP", "write MSI-X data", mmioInfo(msix.data).gpa + " ← " + mmioInfo(msix.data).value, LANE.GUEST, LANE.KVM, msix.data));
     if (route && route.enter) {
       var irqRequest = interruptInfo(route.enter);
       irqSetup.push(message("IRQ SETUP", "VFIO_DEVICE_SET_IRQS", "MSI-X " + irqRequest.start + " · count " + irqRequest.count, LANE.QEMU, LANE.VFIO, route.enter));
@@ -681,10 +760,18 @@ import {
       irqSetup.push(message("IRQ SETUP", "ret", "ret " + eventInfo(route.exit).result, LANE.VFIO, LANE.QEMU, route.exit));
     irqSetup.sort(compareRecords);
 
+    var guestIrqEntries = guestRecords.filter(function(record) {
+      return record.kind === "guest_irq_handler_entry";
+    });
+    var guestIrqExits = guestRecords.filter(function(record) {
+      return record.kind === "guest_irq_handler_exit";
+    });
+    var guestNapiPolls = guestRecords.filter(function(record) {
+      return record.kind === "guest_napi_poll";
+    });
+
     guestRecords.forEach(function(record) {
       var dma = dmaInfo(record);
-      var interrupt = interruptInfo(record);
-      var execution = executionInfo(record);
       var context = record.context || {};
       var group = guestPhaseGroup(record);
       var mappedDma;
@@ -694,7 +781,10 @@ import {
       var rxChunk;
       var rxHpa;
 
-      if (record.kind === "workload_begin" || record.kind === "workload_end")
+      if (record.kind === "workload_begin" || record.kind === "workload_end" ||
+        record.kind === "guest_irq_handler_entry" || record.kind === "guest_irq_handler_exit" ||
+        record.kind === "guest_softirq_raise" || record.kind === "guest_softirq_entry" ||
+        record.kind === "guest_napi_poll" || record.kind === "guest_softirq_exit")
         return;
       if (record.kind === "guest_ixgbe_open")
         runtime.push(message(group, "ixgbe_open", "CPU " + context.cpu + " · " + context.comm, LANE.GUEST, LANE.GUEST, record));
@@ -712,8 +802,8 @@ import {
         runtime.push(message(group, "ixgbe_loopback_test", "loopback setup", LANE.GUEST, LANE.GUEST, record));
       else if (record.kind === "guest_ixgbe_loopback_test_exit")
         runtime.push(message(group, "ret", "ret " + eventInfo(record).result, LANE.GUEST, LANE.GUEST, record));
-      else if (record.kind === "guest_ixgbe_run_loopback_entry")
-        runtime.push(message(group, "ixgbe_run_loopback_test", "64 TX/RX frames per batch", LANE.GUEST, LANE.GUEST, record));
+      else if (record.kind === "guest_nic_run_loopback_entry")
+        runtime.push(message(group, "nic_run_loopback_test", "64 TX/RX frames per batch", LANE.GUEST, LANE.GUEST, record));
       else if (record.kind === "guest_ixgbe_xmit_entry")
         runtime.push(message(group, "ixgbe_xmit_frame_ring", formatBytes(dma.length) + " skb", LANE.GUEST, LANE.GUEST, record));
       else if (record.kind === "guest_dma_map_entry")
@@ -753,26 +843,16 @@ import {
         runtime.push(message(group, "dma_sync_single_for_device", dma.address + " · " + formatBytes(dma.length), LANE.GUEST, LANE.DMA, record));
       else if (record.kind === "guest_ixgbe_clean_exit")
         runtime.push(message(group, "ret", dma.completed + " completed descriptors", LANE.GUEST, LANE.GUEST, record));
-      else if (record.kind === "guest_ixgbe_run_loopback_exit")
+      else if (record.kind === "guest_nic_run_loopback_exit")
         runtime.push(message(group, "ret", "ret " + eventInfo(record).result, LANE.GUEST, LANE.GUEST, record));
-      else if (record.kind === "guest_irq_handler_entry") {
-        if (route && route.update) {
-          runtime.push(message(group, "PCIe MSI-X message", "episode " + execution.episode_id + " · device cause unobserved", LANE.NIC, LANE.IOMMU, null, true, "outside", record));
-          runtime.push(message(group, "VT-d IRTE lookup", "remapped posted-interrupt route", LANE.IOMMU, LANE.KVM, null, true, "outside", record));
-          runtime.push(message(group, "APICv delivery", "guest hard-IRQ boundary", LANE.KVM, LANE.GUEST, null, true, "outside", record));
-        }
-        runtime.push(message(group, "irq_handler_entry", interrupt.action + " · IRQ " + interrupt.irq + " · CPU " + context.cpu, LANE.GUEST, LANE.GUEST, record));
-      } else if (record.kind === "guest_softirq_raise")
-        runtime.push(message(group, "softirq_raise", execution.softirq + " · episode " + execution.episode_id, LANE.GUEST, LANE.NET, record));
-      else if (record.kind === "guest_irq_handler_exit")
-        runtime.push(message(group, "irq_handler_exit", irqDisposition(eventInfo(record).result), LANE.GUEST, LANE.GUEST, record));
-      else if (record.kind === "guest_softirq_entry")
-        runtime.push(message(group, "softirq_entry", execution.softirq + " · CPU " + context.cpu, LANE.NET, LANE.NET, record));
-      else if (record.kind === "guest_napi_poll")
-        runtime.push(message(group, "napi_poll", "work " + execution.napi_work + " / budget " + execution.napi_budget, LANE.NET, LANE.GUEST, record));
-      else if (record.kind === "guest_softirq_exit")
-        runtime.push(message(group, "softirq_exit", execution.softirq + " · episode " + execution.episode_id, LANE.NET, LANE.NET, record));
     });
+
+    if (guestIrqEntries.length) {
+      var irqAnchor = guestIrqExits[guestIrqExits.length - 1] || guestIrqEntries[guestIrqEntries.length - 1];
+      var irqSummary = message("IRQ", "guest IRQ activity", guestIrqEntries.length + " entry · " + guestIrqExits.length + " ret · " + guestNapiPolls.length + " NAPI", LANE.GUEST, LANE.GUEST, guestIrqEntries[0], false, "guest", irqAnchor);
+      irqSummary.summary = true;
+      runtime.push(irqSummary);
+    }
 
     ebpfRecords.filter(function(record) {
       return record.kind === "kvm_pi_wakeup" || record.kind === "kvm_pi_wakeup_vector" || record.kind === "kvm_pi_sync_pir_to_irr_exit" ||
@@ -803,27 +883,28 @@ import {
     runtime.sort(compareRecords);
 
     if (teardown) {
-      teardownItems = teardownEventsForChunk(teardown, selectedMap).map(function(record) {
-        var address = addressInfo(record);
-        var iommu = iommuInfo(record);
-        var entering;
-
-        if (record.kind === "vfio_dma_unmap_enter")
-          return message("TEARDOWN", "VFIO_IOMMU_UNMAP_DMA", "IOVA " + address.iova + " · " + formatBytes(address.size), LANE.QEMU, LANE.VFIO, record);
-        if (record.kind === "iommu_unmap")
-          return message("TEARDOWN", "remove translation", "IOVA " + address.iova + " · " + formatBytes(address.returned_size), LANE.VFIO, LANE.IOMMU, record);
-        if (record.kind === "iommu_iotlb_invalidate")
-          return message("IOTLB", "invalidate IOTLB", "IOVA " + iommu.iova + " · " + formatBytes(iommu.size), LANE.IOMMU, LANE.IOMMU, record);
-        if (record.kind === "iommu_qi_submit")
-          return message("IOTLB", "submit QI", iommu.qi_count + " descriptor", LANE.IOMMU, LANE.IOMMU, record);
-        if (record.kind === "iommu_qi_complete")
-          return message("IOTLB", "QI completion", "ret " + eventInfo(record).result, LANE.IOMMU, LANE.IOMMU, record);
-        if (record.kind.indexOf("vfio_page_unpin_") === 0) {
-          entering = record.kind === "vfio_page_unpin_enter";
-          return message("TEARDOWN", entering ? "release pages" : "ret", entering ? address.page_count + " pages" : "ret " + eventInfo(record).result, entering ? LANE.VFIO : LANE.MEMORY, entering ? LANE.MEMORY : LANE.VFIO, record);
-        }
-        return message("TEARDOWN", "ret", "ret " + eventInfo(record).result + " · " + formatBytes(address.returned_size), LANE.VFIO, LANE.QEMU, record);
+      var selectedUnmap = teardown.unmaps.find(function(record) {
+        return selectedMap && sameRange(addressInfo(record), addressInfo(selectedMap));
+      }) || teardown.unmaps[0];
+      var qiSubmits = teardown.qi.filter(function(record) {
+        return record.kind === "iommu_qi_submit";
       });
+      var qiCompletions = teardown.qi.filter(function(record) {
+        return record.kind === "iommu_qi_complete";
+      });
+
+      teardownItems = [message("TEARDOWN", "VFIO_IOMMU_UNMAP_DMA", "IOVA " + addressInfo(teardown.enter).iova + " · " + formatBytes(addressInfo(teardown.enter).size), LANE.QEMU, LANE.VFIO, teardown.enter)];
+      if (selectedUnmap) {
+        var unmapSummary = message("TEARDOWN", "IOMMU leaves", teardown.unmaps.length + " leaves removed", LANE.VFIO, LANE.IOMMU, selectedUnmap);
+        unmapSummary.leafSummary = true;
+        teardownItems.push(unmapSummary);
+      }
+      if (qiSubmits.length)
+        teardownItems.push(message("IOTLB", "submit QI", qiSubmits.length + " queued invalidations", LANE.IOMMU, LANE.IOMMU, qiSubmits[0]));
+      if (qiCompletions.length)
+        teardownItems.push(message("IOTLB", "QI completion", qiCompletions.length + " complete", LANE.IOMMU, LANE.IOMMU, qiCompletions[qiCompletions.length - 1]));
+      if (teardown.exit)
+        teardownItems.push(message("TEARDOWN", "ret", "ret " + eventInfo(teardown.exit).result, LANE.VFIO, LANE.QEMU, teardown.exit));
       teardownItems.sort(compareRecords);
     }
     return preparation.concat(mapping, irqSetup, runtime, teardownItems);
@@ -832,11 +913,14 @@ import {
 
   function titleFor(record) {
     var titles = {
-      host_owns_device: "host ownership",
-      vfio_bound: "vfio-pci bind",
-      qemu_attached: "QEMU attach",
-      guest_visible: "guest visible",
-      host_reclaims_device: "host reclaim",
+      host_owns_device: "host owns NIC",
+      vfio_bound: "bind vfio-pci",
+      qemu_started: "QEMU starts",
+      qemu_attached: "QEMU attaches NIC",
+      guest_visible: "guest sees NIC",
+      guest_workload_begin: "guest workload",
+      guest_workload_end: "workload ret",
+      host_reclaims_device: "host reclaims NIC",
       iommu_device_attach: "attach requester",
       kvm_memory_region_enter: "KVM_SET_USER_MEMORY_REGION",
       kvm_memory_region_exit: "memslot result",
@@ -878,77 +962,30 @@ import {
     return titles[record.kind] || record.kind.replace(/_/g, " ");
   }
 
-  function renderSetupFacts() {
-    var host = setupFacts.host || {};
-    var management = setupFacts.management_device || {};
-    var candidate = setupFacts.candidate_device || {};
-    var networkLines = (setupFacts.network && setupFacts.network.lines) || [];
-    var groupLines = (setupFacts.iommu_groups && setupFacts.iommu_groups.lines) || [];
-    var groups = {};
-    var managementLink = networkLines.find(function(line) {
-      return management.interface && line.indexOf(management.interface + " ") === 0;
-    });
-    var candidateLink = networkLines.find(function(line) {
-      return candidate.interface && line.indexOf(candidate.interface + " ") === 0;
-    });
-
-    groupLines.forEach(function(line) {
-      var match = line.match(/^group=(\d+) bdf=(\S+)$/);
-      if (!match)
-        return;
-      groups[match[1]] = groups[match[1]] || [];
-      groups[match[1]].push(match[2]);
-    });
-    byId("physical-bdf").textContent = candidate.bdf || "not sampled";
-    byId("physical-name").textContent = [candidate.name, candidate.vendor_device].filter(Boolean).join(" · ") || "not sampled";
-    byId("host-driver-label").textContent = "HOST " + (candidate.driver || "DRIVER");
-    byId("guest-driver-label").textContent = "GUEST " + (candidate.driver || "DRIVER");
-    byId("management-bdf").textContent = management.bdf || "not sampled";
-    byId("management-detail").textContent = [management.interface, management.driver, management.iommu_group ? "IOMMU group " + management.iommu_group : null].filter(Boolean).join(" · ");
-    byId("candidate-bdf").textContent = candidate.bdf || "not sampled";
-    byId("candidate-detail").textContent = [candidate.interface, candidate.driver, candidate.iommu_group ? "IOMMU group " + candidate.iommu_group : null].filter(Boolean).join(" · ");
-    byId("setup-host").textContent = [host.hostname, host.os].filter(Boolean).join(" · ") || "not sampled";
-    byId("setup-kernel").textContent = host.kernel || "not sampled";
-    byId("setup-dmar").textContent = host.dmar_present === "true" ? "ACPI DMAR table present" : "not reported";
-    byId("setup-qemu").textContent = host.qemu_version || "not sampled";
-    byId("setup-kvm").textContent = host.kvm_device || "not sampled";
-    byId("setup-cmdline").textContent = (host.cmdline || "not sampled").trim().split(/\s+/).join("\n");
-    byId("setup-cmdline").title = host.cmdline || "";
-    byId("setup-route").textContent = [management.default_route_interface, management.bdf].filter(Boolean).join(" → ") || "not sampled";
-    byId("setup-management-link").textContent = managementLink || "not sampled";
-    byId("setup-candidate-link").textContent = candidateLink || "not sampled";
-    byId("setup-reset").textContent = candidate.reset_methods || "not sampled";
-    byId("setup-management-group").textContent = management.iommu_group || "not sampled";
-    byId("setup-candidate-group").textContent = candidate.iommu_group || "not sampled";
-    var groupIds = Object.keys(groups).sort(function(left, right) {
-      return Number(left) - Number(right);
-    });
-    byId("group-summary").textContent = groupIds.length + " groups · group " + (management.iommu_group || "—") + " ≠ group " + (candidate.iommu_group || "—");
-    byId("group-map").innerHTML = groupIds.slice(0, 64).map(function(group) {
-      var className = group === management.iommu_group ? " management" : (group === candidate.iommu_group ? " candidate" : "");
-      return '<div class="iommu-group' + className + '" title="' + escapeHtml(groups[group].join(" · ")) + '"><b>G' + escapeHtml(group) + '</b><span>' + groups[group].length + '</span></div>';
-    }).join("");
-  }
-
   function renderRoadmap() {
     var groups = [{
-      phase: "P",
-      phaseLabel: "PRELUDE",
-      label: "ASSIGNMENT",
-      items: preludeItems()
-    }, {
-      phase: "A",
+      phase: "S",
       phaseLabel: "PHASE A",
-      label: "DMA REMAPPING",
-      items: phaseAItems()
-    }];
+      label: eventScope === "workload" ? "WORKLOAD SETUP" : "SETUP",
+      items: visibleItemsFor("S")
+    }, {
+      phase: "W",
+      phaseLabel: "PHASE B",
+      label: eventScope === "workload" ? "WORKLOAD" : "GUEST WORKLOAD",
+      items: visibleItemsFor("W")
+    }, {
+      phase: "C",
+      phaseLabel: "PHASE C",
+      label: eventScope === "workload" ? "WORKLOAD CLEANUP" : "TEARDOWN",
+      items: visibleItemsFor("C")
+    }].filter(function(group) {
+      return eventScope !== "workload" || (group.phase !== "C" && group.items.length > 0);
+    });
 
     byId("roadmap").innerHTML = groups.map(function(group) {
       var active = group.phase === selectedPhase;
-      var current = active && group.items[selectedIndex];
-
-      return '<section class="roadmap-zone selector-option' + (active ? " active" : "") + '" data-phase-zone="' + group.phase + '"><div class="zone-copy"><b><em>' + group.phaseLabel + '</em></b><span>' + group.label + '</span>' + (current ? '<small>' + escapeHtml(current.label) + '</small>' : "") + '</div></section>';
-    }).join("") + '<section class="roadmap-zone selector-option future"><div class="zone-copy"><b><em>PHASE B</em></b><span>DMA PROTECTION</span><small>future</small></div></section>';
+      return '<button type="button" class="phase-button selector-option' + (active ? " active" : "") + '" data-phase-zone="' + group.phase + '"><span class="selector-kicker">' + group.phaseLabel + '</span><span class="selector-label">' + group.label + '</span></button>';
+    }).join("");
 
     byId("roadmap").querySelectorAll("[data-phase-zone]").forEach(function(zone) {
       zone.onclick = function() {
@@ -957,68 +994,21 @@ import {
     });
   }
 
+  function renderEventScope() {
+    var workloadCount = ["S", "W", "C"].reduce(function(total, phase) {
+      return total + (workloadEventsByPhase[phase] || []).length;
+    }, 0);
+    var allCount = ["S", "W", "C"].reduce(function(total, phase) {
+      return total + phaseItemsFor(phase).length;
+    }, 0);
 
-  function parseBar(bar) {
-    var match = String(bar).match(/^Region\s+(\d+):\s+(.+?)\s+at\s+(\S+)(?:\s+\(([^)]+)\))?\s+\[size=([^\]]+)\]/);
-    return match ? {
-      region: match[1],
-      type: match[2],
-      address: match[3],
-      attributes: match[4] || "",
-      size: match[5]
-    } : {
-      region: "PCI",
-      type: String(bar),
-      address: "not sampled",
-      attributes: "",
-      size: ""
-    };
-  }
-
-  function renderBar(bar) {
-    var parsed = parseBar(bar);
-    var attributes = parsed.attributes.split(",").map(function(part) {
-      return part.trim();
-    }).filter(Boolean).join(" · ");
-    return '<article class="bar-card" title="' + escapeHtml(bar) + '"><header><b>REGION ' + escapeHtml(parsed.region) + '</b><span>' + escapeHtml(parsed.size) + '</span></header><strong>' + escapeHtml(parsed.type) + '</strong><code>' + escapeHtml(parsed.address) + '</code>' + (attributes ? '<small>' + escapeHtml(attributes) + '</small>' : "") + '</article>';
-  }
-
-  function renderPrelude(record) {
-    var current = recordState(record);
-    var candidate = setupFacts.candidate_device || {};
-    var assignment = current.assignment || {};
-    var guest = current.guest_device || {};
-    var nodes = [byId("host-owner"), byId("vfio-owner"), byId("qemu-owner"), byId("guest-owner")];
-
-    byId("physical-bdf").textContent = candidate.bdf || "not sampled";
-    byId("physical-name").textContent = [candidate.name, candidate.vendor_device].filter(Boolean).join(" · ");
-    byId("host-interface").textContent = candidate.interface || "not sampled";
-    byId("guest-interface").textContent = guest.present ? [guest.guest_bdf, guest.interface].filter(Boolean).join(" · ") : "not present";
-    byId("guest-driver-label").textContent = "GUEST " + (guest.driver || candidate.driver || "DRIVER");
-    nodes.forEach(function(node) {
-      node.classList.remove("active");
-      node.classList.add("inactive");
+    byId("scope-workload-count").textContent = workloadCount.toLocaleString() + " events";
+    byId("scope-all-count").textContent = allCount.toLocaleString() + " events";
+    byId("event-scope").querySelectorAll("[data-event-scope]").forEach(function(button) {
+      var active = button.dataset.eventScope === eventScope;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
     });
-    if (record.kind === "host_owns_device" || record.kind === "host_reclaims_device")
-      byId("host-owner").classList.remove("inactive");
-    if (assignment.vfio_bound) {
-      byId("vfio-owner").classList.remove("inactive");
-      byId("qemu-owner").classList.toggle("inactive", !assignment.qemu_attached);
-      byId("guest-owner").classList.toggle("inactive", !guest.present);
-    }
-    if (record.kind === "host_owns_device" || record.kind === "host_reclaims_device")
-      byId("host-owner").classList.add("active");
-    else if (record.kind === "vfio_bound")
-      byId("vfio-owner").classList.add("active");
-    else if (record.kind === "qemu_attached")
-      byId("qemu-owner").classList.add("active");
-    else if (record.kind === "guest_visible")
-      byId("guest-owner").classList.add("active");
-
-    byId("guest-proof").classList.toggle("hidden", record.kind !== "guest_visible");
-    byId("host-bdf-proof").textContent = candidate.bdf || "not sampled";
-    byId("guest-bdf-proof").textContent = guest.present ? guest.guest_bdf : "not present";
-    byId("guest-bars").innerHTML = (Array.isArray(guest.bars) ? guest.bars : []).map(renderBar).join("");
   }
 
   function currentTransaction() {
@@ -1054,67 +1044,91 @@ import {
       var title = "IOVA " + address.iova + " → HPA " + address.hpa + " · " + address.size;
       return '<button class="chunk ' + (index === selectedChunk ? "active" : "") + '" type="button" data-chunk="' + index + '" title="' + escapeHtml(title) + '"><b>' + String(index + 1).padStart(2, "0") + '</b><span>' + escapeHtml(formatBytes(address.size)) + '</span></button>';
     }).join("") || '<span class="chunk">No correlated IOMMU maps.</span>';
-    byId("map-summary").textContent = transaction ? (selectedTransaction === workloadTransaction ? "workload active · " : "") + transaction.chunks.length + " iommu:map records · request " + (eventInfo(transaction.enter).request_id || "legacy") : "no mappings";
+    byId("map-summary").textContent = transaction ? (selectedTransaction === workloadTransaction ? "workload · " : "") + transaction.chunks.length + " leaves · req " + (eventInfo(transaction.enter).request_id || "legacy") : "no mappings";
     byId("chunk-list").querySelectorAll("[data-chunk]").forEach(function(button) {
       button.onclick = function() {
         selectedChunk = Number(button.dataset.chunk);
-        phaseItems = phaseAItems();
-        selectedIndex = phaseItems.findIndex(function(item) {
-          return item.record === chunks[selectedChunk];
-        });
-        if (selectedIndex < 0)
-          selectedIndex = 0;
         renderChunks();
-        selectRecord(selectedIndex);
+        renderState(phaseItems[selectedIndex]);
       };
     });
   }
 
   function renderActors(item) {
-    byId("actor-row").innerHTML = actors.map(function(actor, index) {
+    var actorRow = byId("actor-row");
+
+    visibleLanes = [];
+    lanePositions = {};
+    phaseItems.forEach(function(message) {
+      [message.from, message.to].forEach(function(lane) {
+        if (Number.isInteger(lane) && lane >= 0 && lane < actors.length && visibleLanes.indexOf(lane) < 0)
+          visibleLanes.push(lane);
+      });
+    });
+    visibleLanes.sort(function(a, b) { return a - b; });
+    visibleLanes.forEach(function(lane, position) { lanePositions[lane] = position; });
+    actorRow.style.setProperty("--actor-count", String(Math.max(visibleLanes.length, 1)));
+    actorRow.innerHTML = visibleLanes.map(function(index) {
+      var actor = actors[index];
       var active = item && (item.from === index || item.to === index);
       var resource = "";
-      var candidate = setupFacts.candidate_device || {};
+      var candidate = deviceInfo();
       var transaction = currentTransaction();
       var address = transaction ? addressInfo(transaction.enter) : {};
-      var actorName = actor.id === "guest" ? (candidate.driver || actor.name) : actor.name;
+      var actorName = actor.name;
 
-      if (actor.id === "qemu")
-        resource = address.hva ? "HVA " + address.hva : "guest RAM owner";
+      if (actor.id === "guest")
+        resource = candidate.driver || "NIC driver";
       else if (actor.id === "guest-net")
-        resource = "softirq + NAPI poll";
+        resource = "NAPI";
       else if (actor.id === "guest-dma")
-        resource = "guest DMA addresses";
+        resource = "map / sync";
+      else if (actor.id === "qemu")
+        resource = "VFIO device";
       else if (actor.id === "kvm")
-        resource = "memslots + posted IRQ";
+        resource = "APICv";
       else if (actor.id === "vfio")
-        resource = transaction ? "fd " + eventInfo(transaction.enter).fd : "container";
+        resource = "ownership";
       else if (actor.id === "memory")
         resource = "pinned pages";
       else if (actor.id === "iommu")
-        resource = "IOVA maps + IRTEs";
-      else if (actor.id === "nic")
-        resource = candidate.bdf || "PCIe requester";
+        resource = "VT-d";
       else
-        resource = "DMA descriptors";
+        resource = "DMA requester";
       return '<div class="lifeline-actor ' + actor.scope + '-domain' + (active ? " active" : "") + '"><small>' + actor.role + '</small><b>' + escapeHtml(actorName) + '</b><span>' + escapeHtml(resource) + '</span></div>';
     }).join("");
-    byId("lifeline-lines").innerHTML = actors.map(function(_, index) {
-      return '<i style="left:' + ((index + 0.5) / actors.length * 100) + '%"></i>';
+    byId("lifeline-lines").innerHTML = visibleLanes.map(function(lane, position) {
+      var active = item && (item.from === lane || item.to === lane);
+      return '<i class="' + (active ? "active" : "") + '" style="left:' + ((position + 0.5) / visibleLanes.length * 100) + '%"></i>';
     }).join("");
   }
 
   function renderMessage(item, index) {
-    var low = Math.min(item.from, item.to);
-    var distance = Math.abs(item.to - item.from);
-    var left = (low + 0.5) / actors.length * 100;
-    var width = distance / actors.length * 100;
-    var direction = item.to > item.from ? " forward" : (item.to < item.from ? " reverse" : " self");
+    var from = lanePositions[item.from];
+    var to = lanePositions[item.to];
+    var low;
+    var distance;
+    var left;
+    var width;
+    var center;
+    var direction;
     var evidence = item.architectural ? " architectural" : " observed";
     var scope = item.scope === "guest" ? " guest-scope" : " outside-scope";
-    var style = distance ? "left:" + left + "%;width:" + width + "%" : "left:" + ((item.from + 0.5) / actors.length * 100) + "%";
+    var style;
 
-    return '<button class="interaction-row' + (index === selectedIndex ? " current" : "") + evidence + scope + '" type="button" data-message="' + index + '"><span class="message-group">' + escapeHtml(item.group) + '</span><span class="message-line' + direction + '" style="' + style + '"><i></i><span class="message-copy"><b>' + escapeHtml(item.label) + '</b><small>' + escapeHtml(item.detail) + '</small></span></span></button>';
+    if (from === undefined || to === undefined || !visibleLanes.length)
+      return "";
+    low = Math.min(from, to);
+    distance = Math.abs(to - from);
+    left = (low + 0.5) / visibleLanes.length * 100;
+    width = distance / visibleLanes.length * 100;
+    center = (low + distance / 2 + 0.5) / visibleLanes.length * 100;
+    direction = to > from ? " forward" : (to < from ? " reverse" : " self");
+    style = distance ? "left:" + left + "%;width:" + width + "%" : "left:" + ((from + 0.5) / visibleLanes.length * 100) + "%";
+
+    if (!distance)
+      return '<button class="interaction-row' + (index === selectedIndex ? " current" : "") + evidence + scope + '" type="button" data-message="' + index + '"><i class="local-marker" style="left:' + ((from + 0.5) / visibleLanes.length * 100) + '%"></i><code style="left:' + ((from + 0.5) / visibleLanes.length * 100) + '%" title="' + escapeHtml(item.detail) + '">' + escapeHtml(item.label) + '</code></button>';
+    return '<button class="interaction-row' + (index === selectedIndex ? " current" : "") + evidence + scope + '" type="button" data-message="' + index + '"><i class="message-line' + direction + '" style="' + style + '"><i></i></i><code style="left:' + center + '%" title="' + escapeHtml(item.detail) + '">' + escapeHtml(item.label) + '</code></button>';
   }
 
   function mapPermissions(flags) {
@@ -1154,32 +1168,41 @@ import {
     var guestSeen = guestRecords.filter(function(record) {
       return record.kind !== "workload_begin" && record.kind !== "workload_end" && anchoredTime(record) <= guestCutoff;
     });
-    var txMap = guestSeen.filter(function(record) {
-      return record.kind === "guest_dma_map_exit";
-    }).pop();
-    var txUnmap = guestSeen.filter(function(record) {
-      return record.kind === "guest_dma_unmap";
-    }).pop();
-    var rxCpu = guestSeen.filter(function(record) {
-      return record.kind === "guest_dma_sync_for_cpu";
-    }).pop();
-    var rxDevice = guestSeen.filter(function(record) {
-      return record.kind === "guest_dma_sync_for_device";
-    }).pop();
-    var completion = guestSeen.filter(function(record) {
-      return record.kind === "guest_ixgbe_clean_exit";
-    }).pop();
-    var allTx = guestEvent("guest_dma_map_exit");
-    var allRx = guestEvent("guest_dma_sync_for_cpu");
     var group = item ? item.group : "MAP";
     var rows = [];
     var status = "OBSERVED";
     var title = "DMA ADDRESS SPACE";
     var caption = "Selected VFIO window and its VT-d translation state.";
-    var addressGroups = ["MEMORY", "ATTACH", "MAP", "TEARDOWN", "IOTLB"];
-    var showMap = addressGroups.indexOf(group) >= 0;
+    var addressGroups = ["MEMORY", "ATTACH", "MAP", "TEARDOWN", "IOTLB", "S", "W", "C"];
+    var showMap = addressGroups.indexOf(group) >= 0 && !isRuntimeInterrupt(semanticRecord);
 
-    if (group.indexOf("IRQ") >= 0 || isRuntimeInterrupt(semanticRecord)) {
+    if (group === "SETUP") {
+      var setupKind = semanticRecord && semanticRecord.kind;
+      var setupCandidate = deviceInfo(semanticRecord);
+      var setupOwner = {
+        host_owns_device: "HOST DRIVER",
+        vfio_bound: "VFIO-PCI",
+        qemu_started: "QEMU / KVM",
+        qemu_attached: "QEMU / KVM",
+        guest_visible: "GUEST"
+      }[setupKind] || "—";
+
+      title = "PASS-THROUGH SETUP";
+      caption = "One physical NIC moves from the host into the guest path.";
+      status = setupOwner;
+      rows.push(stateRow("DEVICE", setupCandidate.bdf || "—", setupCandidate.interface || "physical PCIe function"));
+      rows.push(stateRow("OWNER", setupOwner, item ? item.detail : "—"));
+      rows.push(stateRow("NEXT", setupKind === "guest_visible" ? "DMA remapping" : "continue setup", "select the next boundary"));
+    } else if (group === "RESTORE") {
+      var candidate = deviceInfo(semanticRecord);
+
+      title = "OWNERSHIP RESTORED";
+      caption = "The physical function returns to its host driver.";
+      status = "HOST";
+      rows.push(stateRow("DEVICE", candidate.bdf || "—", candidate.interface || "PCIe function"));
+      rows.push(stateRow("OWNER", "HOST", candidate.driver ? candidate.driver + " bound" : "host driver restored"));
+      rows.push(stateRow("VFIO", "released", "guest access ended"));
+    } else if (group.indexOf("IRQ") >= 0 || isRuntimeInterrupt(semanticRecord)) {
       var routeEnter = route && reached(route.enter) ? route.enter : null;
       var routeExit = route && reached(route.exit) ? route.exit : null;
       var routeUpdate = route && reached(route.update) ? route.update : null;
@@ -1228,27 +1251,32 @@ import {
       rows.push(stateRow("PI WAKEUP", wakeEvents.length + " handlers · " + wakeCalls + " vCPU wakes", "vCPU 0 " + wakeVcpu0 + " · vCPU 1 " + wakeVcpu1));
       rows.push(stateRow("GUEST EPISODE", episodeEntry ? "#" + selectedExecution.episode_id + " · IRQ " + executionInfo(episodeEntry).irq : guestEntries.length + " entries · " + guestExits.length + " exits", episodeEntry ? executionInfo(episodeEntry).action + " · CPU " + episodeEntry.context.cpu : (guestEntries.length === guestExits.length ? "balanced hard-IRQ boundaries" : "incomplete hard-IRQ pairing")));
       rows.push(stateRow("BOTTOM HALF", episodeSoftirq ? executionInfo(episodeSoftirq).softirq : "—", episodeNapi ? "napi_poll work " + executionInfo(episodeNapi).napi_work + " / budget " + executionInfo(episodeNapi).napi_budget : "no NAPI poll reached yet"));
-    } else if (group === "LOOPBACK" || group === "DMA USE" || group === "COMPLETE" || group === "NET") {
-      var tx = allTx ? dmaInfo(allTx) : {};
-      var rx = allRx ? dmaInfo(allRx) : {};
-      var translated = transaction && tx.address ? transaction.chunks.find(function(record) {
-        var address = addressInfo(record);
-        return rangeContains(address.iova, address.size, tx.address, "0x1");
-      }) : null;
-      var txReleased = txUnmap && (!txMap || anchoredTime(txUnmap) >= anchoredTime(txMap));
-      var cycleComplete = completion && (!txMap || anchoredTime(completion) >= anchoredTime(txMap));
-      var txOwner = txReleased ? "UNMAPPED" : (txMap ? "DEVICE" : "CPU");
-      var rxOwner = rxDevice && (!rxCpu || anchoredTime(rxDevice) >= anchoredTime(rxCpu)) ? "DEVICE" : (rxCpu ? "CPU" : "DEVICE");
+    } else if (group === "WORKLOAD" || group === "LOOPBACK" || group === "DMA USE" || group === "COMPLETE" || group === "NET") {
+      var workloadBegin = lifecycleRecords.find(function(record) {
+        return record.kind === "guest_workload_begin";
+      });
+      var workloadEnd = lifecycleRecords.find(function(record) {
+        return record.kind === "guest_workload_end";
+      });
+      var loopbackBegin = guestEvent("guest_nic_run_loopback_entry");
+      var loopbackEnd = guestEvent("guest_nic_run_loopback_exit");
+      var mapEnter = guestEvent("guest_dma_map_entry");
+      var mapExit = guestEvent("guest_dma_map_exit");
+      var map = mapExit ? dmaInfo(mapExit) : (mapEnter ? dmaInfo(mapEnter) : {});
+      var guestIrqs = guestRecords.filter(function(record) {
+        return record.kind === "guest_irq_handler_entry";
+      });
+      var guestIrqRets = guestRecords.filter(function(record) {
+        return record.kind === "guest_irq_handler_exit";
+      });
 
-      title = "DMA OWNERSHIP";
-      caption = "Streaming DMA ownership reconstructed from the guest DMA API boundaries.";
-      status = cycleComplete ? "COMPLETE" : (txMap ? "DEVICE OWNED" : "CPU OWNED");
-      rows.push(stateRow("TX BUFFER", tx.address || "—", tx.length ? formatBytes(tx.length) + " · DMA_TO_DEVICE" : ""));
-      rows.push(stateRow("TX OWNER", txOwner, txUnmap ? "mapping released" : (txMap ? "CPU must not touch until unmap" : "not mapped")));
-      rows.push(stateRow("RX BUFFER", rx.address || "—", rx.length ? formatBytes(rx.length) + " · DMA_FROM_DEVICE" : ""));
-      rows.push(stateRow("RX OWNER", rxOwner, rxCpu ? "sync_for_cpu" + (rxDevice ? " · ret to device" : "") : "prior RX mapping unavailable"));
-      rows.push(stateRow("TRANSLATION", translated ? addressInfo(translated).iova + " → " + addressInfo(translated).hpa : "—", translated ? formatBytes(addressInfo(translated).size) + " IOMMU leaf" : "no containing leaf"));
-      rows.push(stateRow("COMPLETION", cycleComplete ? dmaInfo(completion).completed + " descriptors" : "—", cycleComplete ? "frame patterns verified" : "pending"));
+      title = "GUEST WORKLOAD";
+      caption = "Only guest workload evidence captured by the observer is shown here.";
+      status = workloadEnd || (loopbackEnd && eventInfo(loopbackEnd).result === 0) ? "PASS" : "IN PROGRESS";
+      rows.push(stateRow("COMMAND", workloadBegin && Array.isArray(workloadBegin.command) ? workloadBegin.command.join(" ") : "ethtool loopback", workloadBegin && workloadBegin.interface ? workloadBegin.interface : "not sampled"));
+      rows.push(stateRow("LOOPBACK", loopbackBegin ? "entered" : "not sampled", loopbackEnd ? "ret " + eventInfo(loopbackEnd).result : "ret not sampled"));
+      rows.push(stateRow("DMA MAP", map.address || "not sampled", map.length ? formatBytes(map.length) + " · observed guest map" : "guest DMA map fields not sampled"));
+      rows.push(stateRow("IRQ", guestIrqs.length + " entry · " + guestIrqRets.length + " ret", guestIrqs.length === guestIrqRets.length ? "guest handler boundaries balanced" : "pairing incomplete"));
     } else if (["IXGBE OPEN", "OFFLINE DIAG", "INTR TEST", "RESTORE OPEN"].indexOf(group) >= 0) {
       var phase = selectedExecution.phase || "none";
       var phaseRecords = guestSeen.filter(function(record) {
@@ -1278,6 +1306,9 @@ import {
     } else {
       var teardown = transaction && matchingUnmap(transaction);
       var invalidations = teardown ? teardown.invalidations.filter(reached).length : 0;
+      var qiSubmitted = teardown ? teardown.qi.filter(function(record) {
+        return record.kind === "iommu_qi_submit" && reached(record);
+      }).length : 0;
       var completions = teardown ? teardown.qi.filter(function(record) {
         return record.kind === "iommu_qi_complete" && eventInfo(record).result === 0 && reached(record);
       }).length : 0;
@@ -1291,7 +1322,7 @@ import {
         title = "IOTLB INVALIDATION";
         caption = "Page-table removal followed by queued invalidation completion.";
         status = completions ? "COMPLETED" : "IN PROGRESS";
-      } else if (group === "TEARDOWN") {
+      } else if (group === "TEARDOWN" || group === "C") {
         title = "DMA TEARDOWN";
         caption = "Translation removal, cache invalidation, and backing-page release.";
         status = unmapped ? "UNMAPPED" : "TEARING DOWN";
@@ -1305,13 +1336,14 @@ import {
       rows.push(stateRow("VFIO WINDOW", parentReady ? "[" + parent.iova + ", " + hexLimit(parent.iova, parent.size) + ")" : "—", parentReady && parent.hva ? "HVA " + parent.hva + " · " + mapPermissions(eventInfo(transaction.enter).flags) : ""));
       rows.push(stateRow("IOMMU DOMAIN", domainReady ? domain.domain : "—", domainReady && domain.unit_id != null ? "unit " + domain.unit_id + " · opaque identity" : ""));
       rows.push(stateRow("SELECTED LEAF", leafReady ? chunk.iova + " → " + chunk.hpa : "—", leafReady ? formatBytes(chunk.size) : ""));
-      rows.push(stateRow("IOTLB", invalidations + " invalidations · " + completions + " complete", teardown && reached(teardown.enter) ? "correlated request " + eventInfo(teardown.enter).request_id : (mapReady ? "mapping remains active" : "not mapped")));
+      rows.push(stateRow("IOTLB", qiSubmitted + " QI · " + completions + " complete", invalidations ? invalidations + " explicit invalidations" : (teardown && reached(teardown.enter) ? "QI boundary sampled" : (mapReady ? "mapping remains active" : "not mapped"))));
       rows.push(stateRow("PROTECTION", parentReady ? mapPermissions(eventInfo(transaction.enter).flags) : "—", faults.length + " iommu:io_page_fault records"));
     }
     byId("state-title").textContent = title;
     byId("state-caption").textContent = caption;
     byId("state-status").textContent = status;
     byId("state-rows").innerHTML = rows.join("");
+    byId("map-picker").classList.toggle("hidden", !showMap);
     byId("state-map-browser").classList.toggle("hidden", !showMap);
   }
 
@@ -1321,35 +1353,14 @@ import {
     renderActors(current);
     renderState(current);
     byId("interaction-rows").innerHTML = phaseItems.map(renderMessage).join("");
-    byId("flow-caption").textContent = current ? (current.scope === "guest" ? "GUEST" : "HOST / DEVICE") + " · " + current.group + " · " + current.label : "Select a message to inspect its captured boundary.";
     byId("interaction-rows").querySelectorAll("[data-message]").forEach(function(button) {
       button.onclick = function() {
         selectRecord(Number(button.dataset.message));
       };
     });
-  }
-
-
-  function preludeFields(record) {
-    var current = recordState(record);
-    var candidate = setupFacts.candidate_device || {};
-    var assignment = current.assignment || {};
-    var guest = current.guest_device || {};
-    var source = record && record.canonical && record.canonical.source || {};
-    return {
-      mechanism: mechanismLabel(source.mechanism || record.source),
-      hook: hookLabel(record.kind, source.mechanism || record.source, source.hook),
-      time_ns: record.time_ns,
-      host_bdf: candidate.bdf,
-      host_driver: assignment.host_driver,
-      owner: assignment.owner,
-      vfio_bound: assignment.vfio_bound,
-      qemu_attached: assignment.qemu_attached,
-      guest_bdf: guest.present ? guest.guest_bdf : null,
-      guest_driver: guest.present ? guest.driver : null,
-      guest_interface: guest.present ? guest.interface : null,
-      msix: guest.present ? guest.msix_present : null
-    };
+    var selectedRow = byId("interaction-rows").querySelector("[data-message='" + selectedIndex + "']");
+    if (selectedRow)
+      selectedRow.scrollIntoView({ block: "nearest" });
   }
 
   function phaseAFields(item) {
@@ -1364,6 +1375,85 @@ import {
     var execution = executionInfo(record);
     var context = record && record.context ? record.context : {};
 
+    if (item && item.captured && record && record.canonical) {
+      var canonical = record.canonical;
+      var source = canonical.source || {};
+      var context = canonical.context || {};
+      var raw = {
+        mechanism: mechanismLabel(source.mechanism),
+        hook: source.hook ? hookLabel(record.kind, source.mechanism, source.hook) :
+          (source.mechanism === "framework" ? "lifecycle · " + record.kind : record.kind),
+        CPU: context.cpu == null ? null : "CPU " + context.cpu,
+        task: context.comm ? context.comm + (context.tid == null ? "" : " · TID " + context.tid) :
+          (context.tid == null ? null : "TID " + context.tid)
+      };
+
+      function includeField(path, value) {
+        var key = path.slice(path.lastIndexOf(".") + 1);
+        var zeroResult = key === "result" && /(?:_exit|_ret|_complete|_end)$/.test(record.kind);
+        var zeroSlot = key === "slot" && record.kind.indexOf("kvm_memory_region") === 0;
+        var zeroIndex = key === "index" && record.kind.indexOf("vfio_irq_set_") === 0;
+        var zeroBase = (key === "gpa" || key === "iova") &&
+          record.kind === "vfio_dma_map_enter" && path.indexOf("state.address_space.") === 0;
+
+        if (value == null || value === "" || value === false || path === "producer_sequence" ||
+            path === "event_info.hook" || path === "event_info.correlated" ||
+            path === "state.clock_anchor" || path.indexOf("state.clock_anchor.") === 0)
+          return false;
+        if (path === "event_info.operation" && value === "none")
+          return false;
+        if (path === "event_info.sample_status" && (value === "complete" || value === "ok"))
+          return false;
+        if ((value === 0 || value === "0" || value === "0x0") &&
+            !zeroResult && !zeroSlot && !zeroIndex && !zeroBase)
+          return false;
+        return true;
+      }
+
+      function flatten(prefix, value, depth) {
+        if (!includeField(prefix, value))
+          return;
+        if (Array.isArray(value)) {
+          if (prefix === "command" && value.length > 0 && String(value[0]).indexOf("qemu-system-") >= 0) {
+            var summary = [String(value[0]).split("/").pop()];
+            for (var index = 1; index < value.length - 1; index++) {
+              if (["-machine", "-cpu", "-m", "-smp"].indexOf(value[index]) >= 0) {
+                summary.push(String(value[index + 1]));
+                index++;
+              } else if (value[index] === "-device" && String(value[index + 1]).indexOf("vfio-pci") === 0) {
+                summary.push(String(value[index + 1]));
+                index++;
+              }
+            }
+            raw.command = summary.join(" · ");
+          } else {
+            raw[prefix.replace(/^data\./, "")] = value.join(" ");
+          }
+          return;
+        }
+        if (typeof value === "object" && depth < 4) {
+          Object.keys(value).forEach(function(key) {
+            flatten(prefix ? prefix + "." + key : key, value[key], depth + 1);
+          });
+          return;
+        }
+        var label = prefix.replace(/^data\./, "").replace(/^event_info\./, "").replace(/^state\./, "");
+        label = label.replace(/^address_space\./, "");
+        if (label === "operation") label = "op";
+        if (label === "request_id") label = "request";
+        if (label === "sample_status") label = "sample";
+        if (label === "hva" || label === "gpa" || label === "iova" || label === "hpa" ||
+            label === "size" || label === "returned_size" || label === "parent_iova" ||
+            label === "parent_size" || label === "page_count")
+          label = label.toUpperCase();
+        raw[label] = String(value);
+      }
+
+      Object.keys(canonical.data || {}).forEach(function(key) {
+        flatten(key, canonical.data[key], 0);
+      });
+      return raw;
+    }
     if (!record)
       return {
         evidence: "architecture",
@@ -1372,14 +1462,15 @@ import {
     var source = record.canonical && record.canonical.source || {};
     return {
       mechanism: mechanismLabel(source.mechanism || record.source),
-      hook: hookLabel(record.kind, source.mechanism || record.source, info.hook || source.hook),
-      operation: info.operation !== "none" ? info.operation : null,
+      hook: source.mechanism === "framework" ? "lifecycle · " + record.kind : hookLabel(record.kind, source.mechanism || record.source, info.hook || source.hook),
+      op: info.operation !== "none" ? info.operation : null,
       request_id: info.request_id || null,
       fd: info.fd || null,
-      command: info.command !== "0x0" ? info.command : null,
+      command: Array.isArray(record.command) ? record.command.join(" ") : (info.command !== "0x0" ? info.command : null),
       slot: record.kind.indexOf("kvm_memory") === 0 ? info.slot : null,
       flags: info.flags || fault.flags || null,
-      result: /exit|return|complete/.test(record.kind) ? info.result : null,
+      result: record.result || (/exit|return|complete|end/.test(record.kind) ? info.result : null),
+      interface: record.interface || null,
       HVA: address.hva !== "0x0" ? address.hva : null,
       GPA: address.gpa !== "0x0" ? address.gpa : null,
       IOVA: address.iova !== "0x0" || /iommu|vfio_dma/.test(record.kind) ? address.iova : (iommu.iova !== "0x0" ? iommu.iova : fault.iova),
@@ -1427,33 +1518,40 @@ import {
       task: context.comm,
       pid: context.pid,
       tid: context.tid,
-      time_ns: record.time_ns
     };
+  }
+
+  function renderInspectorGrid(id, fields) {
+    byId(id).innerHTML = Object.keys(fields).filter(function(key) {
+      return fields[key] !== undefined && fields[key] !== null && fields[key] !== "";
+    }).map(function(key) {
+      return '<div><small>' + escapeHtml(key) + '</small><b title="' + escapeHtml(fields[key]) + '">' + escapeHtml(fields[key]) + '</b></div>';
+    }).join("");
   }
 
 
   function renderInspector(item) {
     var record;
     var fields;
+    var origin;
 
     if (!item) {
+      byId("event-origin").innerHTML = "";
       byId("fields").innerHTML = "";
-      byId("source-badge").textContent = "no selection";
-      byId("event-title").textContent = "select a boundary";
-      byId("selected-time").textContent = "t = —";
       return;
     }
     record = item.record;
-    fields = selectedPhase === "P" ? preludeFields(record) : phaseAFields(item);
-
-    byId("fields").innerHTML = Object.keys(fields).filter(function(key) {
-      return fields[key] !== undefined && fields[key] !== null && fields[key] !== "";
-    }).map(function(key) {
-      return '<dt>' + escapeHtml(key) + '</dt><dd title="' + escapeHtml(fields[key]) + '">' + escapeHtml(fields[key]) + '</dd>';
-    }).join("");
-    byId("source-badge").textContent = item.architectural ? "architecture" : (item.scope === "guest" ? "guest" : "host / device");
-    byId("event-title").textContent = item.label;
-    byId("selected-time").textContent = record ? record.canonical.clock_domain + " + " + record.time_ns + " ns" : "architectural path";
+    fields = phaseAFields(item);
+    origin = {};
+    ["mechanism", "hook", "CPU", "task"].forEach(function(key) {
+      if (fields[key] !== undefined && fields[key] !== null && fields[key] !== "")
+        origin[key] = fields[key];
+      delete fields[key];
+    });
+    if (item.architectural)
+      origin.mechanism = "architecture";
+    renderInspectorGrid("event-origin", origin);
+    renderInspectorGrid("fields", fields);
   }
 
   function selectRecord(index) {
@@ -1463,28 +1561,50 @@ import {
       return;
     selectedIndex = Math.max(0, Math.min(phaseItems.length - 1, index));
     item = phaseItems[selectedIndex];
-    if (selectedPhase === "P")
-      renderPrelude(item.record);
-    else
-      renderPhaseA();
+    renderPhaseA();
     renderInspector(item);
     renderRoadmap();
-    byId("counter").textContent = (selectedIndex + 1) + " / " + phaseItems.length;
+    byId("counter").textContent = (selectedIndex + 1).toLocaleString() + " / " + phaseItems.length.toLocaleString();
+    byId("scrub").max = Math.max(phaseItems.length - 1, 0);
+    byId("scrub").value = selectedIndex;
   }
 
   function selectPhase(phase) {
+    var scopeItems;
+
+    if (transport)
+      transport.stop();
     selectedPhase = phase;
-    byId("prelude-state").classList.toggle("hidden", phase !== "P");
-    byId("phase-a-state").classList.toggle("hidden", phase !== "A");
-    byId("machine-title").textContent = phase === "P" ? "Assignment prelude" : "DMA remapping";
-    byId("machine-caption").textContent = phase === "P" ? "One physical function changing software ownership." : "Address-space registration, DMA ownership, interrupt remapping, and invalidation.";
-    phaseItems = phase === "P" ? preludeItems() : phaseAItems();
-    if (phase === "A") {
-      renderMapSelector();
-      renderChunks();
-    }
+    scopeItems = visibleItemsFor(phase);
+    byId("lifelines-caption").textContent = "Phase " + ({ S: "A", W: "B", C: "C" }[phase]);
+    phaseItems = scopeItems;
+    renderMapSelector();
+    renderChunks();
     selectedIndex = 0;
+    renderEventScope();
     selectRecord(0);
+  }
+
+  function selectEventScope(scope) {
+    var current = phaseItems[selectedIndex];
+    var sequence = current && recordSequence(current.record);
+    var phase = selectedPhase;
+    var available;
+
+    eventScope = scope;
+    available = ["S", "W", "C"].filter(function(candidate) {
+      return visibleItemsFor(candidate).length > 0;
+    });
+    if (available.indexOf(phase) < 0)
+      phase = available.indexOf("W") >= 0 ? "W" : (available[0] || "S");
+    selectPhase(phase);
+    if (sequence != null) {
+      var matchingIndex = phaseItems.findIndex(function(item) {
+        return recordSequence(item.record) === sequence;
+      });
+      if (matchingIndex >= 0)
+        selectRecord(matchingIndex);
+    }
   }
 
 
@@ -1494,26 +1614,40 @@ import {
   byId("next").onclick = function() {
     selectRecord(selectedIndex + 1);
   };
+  byId("play").onclick = function() {
+    transport.toggle();
+  };
+  byId("scrub").oninput = function() {
+    selectRecord(Number(this.value));
+  };
+  transport = playback(function() {
+    if (!phaseItems.length || selectedIndex >= phaseItems.length - 1)
+      return false;
+    selectRecord(selectedIndex + 1);
+  });
   byId("map-select").onchange = function() {
     selectedTransaction = Number(this.value);
     selectedChunk = selectedTransaction === workloadTransaction ? workloadChunkIndex(mapTransactions[selectedTransaction]) : 0;
-    phaseItems = phaseAItems();
     renderChunks();
-    selectedIndex = phaseItems.findIndex(function(item) {
-      return item.record === mapTransactions[selectedTransaction].enter;
-    });
-    selectRecord(selectedIndex < 0 ? 0 : selectedIndex);
+    renderState(phaseItems[selectedIndex]);
   };
+  byId("event-scope").querySelectorAll("[data-event-scope]").forEach(function(button) {
+    button.onclick = function() {
+      selectEventScope(button.dataset.eventScope);
+    };
+  });
 
   mountView('virt-vtd', capture => {
     assignmentRecords = capture.events.filter(e => e.source.mechanism === 'sysfs').map(e => ({
       ...observation(capture, e),
-      source: e.source.domain + '-ebpf'
+      source: e.source.domain + '-sysfs'
+    }));
+    lifecycleRecords = capture.events.filter(e => e.source.mechanism === 'framework').map(e => ({
+      ...observation(capture, e),
+      source: e.source.domain + '-framework'
     }));
     const host = capture.events.filter(e => e.source.mechanism === 'ebpf' && e.source.domain === 'host');
     const guest = capture.events.filter(e => e.source.mechanism === 'ebpf' && e.source.domain === 'guest');
-    hostMeta = host.find(e => e.kind === 'collector_metadata')?.data || {};
-    guestMeta = guest.find(e => e.kind === 'collector_metadata')?.data || {};
     ebpfRecords = host.filter(e => !e.kind.startsWith('collector_')).map(e => ({
       ...observation(capture, e),
       source: e.source.domain + '-ebpf'
@@ -1522,10 +1656,16 @@ import {
       ...observation(capture, e),
       source: e.source.domain + '-ebpf'
     }));
-    setupFacts = {};
     if (!ebpfRecords.length || !guestRecords.length) throw Error('VT-d needs host and guest observations');
+    clockAnchors = {};
+    capture.events.forEach(function(event) {
+      var anchor = event.data && event.data.state && event.data.state.clock_anchor;
+      if (anchor && anchor.monotonic_ns != null && anchor.realtime_ns != null)
+        clockAnchors[event.source.domain] = { monotonic: BigInt(anchor.monotonic_ns), realtime: BigInt(anchor.realtime_ns) };
+    });
     buildTransactions();
-    renderSetupFacts();
-    selectPhase('A');
+    buildCapturedItems(capture.events);
+    buildWorkloadScope();
+    selectPhase('S');
   });
 })();

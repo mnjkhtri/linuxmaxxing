@@ -15,6 +15,7 @@ from framework.core.runtime import (
     atomic_json,
     command,
     digest,
+    load_experiment_run,
     manifest,
     read_json,
 )
@@ -295,29 +296,12 @@ def build(name):
     return target
 
 
-def prepare_vtd():
+def prepare(name):
     doctor()
-    if "vmx" not in Path("/proc/cpuinfo").read_text():
-        raise LabError("VT-d preparation supports Intel hosts only")
-    groups = Path("/sys/kernel/iommu_groups")
-    if groups.exists() and any(groups.iterdir()):
-        from framework.specifics.vtd import audit
-
-        management, _, pci = audit()
-        print(
-            "VT-d candidate %s; management interface %s remains protected"
-            % (pci.name, management.name)
-        )
-        return
-    command(["sudo", "-n", "mkdir", "-p", "/etc/default/grub.d"])
-    content = b'GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} intel_iommu=on iommu=pt"\n'
-    command(
-        ["sudo", "-n", "tee", "/etc/default/grub.d/90-linuxmaxxing.cfg"], input=content
-    )
-    command(["sudo", "-n", "update-grub"], timeout=120, capture=False)
-    print(
-        "IOMMU boot configuration installed. Reboot the node, then repeat ./lab.sh prepare-vtd."
-    )
+    run_module = load_experiment_run(name)
+    if not hasattr(run_module, "prepare"):
+        raise LabError(name + " does not need an explicit preparation step")
+    run_module.prepare()
 
 
 # Executed using the node's system Python, before project dependencies exist.
@@ -410,6 +394,12 @@ class Remote:
             "BatchMode=yes",
             "-o",
             "ConnectTimeout=10",
+            "-o",
+            "ControlMaster=auto",
+            "-o",
+            "ControlPersist=600",
+            "-o",
+            "ControlPath=" + str(Path.home() / ".ssh" / "linuxmaxxing-%C"),
             "-o",
             "ServerAliveInterval=10",
             "-o",

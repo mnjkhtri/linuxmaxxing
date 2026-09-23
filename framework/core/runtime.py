@@ -3,11 +3,11 @@
 import contextlib
 import fcntl
 import hashlib
+import importlib.util
 import json
 import os
 import re
 import select
-import shlex
 import signal
 import subprocess
 import sys
@@ -21,15 +21,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-NAMES = (
-    "scheduler",
-    "kapi",
-    "io",
-    "memory",
-    "virt-ept",
-    "virt-io",
-    "virt-virtio",
-    "virt-vtd",
+NAMES = tuple(
+    sorted(
+        path.parent.name
+        for path in (ROOT / "experiments").glob("*/experiment.json")
+    )
 )
 
 
@@ -62,6 +58,20 @@ def manifest(name):
     if result["name"] != name:
         raise LabError("manifest name does not match directory")
     return result
+
+
+def load_experiment_run(name):
+    """Load the experiment-owned run sequence and evidence rules."""
+    path = ROOT / "experiments" / name / "_run.py"
+    if not path.is_file():
+        raise LabError("experiment is missing its local runner: " + name)
+    module_name = "linuxmaxxing_runner_" + name.replace("-", "_")
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise LabError("cannot load experiment runner: " + name)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def command(argv, *, cwd=None, timeout=120, input=None, capture=True, env=None):
@@ -242,8 +252,6 @@ def observation(experiment, collector, domain, raw, acquired_ns):
         kind = "collector_metadata"
     elif raw.get("kind") == "capture_summary":
         kind = "collector_summary"
-    if raw.get("kind") == "snapshot" and experiment == "memory":
-        kind = "memory_snapshot"
     context = dict(raw.get("context", {}))
     context["phase"] = info.get("phase_seq", info.get("phase", context.get("phase")))
     if raw.get("kind") == "phase":
@@ -531,7 +539,7 @@ class Capture:
 
 
 def validate_evidence(name, events):
-    """Apply experiment-specific scientific assertions after envelope checks."""
+    """Apply shared capture and required-evidence checks after envelope checks."""
     cfg = manifest(name)
     kinds = Counter(e["kind"] for e in events)
 
@@ -586,152 +594,6 @@ def validate_evidence(name, events):
             if event["kind"] == kind
             and (mechanism is None or event["source"]["mechanism"] == mechanism)
         ]
-
-    if name == "scheduler":
-        for event in selected("enqueue_entity"):
-            runqueue = event["data"]["state"]["runqueue"]
-            require(
-                int(runqueue["node_count"]) == len(runqueue["nodes"]),
-                "scheduler node count differs from payload",
-            )
-        require(
-            selected("sched_process_fork", "tracefs")
-            and selected("sched_switch", "tracefs"),
-            "missing scheduler lifecycle context",
-        )
-    elif name == "memory":
-        phases = selected("phase", "workload")
-        snapshots = selected("memory_snapshot", "ebpf")
-        require(
-            [event["context"]["phase"] for event in phases]
-            == [event["context"]["phase"] for event in snapshots],
-            "memory phases and snapshots do not pair",
-        )
-        require(phases, "memory workload emitted no phases")
-        for stream in (phases, snapshots):
-            times = [int(event["timestamp_ns"]) for event in stream]
-            require(times == sorted(times), "memory producer clock went backwards")
-    elif name == "io":
-        phases = selected("phase", "workload")
-        phase_names = [event["data"]["event_info"].get("phase") for event in phases]
-        phase_actions = [event["data"]["event_info"].get("action") for event in phases]
-        phase_contract = [str(phase["id"]) for phase in cfg.get("phases", [])]
-        expected_markers = [
-            phase_id for phase_id in phase_contract for _ in ("begin", "end")
-        ]
-        expected_actions = [
-            action for _ in phase_contract for action in ("begin", "end")
-        ]
-        require(
-            len(phases) == len(expected_markers),
-            "IO workload must emit one begin/end pair for each canonical phase",
-        )
-        require(
-            phase_contract == ["driver_initialization", "factorial", "two_way_dma"],
-            "IO manifest must define exactly three canonical phases",
-        )
-        require(
-            phase_names == expected_markers,
-            "IO workload phases are not ordered as driver initialization, factorial, two-way DMA",
-        )
-        require(
-            phase_actions == expected_actions,
-            "IO workload phase boundaries are incomplete",
-        )
-        fields = [
-            event["data"]["fields"] for event in selected("qedu_dma_submit", "tracefs")
-        ]
-        require(
-            {value["direction"] for value in fields}
-            >= {"DMA_TO_DEVICE", "DMA_FROM_DEVICE"},
-            "both DMA directions must be observed",
-        )
-        probe_apis = [
-            event["data"]["fields"] for event in selected("qedu_probe_api", "tracefs")
-        ]
-        require(
-            any(
-                value["api"] == "qedu_probe"
-                and value["resource"] == "bound_qedu_device"
-                for value in probe_apis
-            ),
-            "EDU probe did not finish",
-        )
-        handoffs = [
-            event["data"]["fields"]
-            for event in selected("qedu_dma_work_queue", "tracefs")
-        ]
-        require(
-            {value["work_kind"] for value in handoffs if value["queued"] == "1"}
-            >= {"ADVANCE", "FINISH"},
-            "EDU IRQ-to-worker handoff incomplete",
-        )
-    elif name == "kapi":
-        require(
-            any(
-                event["data"].get("domain") == "module"
-                for event in selected("ready", "module")
-            ),
-            "module never reached ready",
-        )
-    elif name == "virt-ept":
-        for kind, field, count in (
-            ("control", "control", 5),
-            ("memslot", "memslot", 6),
-        ):
-            begins = selected(kind + "_begin", "ebpf")
-            ends = selected(kind + "_end", "ebpf")
-            require(len(begins) == len(ends) == count, "wrong EPT " + kind + " count")
-            require(
-                {event["data"][field]["operation_id"] for event in begins}
-                == {event["data"][field]["operation_id"] for event in ends},
-                "unpaired EPT " + kind,
-            )
-            require(
-                all(event["data"][field]["result"] == "0" for event in ends),
-                "failed EPT " + kind,
-            )
-    elif name == "virt-virtio":
-        begins = selected("queue_backend_begin", "ebpf")
-        ends = selected("queue_backend_end", "ebpf")
-        require(
-            len(begins) == len(ends) == 3, "expected three virtqueue backend operations"
-        )
-        require(
-            len(selected("ioeventfd_kick", "ebpf"))
-            == len(selected("irqfd_signal", "ebpf"))
-            == 1,
-            "missing eventfd handoff",
-        )
-        require(
-            [event["data"]["state"]["used"]["idx"] for event in ends]
-            == ["1", "5", "6"],
-            "virtqueue completion indices differ",
-        )
-    elif name == "virt-vtd":
-        lifecycle = [
-            event["kind"] for event in events if event["source"]["mechanism"] == "sysfs"
-        ]
-        require(
-            lifecycle
-            == [
-                "host_owns_device",
-                "vfio_bound",
-                "qemu_attached",
-                "guest_visible",
-                "host_reclaims_device",
-            ],
-            "incomplete PCI assignment lifetime",
-        )
-        for event in selected("guest_ixgbe_run_loopback_exit", "ebpf"):
-            require(
-                event["data"]["event_info"]["result"] == "0", "guest loopback failed"
-            )
-        require(
-            len(selected("guest_irq_handler_entry"))
-            == len(selected("guest_irq_handler_exit")),
-            "unpaired guest IRQ boundaries",
-        )
 
     enters = selected("sys_enter_ioctl", "ebpf")
     exits = selected("sys_exit_ioctl", "ebpf")
@@ -1023,38 +885,6 @@ def decode(kind, payload, key_values):
     return dict(prefix, **fields)
 
 
-def module_record(line):
-    """Normalize a structured KAPI printk line into the capture envelope."""
-    match = re.search(r"\[\s*(\d+\.\d+)\]\s+KAPI_EVT (.*)", line)
-    if not match:
-        raise LabError("invalid KAPI log record")
-    data = {}
-    for token in shlex.split(match[2]):
-        key, sep, value = token.partition("=")
-        if not sep or key in data:
-            raise LabError("invalid KAPI field: " + token)
-        if re.fullmatch(r"[0-9a-f]{16}", value):
-            value = "0x" + value if int(value, 16) else None
-        data[key] = value
-    return record(
-        "kapi",
-        "module",
-        "module",
-        "guest",
-        data["action"],
-        int(Decimal(match[1]) * 1_000_000_000),
-        data,
-        hook="kapi:printk",
-        context={
-            "phase": data["phase"],
-            "cpu": int(data["cpu"]) if "cpu" in data else None,
-            "pid": int(data["tgid"]) if "tgid" in data else None,
-            "tid": int(data["pid"]) if "pid" in data else None,
-            "comm": data.get("comm"),
-        },
-    )
-
-
 def stopped(process, timeout):
     end = time.monotonic() + timeout
     while time.monotonic() < end:
@@ -1077,7 +907,7 @@ class Session:
             self.runtime = Path(shared)
             self.runtime.mkdir(parents=True, exist_ok=True)
         else:
-            scratch_parent = ROOT / "build" if name == "virt-vtd" else None
+            scratch_parent = ROOT / self.cfg["scratch_parent"] if self.cfg.get("scratch_parent") else None
             self._scratch = tempfile.TemporaryDirectory(
                 prefix="linuxmaxxing-%s-" % name, dir=scratch_parent
             )
@@ -1135,53 +965,15 @@ class Session:
 
         self.stack.callback(remove)
 
-    def run_workload(self):
+    def start_workload(self):
         self.capture.lifecycle("workload_started", {"command": self.cfg["workload"]})
-        proc = self.process(self.cfg["workload"], "workload")
-        if self.name == "scheduler":
-            stopped(proc, self.cfg["timeouts"]["ready_s"])
-            for event in self.trace.enabled:
-                if event == "sched/sched_switch":
-                    self.trace.filter(
-                        event, 'prev_comm ~ "sched*" || next_comm ~ "sched*"'
-                    )
-                elif event == "sched/sched_process_fork":
-                    self.trace.filter(
-                        event, 'parent_comm ~ "sched*" || child_comm ~ "sched*"'
-                    )
-                else:
-                    self.trace.filter(event, 'comm ~ "sched*"')
-            proc.signal(signal.SIGCONT)
-        elif self.name == "io":
-            stopped(proc, self.cfg["timeouts"]["ready_s"])
-            pid = proc.child.pid
-            for event in self.trace.enabled:
-                if event.startswith("syscalls/"):
-                    self.trace.filter(event, "common_pid == %d" % pid)
-            self.trace.filter(
-                "sched/sched_switch",
-                'prev_pid == %d || next_pid == %d || prev_comm ~ "kworker*" || next_comm ~ "kworker*"'
-                % (pid, pid),
-            )
-            self.trace.filter("sched/sched_wakeup", "pid == %d" % pid)
-            proc.signal(signal.SIGCONT)
-        elif self.name == "memory":
-            # The MM observer is already keyed to workload_mm. Keep the
-            # supplemental trace stream equally narrow so background reclaim
-            # and allocator activity cannot dominate the capture.
-            pid = proc.child.pid
-            for event in self.trace.enabled:
-                self.trace.filter(event, "common_pid == %d" % pid)
+        return self.process(self.cfg["workload"], "workload")
+
+    def wait_workload(self, proc):
         proc.wait(
             self.cfg["timeouts"]["workload_s"], peers=[p for p, _ in self.observers]
         )
         self.capture.lifecycle("workload_finished", {"exit_code": 0})
-        if self.name == "scheduler":
-            for observer, _ in self.observers:
-                observer.signal(signal.SIGUSR1)
-            for event in self.trace.enabled:
-                self.trace.filter(event, "0")
-            time.sleep(self.cfg.get("post_workload_grace_ms", 0) / 1000)
 
     def collect(self):
         for proc, label in self.observers:
@@ -1215,81 +1007,14 @@ class Session:
                 "collector_finished",
                 {"collector": "tracefs", "dropped": 0, "failures": 0},
             )
-        if self.name in ("memory", "io"):
-            for raw in ndjson(self.runtime / "workload.ndjson"):
+        workload_path = self.runtime / "workload.ndjson"
+        if workload_path.exists():
+            for raw in ndjson(workload_path):
                 self.capture.events.append(
                     observation(self.name, "workload", self.domain, raw, self.acquired)
                 )
 
-    def io_prepare(self):
-        self.module("qedu_trace")
-        self.trace_start()
-        devices = [
-            p
-            for p in Path("/sys/bus/pci/devices").iterdir()
-            if (p / "vendor").read_text().strip() == "0x1234"
-            and (p / "device").read_text().strip() == "0x11e8"
-        ]
-        if len(devices) != 1:
-            raise LabError("expected exactly one QEMU EDU device")
-        pci = devices[0]
-        irq = (pci / "irq").read_text().strip()
-        self.trace.filter("dma/dma_alloc", 'device == "%s"' % pci.name)
-        for event in (
-            "irq/irq_handler_entry",
-            "irq/irq_handler_exit",
-            "irq_vectors/vector_alloc",
-            "irq_vectors/vector_config",
-        ):
-            self.trace.filter(event, "irq == " + irq)
-        self.module("qedu")
-        timeout = Path("/sys/class/misc/qedu/timeout_ms")
-        previous = timeout.read_text()
-        self.stack.callback(timeout.write_text, previous)
-        timeout.write_text("1500\n")
-        symbols = {
-            fields[2]: fields[0]
-            for line in Path("/proc/kallsyms").read_text().splitlines()
-            if len(fields := line.split()) >= 3
-        }
-        names = ("qedu_dma_advance_work", "qedu_dma_finish_work")
-        if not all(symbols.get(n, "0").strip("0") for n in names):
-            raise LabError("EDU worker symbols are unavailable")
-        expr = " || ".join("function == 0x" + symbols[n] for n in names)
-        for event in (
-            "workqueue/workqueue_activate_work",
-            "workqueue/workqueue_execute_start",
-            "workqueue/workqueue_execute_end",
-        ):
-            self.trace.filter(event, expr)
-        self.trace.filter("workqueue/workqueue_queue_work", 'workqueue == "qedu_dma"')
-
-    def kapi(self):
-        marker = "LAB_KAPI_BEGIN_%d_%d" % (os.getpid(), self.acquired)
-        Path("/dev/kmsg").write_text("<6>" + marker + "\n")
-        self.capture.lifecycle("collector_ready", {"collector": "module"})
-        self.capture.lifecycle(
-            "workload_started", {"command": ["/sbin/insmod", "kapi.ko"]}
-        )
-        # dmesg is bounded by an explicit marker; no global log clearing.
-        self.module("kapi")
-        command(["/sbin/rmmod", "kapi"])
-        # Successful explicit teardown disarms only this module callback.
-        # The callback checks ownership state again on cleanup.
-        self.capture.lifecycle("workload_finished", {"exit_code": 0})
-        lines = command(["dmesg"]).decode().splitlines()
-        active = False
-        for line in lines:
-            if marker in line:
-                active = True
-                continue
-            if active and "KAPI_EVT " in line:
-                self.capture.events.append(module_record(line))
-        self.capture.lifecycle(
-            "collector_finished", {"collector": "module", "dropped": 0, "failures": 0}
-        )
-
-    def execute(self):
+    def execute(self, workflow):
         if os.geteuid() != 0:
             raise LabError(
                 "experiment worker requires root in its execution environment"
@@ -1305,23 +1030,7 @@ class Session:
             },
         )
         try:
-            if self.name == "virt-vtd":
-                from framework.specifics.vtd import run
-
-                run(self)
-            elif self.name == "kapi":
-                self.kapi()
-            else:
-                if self.name == "memory":
-                    command(["/sbin/swapon", "/dev/vdb"])
-                if self.name == "io":
-                    self.io_prepare()
-                else:
-                    self.trace_start()
-                if self.cfg["observer"]:
-                    self.observer()
-                self.run_workload()
-                self.collect()
+            workflow(self)
             if self.trace:
                 self.capture.events[0]["data"]["enabled"] = self.trace.enabled
                 self.capture.events[0]["data"]["skipped"] = self.trace.skipped

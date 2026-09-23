@@ -9,7 +9,21 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from framework.core.runtime import Capture, LabError, Process, atomic_bytes, check_type, lock, ndjson, publish, record, trace_record, validate
+from framework.core.runtime import (
+    Capture,
+    LabError,
+    NAMES,
+    Process,
+    atomic_bytes,
+    check_type,
+    load_experiment_run,
+    lock,
+    ndjson,
+    publish,
+    record,
+    trace_record,
+    validate,
+)
 from framework.lab.environment import Remote
 
 
@@ -63,9 +77,9 @@ class ContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             cap = fixture(Path(directory))
             validate(cap.path, "scheduler")
-            cap.events = [e for e in cap.events if e["kind"] != "sched_switch"]
+            cap.events = [e for e in cap.events if e["kind"] != "enqueue_entity"]
             cap.save()
-            with self.assertRaisesRegex(LabError, "lifecycle context"):
+            with self.assertRaisesRegex(LabError, "missing enqueue_entity"):
                 validate(cap.path, "scheduler")
             cap = fixture(Path(directory))
             next(e for e in cap.events if e["kind"] == "collector_finished")["data"]["dropped"] = "1"
@@ -101,6 +115,15 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(event["data"]["fields"], {"vcpu": "0", "rip": "0xabc"})
         with self.assertRaises(LabError):
             trace_record("virt-ept", "host", "vmm-42 [003] ..... 1.234: kvm_entry: new incompatible format\n")
+
+
+class ExperimentBoundaryTests(unittest.TestCase):
+    def test_every_experiment_owns_its_run_sequence(self):
+        for name in NAMES:
+            with self.subTest(experiment=name):
+                module = load_experiment_run(name)
+                self.assertTrue(callable(module.main))
+                self.assertTrue(callable(module.run))
 
 
 class ProcessTests(unittest.TestCase):

@@ -44,7 +44,7 @@ virt-virtio  lab server host: virtqueue and eventfd transitions
 virt-vtd     lab server host plus assigned guest: VT-d/VFIO and guest DMA
 ```
 
-Each experiment is self-contained under `experiments/<name>/`: its manifest, payload contract, build files, workload, observer, and resource-specific source live together. `common/` contains only reusable observer/runtime code. `framework/` contains the generic capture and execution machinery.
+Each experiment is self-contained under `experiments/<name>/`. Start at its `_run.py` to see the exact execution order and experiment-specific evidence checks, then follow its manifest, workload, observer, and BPF/C sources. `common/` and `framework/` provide shared observer and capture/transport primitives; they do not decide an experiment's sequence.
 
 Use one experiment at a time while developing:
 
@@ -55,7 +55,7 @@ Use one experiment at a time while developing:
 ./lab.sh validate memory
 ```
 
-`virt-vtd` requires an Intel host with an unused, isolated, FLR-capable NIC. If IOMMU is not enabled, run `./lab.sh prepare-vtd`, allow the node to reboot, and run it again. The management interface is audited and must remain available before, during, and after assignment.
+`virt-vtd` requires an Intel host with an unused, isolated, FLR-capable NIC. If IOMMU is not enabled, run `./lab.sh prepare virt-vtd`, allow the node to reboot, and run it again. The management interface is audited and must remain available before, during, and after assignment.
 
 The custom kernel remains a guest kernel. The lab server supplies the Linux host and KVM capability; QEMU supplies the study guest for the guest experiments. A fresh overlay and swap disk are created per execution, while the pinned base image and kernel build are reused on that server.
 

@@ -1,4 +1,4 @@
-"""VT-d workload hooks. Process, observer, validation, and publication remain shared."""
+"""VT-d run sequence, guest workload, and capture-specific checks."""
 
 import json
 import shlex
@@ -26,7 +26,113 @@ def driver(pci):
     return path.resolve().name if path.exists() else None
 
 
+SUPPORTED_DRIVERS = {"igb", "ixgbe"}
+
+
+class DeviceOwnership:
+    """Temporarily hand an audited NIC to VFIO and restore its host driver."""
+
+    def __init__(self, session, pci, management, management_pci):
+        self.session = session
+        self.pci = pci
+        self.management = management
+        self.management_pci = management_pci
+        self.original_driver = driver(pci)
+        self.management_driver = driver(management_pci)
+        override = (pci / "driver_override").read_text()
+        self.original_override = "\n" if override.strip() == "(null)" else override
+        self.active = False
+
+    def check_management(self):
+        routes = json.loads(command(["ip", "-j", "route", "show", "default"]))
+        if (
+            not routes
+            or routes[0].get("dev") != self.management.name
+            or driver(self.management_pci) != self.management_driver
+        ):
+            raise LabError("management interface changed during assignment")
+
+    def record(self, kind):
+        # These controller markers describe ownership changes, not kernel tracepoints.
+        self.session.capture.events.append(
+            record(
+                "virt-vtd",
+                "assignment",
+                "sysfs",
+                "host",
+                kind,
+                time.monotonic_ns(),
+                {
+                    "host_bdf": self.pci.name,
+                    "host_driver": driver(self.pci),
+                    "management_bdf": self.management_pci.name,
+                },
+                hook="pci:driver",
+            )
+        )
+
+    def bind_vfio(self):
+        self.active = True
+        # This reserves the device for passthrough; QEMU attaches it to the VM later.
+        (self.pci / "driver_override").write_text("vfio-pci\n")
+        (self.pci / "driver/unbind").write_text(self.pci.name)
+        Path("/sys/bus/pci/drivers/vfio-pci/bind").write_text(self.pci.name)
+        if driver(self.pci) != "vfio-pci":
+            raise LabError("VFIO bind failed")
+        self.check_management()
+
+    def restore(self):
+        if not self.active:
+            return
+        current = driver(self.pci)
+        if current and current != self.original_driver:
+            # Detach VFIO first, then return the device to its original host driver.
+            (self.pci / "driver/unbind").write_text(self.pci.name)
+        (self.pci / "driver_override").write_text(self.original_override)
+        if driver(self.pci) != self.original_driver:
+            (Path("/sys/bus/pci/drivers") / self.original_driver / "bind").write_text(
+                self.pci.name
+            )
+        if driver(self.pci) != self.original_driver:
+            raise LabError("failed to restore " + self.pci.name)
+        self.check_management()
+        self.record("host_reclaims_device")
+        self.active = False
+
+
+def main(domain):
+    if domain == "guest":
+        guest_main()
+        return
+    if domain != "host":
+        raise LabError("VT-d worker domain must be host or guest")
+    Session("virt-vtd", domain).execute(run)
+
+
+def prepare():
+    if "vmx" not in Path("/proc/cpuinfo").read_text():
+        raise LabError("VT-d preparation supports Intel hosts only")
+    groups = Path("/sys/kernel/iommu_groups")
+    if groups.exists() and any(groups.iterdir()):
+        management, _, pci = audit()
+        print(
+            "VT-d candidate %s; management interface %s remains protected"
+            % (pci.name, management.name)
+        )
+        return
+    command(["sudo", "-n", "mkdir", "-p", "/etc/default/grub.d"])
+    content = b'GRUB_CMDLINE_LINUX_DEFAULT="${GRUB_CMDLINE_LINUX_DEFAULT} intel_iommu=on iommu=pt"\n'
+    command(
+        ["sudo", "-n", "tee", "/etc/default/grub.d/90-linuxmaxxing.cfg"], input=content
+    )
+    command(["sudo", "-n", "update-grub"], timeout=120, capture=False)
+    print(
+        "IOMMU boot configuration installed. Reboot the node, then repeat ./lab.sh prepare virt-vtd."
+    )
+
+
 def audit():
+    """Pick an idle, isolated NIC without risking the host management path."""
     routes = json.loads(command(["ip", "-j", "route", "show", "default"]))
     if not routes or "dev" not in routes[0]:
         raise LabError("cannot identify management interface")
@@ -43,8 +149,9 @@ def audit():
         ):
             continue
         pci = (net / "device").resolve()
-        if driver(pci) != "ixgbe" or not (pci / "iommu_group").exists():
+        if driver(pci) not in SUPPORTED_DRIVERS or not (pci / "iommu_group").exists():
             continue
+        # Any configured address or route means the interface may carry host traffic.
         if any(
             item.get("addr_info")
             for item in json.loads(
@@ -55,6 +162,7 @@ def audit():
         if command(["ip", "route", "show", "dev", net.name]).strip():
             continue
         group = (pci / "iommu_group").resolve()
+        # VFIO needs an isolated IOMMU group, and FLR gives us a device-level reset.
         if (
             group == (mgmt_pci / "iommu_group").resolve()
             or len(list((group / "devices").iterdir())) != 1
@@ -70,7 +178,7 @@ def audit():
         candidates.append(pci)
     if not candidates:
         raise LabError(
-            "no unused, isolated, FLR-capable ixgbe NIC; use an eligible Intel lab server with IOMMU enabled"
+            "no unused, isolated, FLR-capable Intel NIC (igb/ixgbe); use an eligible Intel lab server with IOMMU enabled"
         )
     return management, mgmt_pci, sorted(candidates)[0]
 
@@ -83,13 +191,10 @@ def gate(process, enabled):
 def run(session):
     if "vmx" not in Path("/proc/cpuinfo").read_text():
         raise LabError("VT-d experiment requires Intel VMX")
+    # Keep the default-route NIC on its host driver; assign only a spare isolated NIC.
     management, mgmt_pci, pci = audit()
-    original_driver = driver(pci)
-    management_driver = driver(mgmt_pci)
-    original_override = (pci / "driver_override").read_text()
-    original_override = (
-        "\n" if original_override.strip() == "(null)" else original_override
-    )
+    ownership = DeviceOwnership(session, pci, management, mgmt_pci)
+    # Load VFIO's PCI driver; the NIC is still owned by its normal host driver here.
     command(["modprobe", "vfio-pci"])
     command(["modprobe", "vfio_iommu_type1"])
     if not Path("/sys/kernel/tracing/events").exists():
@@ -142,68 +247,15 @@ def run(session):
     if overlay.exists():
         overlay.unlink()
     command(["qemu-img", "create", "-f", "qcow2", "-F", "qcow2", "-b", image, overlay])
+    # Attach before QEMU starts so the host trace sees KVM/VFIO setup calls.
     observer = session.observer()
-    changed = False
-
-    def check_management():
-        routes = json.loads(command(["ip", "-j", "route", "show", "default"]))
-        if (
-            not routes
-            or routes[0].get("dev") != management.name
-            or driver(mgmt_pci) != management_driver
-        ):
-            raise LabError("management interface changed during assignment")
-
-    def assignment(kind):
-        session.capture.events.append(
-            record(
-                "virt-vtd",
-                "assignment",
-                "sysfs",
-                "host",
-                kind,
-                time.monotonic_ns(),
-                {
-                    "host_bdf": pci.name,
-                    "host_driver": driver(pci),
-                    "management_bdf": mgmt_pci.name,
-                },
-                hook="pci:driver",
-            )
-        )
-
-    def restore():
-        nonlocal changed
-        if changed:
-            current = driver(pci)
-            if current and current != original_driver:
-                (pci / "driver/unbind").write_text(pci.name)
-            (pci / "driver_override").write_text(original_override)
-            if driver(pci) != original_driver:
-                (Path("/sys/bus/pci/drivers") / original_driver / "bind").write_text(
-                    pci.name
-                )
-            if driver(pci) != original_driver:
-                raise LabError("failed to restore " + pci.name)
-            check_management()
-            assignment("host_reclaims_device")
-            changed = False
-
     # Register before the first write. QEMU callbacks are registered later and run first.
-    session.stack.callback(restore)
-    check_management()
-    assignment("host_owns_device")
-    session.capture.lifecycle(
-        "workload_started", {"command": ["vfio-assign", pci.name]}
-    )
-    changed = True
-    (pci / "driver_override").write_text("vfio-pci\n")
-    (pci / "driver/unbind").write_text(pci.name)
-    Path("/sys/bus/pci/drivers/vfio-pci/bind").write_text(pci.name)
-    if driver(pci) != "vfio-pci":
-        raise LabError("VFIO bind failed")
-    check_management()
-    assignment("vfio_bound")
+    session.stack.callback(ownership.restore)
+    ownership.check_management()
+    ownership.record("host_owns_device")
+    # Hand ownership from the host NIC driver to vfio-pci through sysfs.
+    ownership.bind_vfio()
+    ownership.record("vfio_bound")
     argv = [
         "qemu-system-x86_64",
         "-machine",
@@ -218,10 +270,12 @@ def run(session):
         "if=virtio,format=qcow2,file=" + str(overlay),
         "-drive",
         "if=virtio,format=raw,media=cdrom,file=" + str(seed),
+        # Keep guest SSH on an emulated management NIC, separate from passthrough.
         "-netdev",
         "user,id=mgmt,hostfwd=tcp:127.0.0.1:2222-:22",
         "-device",
         "virtio-net-pci,netdev=mgmt",
+        # QEMU attaches the already vfio-pci-owned host NIC to this VM.
         "-device",
         "vfio-pci,host=" + pci.name,
         "-virtfs",
@@ -237,6 +291,7 @@ def run(session):
         "-no-reboot",
     ]
     vm = session.process(argv, "qemu", cwd=ROOT)
+    session.capture.lifecycle("qemu_started", {"command": argv})
     ssh = [
         "ssh",
         "-i",
@@ -260,11 +315,10 @@ def run(session):
         if vm.child.poll() is not None:
             raise LabError("VT-d guest failed to boot")
         try:
-            # The 9p mount is created by cloud-init as root and is intentionally
-            # not world-readable.  Probe it with the same privileged boundary
-            # used to launch the guest workload.
+            # The 9p mount is created by cloud-init as root and is intentionally not world-readable.
+            # Probe it with the same privileged boundary used to launch the guest workload.
             command(
-                ssh + ["sudo -n test -r /mnt/lab/framework/specifics/vtd.py"],
+                ssh + ["sudo -n test -r /mnt/lab/experiments/virt-vtd/_run.py"],
                 timeout=10,
             )
             break
@@ -272,37 +326,43 @@ def run(session):
             time.sleep(1)
     else:
         raise LabError("VT-d guest SSH did not become ready")
-    assignment("qemu_attached")
-    assignment("guest_visible")
+    # QEMU has started with the passthrough device; the guest OS can now enumerate it.
+    ownership.record("qemu_attached")
+    ownership.record("guest_visible")
+    # Host probes remain attached; this adds a clock marker around the guest run.
     gate(observer, 1)
     guest_scratch = "/mnt/lab/" + str(runtime.relative_to(ROOT))
     command(
         ssh
         + [
-            "sudo -n env %s python3 /mnt/lab/framework/specifics/vtd.py --guest"
+            "sudo -n env %s python3 /mnt/lab/experiments/virt-vtd/_run.py --guest"
             % shlex.quote("LAB_SHARED_SCRATCH=" + guest_scratch)
         ],
         timeout=300,
         capture=False,
     )
+    session.capture.lifecycle("cleanup_begin", {"reason": "guest workload complete"})
     gate(observer, 0)
     guest_events = list(ndjson(runtime / "guest-events.ndjson"))
     session.capture.events.extend(guest_events)
     vm.stop()
-    restore()
-    session.capture.lifecycle("workload_finished", {"exit_code": 0})
+    session.capture.lifecycle("qemu_stopped", {"reason": "guest workload complete"})
+    ownership.restore()
     session.collect()
 
 
 def guest_main():
     session = Session("virt-vtd", "guest")
+    # The assigned Intel NIC is distinct from QEMU's virtio management NIC.
     nets = [
         net
         for net in Path("/sys/class/net").iterdir()
-        if (net / "device").exists() and driver((net / "device").resolve()) == "ixgbe"
+        if (net / "device").exists()
+        and driver((net / "device").resolve()) in SUPPORTED_DRIVERS
     ]
     if len(nets) != 1:
-        raise LabError("guest requires exactly one assigned ixgbe interface")
+        raise LabError("guest requires exactly one assigned Intel igb/ixgbe interface")
+    nic_driver = driver((nets[0] / "device").resolve())
     if not Path("/sys/kernel/tracing/events").exists():
         command(["mount", "-t", "tracefs", "nodev", "/sys/kernel/tracing"])
     with session.stack:
@@ -310,14 +370,19 @@ def guest_main():
             "workload_started", {"command": ["ethtool", "-t", nets[0].name, "offline"]}
         )
         observer = session.observer(
-            [session.cwd / "build/vtd", "--guest", nets[0].name], label="guest-observer"
+            [session.cwd / "build/vtd", "--guest", nets[0].name, nic_driver],
+            label="guest-observer",
         )
+        # This gate marks the observation window; interface-up and ethtool follow it.
         gate(observer, 1)
         command(["ip", "link", "set", "dev", nets[0].name, "up"])
         # ethtool may report an unrelated offline test failure; the experiment requires loopback success.
-        proc = session.process(
-            ["ethtool", "-t", nets[0].name, "offline"], "guest-workload"
+        workload_command = ["ethtool", "-t", nets[0].name, "offline"]
+        session.capture.lifecycle(
+            "guest_workload_begin",
+            {"command": workload_command, "interface": nets[0].name},
         )
+        proc = session.process(workload_command, "guest-workload")
         try:
             proc.wait(180, peers=[observer])
         except LabError:
@@ -328,6 +393,10 @@ def guest_main():
 
         if not re.search(r"^Loopback test.*\s0$", output, re.MULTILINE):
             raise LabError("guest loopback test did not succeed")
+        session.capture.lifecycle(
+            "guest_workload_end",
+            {"interface": nets[0].name, "result": "loopback passed"},
+        )
         gate(observer, 0)
         session.capture.lifecycle("workload_finished", {"exit_code": 0})
         session.collect()
@@ -337,6 +406,6 @@ def guest_main():
 
 if __name__ == "__main__":
     if sys.argv[1:] != ["--guest"]:
-        raise SystemExit("vtd.py requires --guest when invoked directly")
+        raise SystemExit("_run.py requires --guest when invoked directly")
     with signals():
         guest_main()

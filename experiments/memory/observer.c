@@ -142,7 +142,7 @@ out:
 
 /*
  * First NDJSON record.
- * The frontend recognizes kind=meta and does not treat it as a snapshot.
+ * The capture normalizer records kind=meta as collector metadata.
  * Static sampling limits live here once instead of on every record.
  */
 static void write_meta(struct json_writer *jw)
@@ -383,7 +383,7 @@ static void write_snapshot(struct json_writer *jw, const struct mm_event *event,
 	json_object_begin(jw);
 
 	json_string(jw, "experiment", "memory");
-	json_string(jw, "kind", "snapshot");
+	json_string(jw, "kind", "memory_snapshot");
 	json_string(jw, "source", "ebpf");
 	json_u32(jw, "seq", seq);
 	json_u64(jw, "time_ns", event->time_ns);
