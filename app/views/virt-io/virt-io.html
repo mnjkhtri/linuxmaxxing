@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>KVM virt-I/O</title>
-  <link rel="stylesheet" href="virt-io.css">
-<link rel="stylesheet" href="../../theme.css">
+  <link rel="stylesheet" href="virt-io.css?v=ui-42">
+<link rel="stylesheet" href="../../theme.css?v=ui-11">
 </head>
 <body>
 <main class="io">
@@ -17,29 +17,10 @@
     <div id="status" role="status"><i class="trace-dot"></i><span>loading virt-io capture…</span></div>
   </header>
 
-  <nav id="roadmap" class="roadmap panel experiment-selector" aria-label="Derived execution episodes"></nav>
+  <nav id="roadmap" class="roadmap panel experiment-selector" aria-label="Virt-I/O phases"></nav>
 
   <section class="workbench">
-    <section class="topology panel">
-      <header class="panel-head">
-        <h2>I/O topology</h2>
-        <div class="strip">
-          <span>vCPU <b>0</b></span><i>|</i>
-          <span>host CPU <b id="strip-host">—</b></span><i>|</i>
-          <span>GSI <b id="strip-gsi">—</b></span><i>|</i>
-          <span>vector <b id="strip-vector">—</b></span><i>|</i>
-          <span>DMA <b id="strip-dma">—</b></span><i>|</i>
-          <span>device buf <b id="strip-buf">—</b></span>
-        </div>
-      </header>
-
-      <div class="scope">
-        <span class="micro">VIRT / IO</span>
-        <strong class="task" id="task">vmm</strong>
-        <span id="episode-name">derived episode</span>
-        <span id="event-clock">t = 0.000 µs</span>
-      </div>
-
+    <section class="topology">
       <div class="stage">
         <section class="region execution">
           <header class="region-title">
@@ -58,7 +39,7 @@
           </header>
           <div class="irq-body">
             <div class="irq-lifecycle" aria-label="Interrupt delivery state">
-              <div class="irq-life-head"><b id="irq-life-mode">no delivery</b><span id="irq-life-summary">waiting for an interrupt request</span></div>
+              <div class="irq-life-head"><b id="irq-life-mode">no delivery</b><span id="irq-life-summary">waiting for request</span></div>
               <div class="irq-life-steps">
                 <span id="irq-step-request"><b>request</b><small>—</small></span>
                 <span id="irq-step-route"><b>route</b><small>—</small></span>
@@ -121,27 +102,24 @@
       </div>
     </section>
 
-    <aside class="notebook inspector-pane panel">
-      <header class="panel-head inspector-head"><div><h2>Transition internals</h2><span>trace boundary</span></div><code id="source-badge">trace + eBPF</code></header>
-      <div class="note-body inspector-body">
-        <div class="type selected-kind"><i class="trace-dot"></i><span id="detail-type">VM entry</span></div>
-        <h2 id="detail-title">kvm_entry</h2>
+    <aside class="inspector inspector-pane panel">
+      <div class="inspector-body">
         <section class="origin-card inspector-section">
           <h3>Origin</h3>
           <div class="origin-grid" id="event-origin"></div>
         </section>
-        <dl class="fields" id="fields"></dl>
+        <section class="field-card">
+          <h3>Fields</h3>
+          <div id="fields" class="origin-grid"></div>
+        </section>
       </div>
-      <section class="inspector-footer toolbar">
-        <button id="next" title="next observation">→</button>
-        <button id="prev" title="previous">←</button>
-        <button id="play" title="play/pause">▶</button>
-        <input id="scrub" type="range" min="0" max="164" value="0" aria-label="event scrubber">
-        <span id="counter">1 / 165</span>
-      </section>
+      <footer class="inspector-footer playback-bar">
+        <button id="prev" title="Previous event">Prev</button><button id="play" title="Play or pause">Play</button><button id="next" title="Next event">Next</button>
+        <input id="scrub" type="range" min="0" value="0" aria-label="Event observation scrubber" /><span id="counter">— / —</span>
+      </footer>
     </aside>
   </section>
 </main>
-<script type="module" src="virt-io.js"></script>
+<script type="module" src="virt-io.js?v=ui-42"></script>
 </body>
 </html>

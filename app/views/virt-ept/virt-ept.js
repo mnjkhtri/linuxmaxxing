@@ -140,10 +140,6 @@ import {
     return bytes + " B";
   }
 
-  function relativeTime(event) {
-    return ((event.timeNs - M.events[0].timeNs) / 1000).toFixed(1) + " µs";
-  }
-
   function parseEbpf(capture) {
     M.meta = values(capture.events.find(e => e.kind === 'collector_metadata' && e.source.mechanism === 'ebpf')?.data || {});
     return capture.events.filter(e => e.source.mechanism === 'ebpf' && e.data.state).map(e => {
@@ -574,34 +570,6 @@ import {
     return item ? item.operation : "COMMAND";
   }
 
-  function eventTitle(event) {
-    var info = event.traceInfo || event.info || {},
-      record = event.record || {};
-    if (event.name === "control_begin") return "handle_control_command · " + commandName(record.control.command);
-    if (event.name === "control_end") return "handle_control_command · return " + record.control.result;
-    if (event.name === "memslot_begin") return "set_memory_region · prepare request";
-    if (event.name === "memslot_end") return "set_memory_region · return " + record.memslot.result;
-    if (event.name === "sys_enter_ioctl") return (record.ioctl.request_name || "ioctl") + " · request";
-    if (event.name === "sys_exit_ioctl") return (record.ioctl.request_name || "ioctl") + " · return " + record.ioctl.result;
-    if (event.name === "sys_enter_madvise") return (record.madvise.advice_name || "madvise") + " · request";
-    if (event.name === "sys_exit_madvise") return (record.madvise.advice_name || "madvise") + " · return " + record.madvise.result;
-    if (event.name === "sys_enter_mmap") return "mmap · request " + formatBytes(parseHex(record.mmap.length));
-    if (event.name === "sys_exit_mmap") return "mmap · return " + record.mmap.result_hva;
-    if (event.name === "vmx_handle_exit_return") return "vmx_handle_exit · " + (record.disposition.meaning || "disposition");
-    if (event.name === "kvm_exit") return "kvm_exit · " + (info.reason || "unknown");
-    if (event.name === "kvm_userspace_exit") return info.reason || "kvm_userspace_exit";
-    if (event.name === "kvm_page_fault") return "kvm:kvm_page_fault";
-    if (event.name === "kvm_mmu_spte_requested") return "kvmmmu:kvm_mmu_spte_requested";
-    if (event.name === "kvm_mmu_set_spte") return "kvmmmu:kvm_mmu_set_spte";
-    if (event.name === "kvm_tdp_mmu_spte_changed" || event.name === "tdp_spte_batch") return "kvmmmu:kvm_tdp_mmu_spte_changed";
-    if (event.name === "mark_mmio_spte") return "kvmmmu:mark_mmio_spte";
-    if (event.name === "handle_mmio_page_fault") return "kvmmmu:handle_mmio_page_fault";
-    if (event.name === "check_mmio_spte") return "kvmmmu:check_mmio_spte";
-    if (event.name === "fast_page_fault") return "kvmmmu:fast_page_fault";
-    if (event.name === "kvm_mmu_split_huge_page") return "kvmmmu:kvm_mmu_split_huge_page";
-    return event.name;
-  }
-
   function eventKind(event) {
     if (event.source === "tracefs") return event.name === "tdp_spte_batch" ? "TRACEPOINT BATCH" : "TRACEPOINT";
     if (/^(control|memslot)_/.test(event.name)) return "UPROBE";
@@ -837,157 +805,6 @@ import {
     renderWalk(state);
     $("state-kind").textContent = mapped + " RAM · " + mmio + " MMIO";
     $("state-caption").textContent = state.gfns.length + " bounded GFN walks · root " + state.root_hpa;
-  }
-
-  function fieldRows(event) {
-    var info = event.traceInfo || event.info || {},
-      record = event.record || {},
-      control = record.control || {},
-      memslot = record.memslot || {},
-      ioctl = record.ioctl || {},
-      madvise = record.madvise || {},
-      mmap = record.mmap || {},
-      disposition = record.disposition || {},
-      rows = [];
-    var link = relation(event);
-    rows.push(["capture", event.source === "tracefs" ? "tracefs · line " + event.line : "eBPF · seq " + record.seq]);
-    rows.push(["initiator", ACTOR_NAME[link.from]]);
-    rows.push(["responder", ACTOR_NAME[link.to]]);
-    rows.push(["time", relativeTime(event)]);
-    if (event.context && event.context.comm) rows.push(["context", event.context.comm + " · PID " + event.context.pid + " · CPU " + event.context.cpu]);
-    if (event.name === "control_begin" || event.name === "control_end") {
-      rows.push(["command", control.command + " · " + commandName(control.command)]);
-      rows.push(["operation id", control.operation_id]);
-      if (event.name === "control_end") {
-        rows.push(["result", control.result]);
-        rows.push(["duration", (Number(control.duration_ns) / 1000).toFixed(1) + " µs"]);
-      }
-    } else if (event.name === "memslot_begin" || event.name === "memslot_end") {
-      rows.push(["operation", memslot.size === "0x0" ? "delete memory slot" : "register memory slot"]);
-      rows.push(["slot", memslot.slot]);
-      rows.push(["GPA base", memslot.guest_phys_addr]);
-      rows.push(["size", memslot.size + " · " + formatBytes(parseHex(memslot.size))]);
-      rows.push(["userspace HVA", memslot.userspace_addr]);
-      rows.push(["flags", memslot.flags]);
-      if (event.name === "memslot_end") {
-        rows.push(["result", memslot.result]);
-        rows.push(["duration", (Number(memslot.duration_ns) / 1000).toFixed(1) + " µs"]);
-      }
-    } else if (event.name === "sys_enter_ioctl" || event.name === "sys_exit_ioctl") {
-      rows.push(["request", ioctl.request_name]);
-      rows.push(["fd", ioctl.fd]);
-      rows.push(["argument", ioctl.argument]);
-      rows.push(["call id", ioctl.call_id]);
-      if (ioctl.completed) {
-        rows.push(["result", ioctl.result]);
-        rows.push(["duration", (Number(ioctl.duration_ns) / 1000).toFixed(1) + " µs"]);
-      }
-    } else if (event.name === "sys_enter_madvise" || event.name === "sys_exit_madvise") {
-      rows.push(["advice", madvise.advice_name]);
-      rows.push(["HVA start", madvise.start]);
-      rows.push(["length", madvise.length + " · " + formatBytes(parseHex(madvise.length))]);
-      rows.push(["call id", madvise.call_id]);
-      if (madvise.completed) {
-        rows.push(["result", madvise.result]);
-        rows.push(["duration", (Number(madvise.duration_ns) / 1000).toFixed(1) + " µs"]);
-      }
-    } else if (event.name === "sys_enter_mmap" || event.name === "sys_exit_mmap") {
-      rows.push(["length", mmap.length + " · " + formatBytes(parseHex(mmap.length))]);
-      rows.push(["protection", mmap.prot]);
-      rows.push(["flags", mmap.flags]);
-      rows.push(["fd", mmap.fd]);
-      rows.push(["offset", mmap.offset]);
-      rows.push(["call id", mmap.call_id]);
-      if (mmap.completed) {
-        rows.push(["result HVA", mmap.result_hva]);
-        rows.push(["duration", (Number(mmap.duration_ns) / 1000).toFixed(1) + " µs"]);
-      }
-    } else if (event.name === "vmx_handle_exit_return") {
-      rows.push(["result", disposition.result]);
-      rows.push(["decision", disposition.meaning]);
-    } else if (event.name === "kvm_entry") {
-      rows.push(["vCPU", info.vcpu]);
-      rows.push(["guest RIP", info.rip]);
-    } else if (event.name === "kvm_exit") {
-      var decoded = ioExit(info);
-      rows.push(["reason", info.reason]);
-      if (decoded) {
-        rows.push(["I/O operation", decoded.direction]);
-        rows.push(["I/O port", hex(decoded.port)]);
-      }
-      rows.push(["vCPU", info.vcpu]);
-      rows.push(["guest RIP", info.rip]);
-      rows.push(["qualification", info.info1]);
-    } else if (event.name === "kvm_userspace_exit") {
-      rows.push(["exit reason", info.reason]);
-      if (present(info.reasonCode)) rows.push(["reason code", info.reasonCode]);
-    } else if (event.name === "kvm_unmap_hva_range") {
-      rows.push(["HVA start", info.start]);
-      rows.push(["HVA end", info.end]);
-      if (info.start && info.end) rows.push(["range", formatBytes(parseHex(info.end) - parseHex(info.start))]);
-    } else if (event.name === "kvm_page_fault") {
-      rows.push(["access", faultAccess(info)]);
-      rows.push(["fault GPA", info.address]);
-      rows.push(["GFN", hex(info.gfn)]);
-      rows.push(["guest RIP", info.rip]);
-      rows.push(["error code", info.errorCode]);
-    } else if (event.name === "kvm_mmu_spte_requested") {
-      rows.push(["GFN", hex(info.gfn)]);
-      rows.push(["host PFN", hex(info.pfn)]);
-      rows.push(["leaf level", info.level]);
-    } else if (event.name === "kvm_mmu_set_spte") {
-      rows.push(["GFN", hex(info.gfn)]);
-      rows.push(["SPTE", info.spte]);
-      rows.push(["permissions", info.permissions]);
-      rows.push(["leaf level", info.level]);
-      rows.push(["table HPA", info.table]);
-    } else if (event.name === "kvm_tdp_mmu_spte_changed") {
-      rows.push(["operation", info.action]);
-      rows.push(["GFN", hex(info.gfn)]);
-      rows.push(["level", info.level]);
-      rows.push(["old SPTE", info.oldSpte]);
-      rows.push(["new SPTE", info.newSpte]);
-    } else if (event.name === "tdp_spte_batch") {
-      rows.push(["operation", info.action]);
-      rows.push(["changes", info.count]);
-      rows.push(["GFN span", hex(info.minGfn) + " – " + hex(info.maxGfn)]);
-      rows.push(["level", info.level]);
-      rows.push(["first old SPTE", info.firstOldSpte]);
-      rows.push(["last new SPTE", info.lastNewSpte]);
-    } else if (event.name === "mark_mmio_spte") {
-      rows.push(["GFN", hex(info.gfn)]);
-      rows.push(["SPTE pointer token", info.sptep]);
-      rows.push(["access", hex(info.access)]);
-      rows.push(["generation", hex(info.generation)]);
-    } else if (event.name === "kvm_mmu_split_huge_page") {
-      rows.push(["GFN", hex(info.gfn)]);
-      rows.push(["source SPTE", info.spte]);
-      rows.push(["source level", info.level]);
-      rows.push(["errno", info.errno]);
-    } else if (event.name === "handle_mmio_page_fault") {
-      rows.push(["address", info.address]);
-      rows.push(["GFN", hex(info.gfn)]);
-      rows.push(["access", hex(info.access)]);
-    } else if (event.name === "check_mmio_spte") {
-      rows.push(["SPTE", info.spte]);
-      rows.push(["KVM generation", hex(info.kvmGeneration)]);
-      rows.push(["SPTE generation", hex(info.spteGeneration)]);
-      rows.push(["valid", info.valid ? "yes" : "no"]);
-    } else if (event.name === "fast_page_fault") {
-      rows.push(["GPA", info.address]);
-      rows.push(["error flags", info.errorFlags]);
-      rows.push(["old SPTE", info.oldSpte]);
-      rows.push(["new SPTE", info.newSpte]);
-      rows.push(["result", info.fixed ? "fixed" : info.spurious ? "spurious" : "unresolved"]);
-    } else if (event.name === "kvm_flush_remote_tlbs") {
-      if (event.state) {
-        rows.push(["KVM", event.state.kvm]);
-        rows.push(["MMU", event.state.mmu]);
-        rows.push(["EPT root", event.state.root_hpa]);
-      }
-    }
-    if (event.source === "tracefs" && event.stateOrigin) rows.push(["EPT state", event.stateOrigin]);
-    return rows;
   }
 
   function renderInspector(event) {

@@ -56,7 +56,6 @@ import {
         d = st.dma || {},
         ms = st.msi || {},
         io = st.ioctl || {},
-        di = st.disposition || {},
         mm = st.mmio || {},
         cmd = st.command || {};
       out.push({
@@ -108,9 +107,6 @@ import {
         ioctl_arg: io.argument,
         ioctl_result: io.result,
         ioctl_duration: io.duration_ns,
-        disposition_present: di.present,
-        disposition_result: di.result,
-        disposition_meaning: di.meaning,
         mmio_present: mm.present,
         mmio_offset: mm.offset,
         mmio_register: mm.register,
@@ -193,7 +189,6 @@ import {
     device_dma_transfer_return: 'dma_return',
     sys_enter_ioctl: 'ioctl_enter',
     sys_exit_ioctl: 'ioctl_return',
-    vmx_handle_exit_return: 'disposition',
     device_mmio_write: 'device_dispatch',
     device_execute_command: 'command',
     device_execute_command_return: 'command_return'
@@ -237,7 +232,7 @@ import {
       name: f.name,
       time_ns: f.time_ns,
       source: 'ebpf',
-      state_sampled: !!f.vcpu,
+      controller_sampled: !!f.vcpu,
       vmexit_id: f.vmexit_id,
       operation_id: f.operation_id,
       call_id: f.call_id,
@@ -275,9 +270,6 @@ import {
       ioctl_arg: f.ioctl_arg,
       ioctl_result: f.ioctl_result,
       ioctl_duration_ns: f.ioctl_duration,
-      disposition_present: f.disposition_present,
-      disposition_result: f.disposition_result,
-      disposition_meaning: f.disposition_meaning,
       mmio_present: f.mmio_present,
       mmio_offset: f.mmio_offset,
       mmio_register: f.mmio_register,
@@ -311,7 +303,7 @@ import {
       name: t.type,
       time_ns: t.time_ns,
       source: 'tracefs',
-      state_sampled: false,
+      controller_sampled: false,
       vmexit_id: 0,
       operation_id: 0,
       call_id: 0,
@@ -413,7 +405,8 @@ import {
   function finalize(events) {
     var base = events.length ? events[0].time_ns : 0,
       held = {},
-      activeVmexit = 0;
+      activeVmexit = 0,
+      lastControllerSample = -1;
     var heldFields = ['vcpu_ptr', 'kvm_ptr', 'apic_ptr', 'ioapic_ptr', 'irr', 'isr', 'rte', 'tpr', 'svr'];
     events.forEach(function(e) {
       e.time_us = (e.time_ns - base) / 1000
@@ -421,9 +414,15 @@ import {
     events.forEach(function(e, index) {
       if (e.name === 'kvm_exit' && e.vmexit_id) activeVmexit = e.vmexit_id;
       else if (!e.vmexit_id && activeVmexit) e.vmexit_id = activeVmexit;
+      if (e.controller_sampled) {
+        lastControllerSample = index;
+        e.controller_sample_index = index;
+      } else {
+        e.controller_sample_index = lastControllerSample;
+      }
       heldFields.forEach(function(field) {
-        if (e.state_sampled && e[field] != null) held[field] = e[field];
-        else if (e[field] == null && held[field] != null) e[field] = held[field];
+        if (e.controller_sampled && e[field] != null) held[field] = e[field];
+        else if (!e.controller_sampled && held[field] != null) e[field] = held[field];
       });
       e.prev_seq = index > 0 ? events[index - 1].seq : null;
       e.next_seq = index < events.length - 1 ? events[index + 1].seq : null;
@@ -524,47 +523,6 @@ import {
     D: 'direct MSI',
     E: 'virtual DMA'
   };
-  /* Narrative annotation for each guest phase: how it begins, how it hands off,
-     and which guest.S section drives it.  Applied to whichever indices we derive. */
-  var SEMANTIC_PHASE = {
-    A: {
-      ingress: 'the VMM configures KVM, creates vCPU 0, and enters it through KVM_RUN',
-      egress: 'phase A ends inside guest residency: STI enables APIC interrupts, then the phase-B COMMAND MMIO write produces the next observed exit',
-      source: 'guest.S phase A'
-    },
-    B: {
-      ingress: 'phase B begins inside the guest run after the phase-A marker; the first phase-B-specific observed exit is the COMMAND MMIO exit',
-      egress: 'phase B ends inside guest residency: WAIT_IRQ_COUNT 1 completes before CLI and the phase-C command write',
-      source: 'guest.S phase B'
-    },
-    C: {
-      ingress: 'phase C begins inside the guest run preceding the phase-C command MMIO exit; CLI has set IF=0',
-      egress: 'phase C ends inside guest residency after the marker: the next observed exit is the phase-D (MSI) command write',
-      source: 'guest.S phase C'
-    },
-    D: {
-      ingress: 'phase D begins after its PIO marker; the guest writes CMD_MSI_ONLY with interrupt delivery enabled',
-      egress: 'phase D ends inside guest residency after the MSI handler runs, then DMA programming begins',
-      source: 'guest.S phase D'
-    },
-    E: {
-      ingress: 'phase E begins inside the guest run preceding the first DMA-programming MMIO exit',
-      egress: 'run terminates through OUT 0x82 → KVM_EXIT_IO',
-      source: 'guest.S phase E'
-    }
-  };
-
-  function annotateEpisode(ep) {
-    var letter = ep.name.charAt(6);
-    var s = SEMANTIC_PHASE[letter];
-    if (s) {
-      ep.ingress = s.ingress;
-      ep.egress = s.egress;
-      ep.source = s.source
-    }
-    return ep;
-  }
-
   function deriveEpisodes(events) {
     var accepts = [],
       dmas = [],
@@ -619,7 +577,8 @@ import {
         }
         return -1;
       }
-      var opens = [0, openB];
+      /* The boundary event closes Phase A; Phase B begins after enter guest. */
+      var opens = [0, Math.min(openB + 1, events.length)];
       for (var i = 1; i <= 3; i++) {
         if (i >= accepts.length) break;
         opens.push(openAfter(accepts[i - 1], accepts[i]));
@@ -644,7 +603,7 @@ import {
             desc: regionDesc(events.slice(lo, hi), events[lo].seq, events[hi - 1].seq)
           });
         }
-        if (eps.length) return eps.map(annotateEpisode);
+        if (eps.length) return eps;
       }
     }
 
@@ -686,13 +645,13 @@ import {
         desc: regionDesc(seg, events[sa].seq, events[se].seq)
       });
     }
-    return eps.map(annotateEpisode);
+    return eps;
   }
 
   function episodeFor(index) {
     for (var i = 0; i < D.episodes.length; i++) {
       var ep = D.episodes[i];
-      if (index >= ep.start - 1 && index <= ep.end - 1) return i;
+      if (ep.indices.length && index >= ep.indices[0] && index <= ep.indices[ep.indices.length - 1]) return i;
     }
     return D.episodes.length - 1;
   }
@@ -703,7 +662,6 @@ import {
     if (e.name === 'kvm_entry') return 'VM entry';
     if (e.name === 'kvm_exit') return e.reason || 'VM exit';
     if (e.name === 'kvm_userspace_exit') return (e.userspace_reason || 'userspace exit').replace('KVM_EXIT_', '');
-    if (e.name === 'vmx_handle_exit_return') return e.disposition_meaning || 'exit disposition';
     if (e.name === 'sys_enter_ioctl') return e.ioctl_name || 'ioctl';
     if (e.name === 'sys_exit_ioctl') return (e.ioctl_name || 'ioctl') + ' ret';
     if (e.name === 'device_mmio_write') return (e.mmio_register || 'MMIO') + ' write';
@@ -724,30 +682,17 @@ import {
     return e.name;
   }
 
-  function detailType(e) {
-    if (e.kind === 'entry') return 'domain transition · KVM → guest';
-    if (e.kind === 'exit') return 'domain transition · guest → KVM';
-    if (e.kind === 'handoff') return 'domain transition · KVM → userspace';
-    if (e.kind === 'disposition') return 'KVM exit disposition';
-    if (e.kind === 'ioctl_enter' || e.kind === 'ioctl_return') return 'KVM userspace ABI';
-    if (e.kind === 'device_dispatch') return 'VMM device dispatch';
-    if (e.kind === 'command' || e.kind === 'command_return') return 'device command';
-    if (e.kind === 'dma' || e.kind === 'dma_return') return 'device state · DMA';
-    if (e.kind === 'irq') return 'interrupt route';
-    if (e.kind === 'msi') return 'interrupt route · MSI';
-    if (e.kind === 'apic') return 'guest APIC programming';
-    return 'KVM internal handling';
-  }
   /* ---- renderers -------------------------------------------------------- */
 
   function renderRoadmap() {
     var active = episodeFor(cursor);
     $('roadmap').innerHTML = D.episodes.map(function(ep, ei) {
-      return '<button type="button" class="zone selector-option ' + (ei === active ? 'active' : '') + '" data-ep="' + ei + '"><span class="selector-kicker">PHASE ' + (ei + 1) + '</span><span class="selector-label">' + esc(ep.name) + '</span></button>';
+      var label = ep.name.replace(/^Phase [A-Z] · /, '');
+      return '<button type="button" class="phase-button selector-option ' + (ei === active ? 'active' : '') + '" data-ep="' + ei + '"><span class="selector-kicker">PHASE ' + String.fromCharCode(65 + ei) + '</span><span class="selector-label">' + esc(label) + '</span></button>';
     }).join('');
     $('roadmap').querySelectorAll('[data-ep]').forEach(function(z) {
       z.addEventListener('click', function() {
-        select(D.episodes[+z.dataset.ep].start - 1)
+        select(D.episodes[+z.dataset.ep].indices[0])
       });
     });
   }
@@ -788,18 +733,11 @@ import {
       bytes: bytes
     };
   }
-  /* Human meaning of the guest IO ports used by this capture. */
-  function ioMeaning(e) {
-    var q = ioQualification(e);
-    if (!q) return '';
-    if (q.port === 0x21) return 'master PIC mask';
-    if (q.port === 0xa1) return 'slave PIC mask';
-    if (q.port === 0xe9) return 'phase synchronization marker';
-    if (q.port === 0x82) return 'VMM done / success port';
-    return 'port I/O';
-  }
   /* Compact terminal label for a tracepoint/hook observation site. */
   function compactObs(e) {
+    if (e.name === 'kvm_mmio') return 'MMIO';
+    if (e.name === 'kvm_emulate_insn') return 'emulate';
+    if (e.name === 'device_mmio_write') return 'MMIO write';
     if (e.name === 'kvm_apic_accept_irq') return 'accept vec ' + (e.vec != null ? vecHex(e.vec) : '?');
     if (e.name === 'kvm_ioapic_set_irq') return 'route pin ' + (e.pin != null ? e.pin : '?');
     if (e.name === 'kvm_msi_set_irq') return 'MSI vec ' + (e.msi_vector != null ? vecHex(e.msi_vector) : '?');
@@ -807,17 +745,13 @@ import {
     if (e.name === 'kvm_ack_irq') return 'ack pin ' + (e.pin != null ? e.pin : '?');
     if (e.name === 'kvm_apic') return (e.apic_reg || 'APIC') + ' ' + (e.apic_access || 'write');
     if (e.name === 'kvm_page_fault') return 'EPT fault · ' + (e.fault_gpa || '?');
-    if (e.name === 'kvm_mmio') return 'MMIO ' + (e.mmio_type || '') + ' · ' + (e.mmio_gpa || '?') + ' = ' + (e.mmio_val || '?');
     if (e.name === 'kvm_fast_mmio') return 'fast MMIO · ' + (e.mmio_gpa || '?');
     if (e.name === 'kvm_pio') return 'PIO ' + (e.pio_dir || '') + ' · ' + (e.pio_port || '?') + ' = ' + (e.pio_val || '?');
-    if (e.name === 'kvm_emulate_insn') return 'emulate · ' + String(e.handler_text || e.raw).replace(/^.*kvm_emulate_insn:\s*/, '').slice(0, 30);
     if (e.name === 'kvm_cr') return String(e.handler_text || 'CR access').slice(0, 34);
     if (e.name === 'device_dma_transfer') return (e.dma_dir === 'to_device' ? 'DMA → device' : 'DMA ← device') + ' · ' + (e.dma_gpa || '');
     if (e.name === 'device_dma_transfer_return') return 'DMA ret ' + e.dma_result + ' · sum ' + e.dma_checksum;
     if (e.name === 'device_execute_command') return e.command_name || 'execute command';
     if (e.name === 'device_execute_command_return') return (e.command_name || 'command') + ' · status ' + e.command_status;
-    if (e.name === 'device_mmio_write') return (e.mmio_register || 'MMIO') + ' = ' + e.mmio_value;
-    if (e.name === 'vmx_handle_exit_return') return e.disposition_meaning || 'exit disposition';
     if (e.name === 'sys_enter_ioctl') return e.ioctl_name || 'ioctl';
     if (e.name === 'sys_exit_ioctl') return (e.ioctl_name || 'ioctl') + ' ret ' + e.ioctl_result;
     return prettyEvent(e);
@@ -826,17 +760,17 @@ import {
   function seqIoLabel(e) {
     var q = ioQualification(e);
     if (!q) return e.reason || 'IO_INSTRUCTION';
-    var meaning = ioMeaning(e);
-    return q.dir + ' 0x' + q.port.toString(16) + (meaning ? ' · ' + meaning : '');
+    var label = q.dir + ' 0x' + q.port.toString(16).toUpperCase();
+    return q.port === 0xe9 ? label + ' · sync' : label;
   }
   /* Component lifelines use the same actor/message model as the native I/O view. */
   var COMPONENT_ACTORS = [{
     id: 'vmm',
-    role: 'USERSPACE',
+    role: 'HOST',
     name: 'VMM'
   }, {
     id: 'kvm',
-    role: 'HOST KERNEL',
+    role: 'HOST',
     name: 'KVM'
   }, {
     id: 'guest',
@@ -844,26 +778,26 @@ import {
     name: 'vCPU 0'
   }, {
     id: 'lapic',
-    role: 'KVM IRQCHIP',
+    role: 'HOST',
     name: 'LAPIC'
   }, {
     id: 'ioapic',
-    role: 'KVM IRQCHIP',
+    role: 'HOST',
     name: 'IOAPIC'
   }, {
     id: 'device',
-    role: 'USERSPACE',
+    role: 'HOST',
     name: 'TOY DEVICE'
   }, {
     id: 'memory',
-    role: 'GUEST MEMORY',
+    role: 'GUEST',
     name: 'RAM'
   }];
 
   function actorDetail(actor) {
     if (actor.id === 'vmm') return D.events[0].comm + '-' + D.events[0].pid;
-    if (actor.id === 'kvm') return 'KVM_RUN + irqchip';
-    if (actor.id === 'guest') return 'guest execution';
+    if (actor.id === 'kvm') return 'KVM_RUN';
+    if (actor.id === 'guest') return 'execution';
     if (actor.id === 'lapic') return 'vec ' + vecHex(metaVec()) + ' / ' + vecHex(metaMsiVec());
     if (actor.id === 'ioapic') return 'GSI ' + metaGsi();
     if (actor.id === 'device') return D.meta.device_buffer_size + ' B buffer';
@@ -903,25 +837,23 @@ import {
       vector = event.vec != null ? vecHex(event.vec) : vecHex(metaVec()),
       request = event.ioctl_name || 'ioctl';
     if (event.kind === 'entry') {
-      flow.push(componentMessage('kvm', 'guest', 'kvm_entry' + (event.rip ? ' · ' + event.rip : ''), 'entry'));
+      flow.push(componentMessage('kvm', 'guest', 'enter guest', 'entry'));
     } else if (event.kind === 'exit') {
       flow.push(componentMessage('guest', 'kvm', event.reason === 'IO_INSTRUCTION' ? seqIoLabel(event) : (event.reason || 'VM exit'), 'exit'));
     } else if (event.kind === 'handoff') {
       flow.push(componentMessage('kvm', 'vmm', (event.userspace_reason || 'KVM_EXIT').replace('KVM_EXIT_', ''), 'handoff'));
-    } else if (event.kind === 'disposition') {
-      flow.push(componentMessage('kvm', 'kvm', event.disposition_meaning + (event.disposition_result != null ? ' · ret ' + event.disposition_result : ''), 'local'));
     } else if (event.kind === 'ioctl_enter') {
       var requester = (request === 'KVM_IRQ_LINE' || request === 'KVM_SIGNAL_MSI') ? 'device' : 'vmm';
-      flow.push(componentMessage(requester, 'kvm', request + ' · fd ' + event.ioctl_fd, 'run'));
+      flow.push(componentMessage(requester, 'kvm', request, 'run'));
     } else if (event.kind === 'ioctl_return') {
       var owner = (request === 'KVM_IRQ_LINE' || request === 'KVM_SIGNAL_MSI') ? 'device' : 'vmm';
-      flow.push(componentMessage(owner, owner, request + ' ret ' + event.ioctl_result, 'local'));
+      flow.push(componentMessage('kvm', owner, request + ' ret ' + event.ioctl_result, 'run'));
     } else if (event.name === 'device_mmio_write') {
-      flow.push(componentMessage('vmm', 'device', (event.mmio_register || 'MMIO') + ' = ' + event.mmio_value, 'handoff'));
+      flow.push(componentMessage('vmm', 'device', 'MMIO write', 'handoff'));
     } else if (event.name === 'device_execute_command') {
-      flow.push(componentMessage('device', 'device', 'execute ' + (event.command_name || 'command'), 'local'));
+      flow.push(componentMessage('vmm', 'device', 'execute ' + (event.command_name || 'command'), 'run'));
     } else if (event.name === 'device_execute_command_return') {
-      flow.push(componentMessage('device', 'device', 'complete · status ' + event.command_status, 'local'));
+      flow.push(componentMessage('device', 'vmm', 'ret · ' + event.command_status, 'run'));
     } else if (event.name === 'kvm_set_irq') {
       flow.push(componentMessage('kvm', 'ioapic', 'GSI ' + (event.gsi != null ? event.gsi : metaGsi()) + ' = ' + event.level, 'interrupt'));
     } else if (event.name === 'kvm_ioapic_set_irq') {
@@ -935,14 +867,18 @@ import {
     } else if (event.name === 'kvm_eoi') {
       flow.push(componentMessage('guest', 'lapic', 'EOI ' + vector, 'apic'));
     } else if (event.name === 'kvm_apic') {
-      flow.push(componentMessage('guest', 'lapic', (event.apic_reg || 'APIC') + ' ' + (event.apic_access || 'write'), 'apic'));
+      flow.push(componentMessage('kvm', 'lapic', (event.apic_reg || 'APIC') + ' ' + (event.apic_access || 'write'), 'apic'));
     } else if (event.name === 'kvm_ack_irq') {
       flow.push(componentMessage('ioapic', 'ioapic', 'ack pin ' + (event.pin != null ? event.pin : '?'), 'local'));
     } else if (event.name === 'device_dma_transfer') {
       var access = event.dma_dir === 'to_device' ? 'DMA read' : 'DMA write';
-      flow.push(componentMessage('device', 'memory', access + ' · ' + event.dma_gpa + ' · ' + event.dma_len + ' B', 'dma'));
+      var source = event.dma_dir === 'to_device' ? 'memory' : 'device';
+      var target = event.dma_dir === 'to_device' ? 'device' : 'memory';
+      flow.push(componentMessage(source, target, access + ' · ' + event.dma_gpa, 'dma'));
     } else if (event.name === 'device_dma_transfer_return') {
-      flow.push(componentMessage('device', 'device', 'DMA ret ' + event.dma_result + ' · sum ' + event.dma_checksum, 'local'));
+      var returnSource = event.dma_dir === 'to_device' ? 'device' : 'memory';
+      var returnTarget = event.dma_dir === 'to_device' ? 'memory' : 'device';
+      flow.push(componentMessage(returnSource, returnTarget, 'DMA ret ' + event.dma_result, 'dma'));
     } else {
       flow.push(componentMessage('kvm', 'kvm', compactObs(event), 'local'));
     }
@@ -984,19 +920,17 @@ import {
         kind = ' ' + flow.kind;
       var from = (fromIndex + .5) / COMPONENT_ACTORS.length * 100,
         to = (toIndex + .5) / COMPONENT_ACTORS.length * 100;
-      var time = '<span class="component-time">+' + Number(item.event.time_us).toFixed(3) + 'µs</span>';
       if (fromIndex === toIndex) {
-        return '<button type="button" class="component-row local' + selected + '" data-index="' + item.global + '">' + time + '<i class="component-local ' + flow.kind + '" style="left:' + from + '%"></i><code style="left:' + from + '%" title="' + esc(item.event.raw) + '">' + esc(flow.label) + '</code></button>';
+        return '<button type="button" class="component-row local' + selected + '" data-index="' + item.global + '"><i class="component-local ' + flow.kind + '" style="left:' + from + '%"></i><code style="left:' + from + '%" title="' + esc(item.event.raw) + '">' + esc(flow.label) + '</code></button>';
       }
       var left = Math.min(from, to),
         width = Math.abs(to - from),
         direction = to > from ? 'forward' : 'reverse';
-      return '<button type="button" class="component-row' + selected + '" data-index="' + item.global + '">' + time + '<i class="component-arrow ' + direction + kind + '" style="left:' + left + '%;width:' + width + '%"></i><i class="component-point" style="left:' + from + '%"></i><i class="component-point" style="left:' + to + '%"></i><code style="left:' + ((from + to) / 2) + '%" title="' + esc(item.event.raw) + '">' + esc(flow.label) + '</code></button>';
+      return '<button type="button" class="component-row' + selected + '" data-index="' + item.global + '"><i class="component-arrow ' + direction + kind + '" style="left:' + left + '%;width:' + width + '%"></i><i class="component-point" style="left:' + from + '%"></i><i class="component-point" style="left:' + to + '%"></i><code style="left:' + ((from + to) / 2) + '%" title="' + esc(item.event.raw) + '">' + esc(flow.label) + '</code></button>';
     }).join('');
-    var tail = ep.egress ? '<div class="component-tail"><b>phase boundary:</b> ' + esc(ep.egress) + '</div>' : '';
     var previous = host.querySelector('.component-track'),
       previousTop = previous ? previous.scrollTop : null;
-    host.innerHTML = head + '<div class="component-track"><div class="component-body" style="--rows:' + Math.max(interactions.length, 1) + '">' + laneLines + rows + '</div></div>' + tail;
+    host.innerHTML = head + '<div class="component-track"><div class="component-body" style="--rows:' + Math.max(interactions.length, 1) + '">' + laneLines + rows + '</div></div>';
     host.querySelectorAll('.component-row').forEach(function(row) {
       row.addEventListener('click', function() {
         select(+row.dataset.index)
@@ -1016,8 +950,6 @@ import {
       $('flow-caption').textContent = (e.reason || 'VM exit') + ' transfers control from guest to KVM' + (e.rip ? ' at ' + e.rip : '');
     } else if (e.kind === 'handoff') {
       $('flow-caption').textContent = (e.userspace_reason || 'KVM exit') + ' · ret KVM_RUN to the VMM';
-    } else if (e.kind === 'disposition') {
-      $('flow-caption').textContent = 'vmx_handle_exit ret ' + e.disposition_result + ' · ' + e.disposition_meaning;
     } else if (e.kind === 'ioctl_enter' || e.kind === 'ioctl_return') {
       $('flow-caption').textContent = (e.ioctl_name || 'ioctl') + ' · fd ' + e.ioctl_fd + (e.ioctl_completed ? ' · ret ' + e.ioctl_result + ' · ' + e.ioctl_duration_ns + ' ns' : '');
     } else if (e.name === 'device_dma_transfer' || e.name === 'device_dma_transfer_return') {
@@ -1144,10 +1076,10 @@ import {
   function irqRouteLabel(e, cycle) {
     if ((cycle && cycle.transport === 'msi') || e.kind === 'msi' || e.name === 'kvm_msi_set_irq') {
       var msi = cycle && cycle.msiEvent ? cycle.msiEvent : e;
-      return 'MSI → VEC ' + vecHex(msi.msi_vector != null ? msi.msi_vector : metaMsiVec());
+      return 'MSI → ' + vecHex(msi.msi_vector != null ? msi.msi_vector : metaMsiVec());
     }
-    if (e.rte != null && e.rte !== '') return 'GSI ' + D.meta.device_gsi + ' → VEC ' + vecHex(metaVec());
-    return 'GSI ' + D.meta.device_gsi + ' → VEC —';
+    if (e.rte != null && e.rte !== '') return 'GSI ' + D.meta.device_gsi + ' → ' + vecHex(metaVec());
+    return 'GSI ' + D.meta.device_gsi + ' → —';
   }
 
   function irqStateMap(e, cycle) {
@@ -1193,7 +1125,7 @@ import {
     try {
       var v = BigInt(rte || 0),
         delivery = ['fixed', 'lowest', 'SMI', 'reserved', 'NMI', 'INIT', 'reserved', 'ExtINT'][Number((v >> 8n) & 7n)];
-      return 'vec ' + vecHex(Number(v & 255n)) + ' · ' + delivery + ' · ' + (v & 2048n ? 'logical' : 'physical') + ' · ' + (v & 32768n ? 'level' : 'edge') + '/' + (v & 8192n ? 'low' : 'high') + ' · ' + (v & 65536n ? 'masked' : 'unmasked') + ' · dest ' + Number((v >> 56n) & 255n);
+      return 'vec ' + vecHex(Number(v & 255n)) + ' · ' + delivery + ' · ' + (v & 2048n ? 'logical' : 'phys') + ' · ' + (v & 32768n ? 'level' : 'edge');
     } catch (ignore) {
       return rte || '0x0'
     }
@@ -1215,8 +1147,8 @@ import {
     if (f === 'svr') return svrDecode(v);
     if (f === 'tpr') return tprDecode(v);
     if (f === 'rte') return rteDecode(v);
-    if (f === 'irr') return 'vector presently pending';
-    if (f === 'isr') return 'vector presently in service';
+    if (f === 'irr') return 'pending';
+    if (f === 'isr') return 'in service';
     return String(v).indexOf('MSI') === 0 ? 'message route · IOAPIC bypassed' : 'IOAPIC redirection route';
   }
 
@@ -1235,7 +1167,7 @@ import {
     var stages = ['request', 'route', 'accept', 'pending', 'service', 'ack', 'cleared'];
     if (cycle.start < 0) {
       $('irq-life-mode').textContent = 'no delivery';
-      $('irq-life-summary').textContent = 'waiting for an interrupt request';
+      $('irq-life-summary').textContent = 'waiting for request';
       stages.forEach(function(stage) {
         var node = $('irq-step-' + stage);
         node.className = stage === 'cleared' ? 'derived' : '';
@@ -1260,7 +1192,7 @@ import {
       pending: 'LAPIC IRR · ' + vecHex(cycle.vector),
       service: 'LAPIC ISR · ' + vecHex(cycle.vector),
       ack: 'REG_IRQ_ACK · 0x1',
-      cleared: 'ISR ' + vecHex(cycle.vector) + ' → — · sampled'
+      cleared: 'ISR ' + vecHex(cycle.vector) + ' → clear'
     };
     stages.forEach(function(stage) {
       var node = $('irq-step-' + stage),
@@ -1278,44 +1210,53 @@ import {
   var IRQ_STATE_ITEMS = ['irr', 'isr', 'svr', 'tpr', 'rte', 'route'];
 
   function renderIRQ(e) {
-    var cycle = interruptCycle(cursor),
-      isMsi = cycle.transport === 'msi' || e.kind === 'msi' || e.name === 'kvm_msi_set_irq';
-    var pending = lapicWindow(e.irr),
-      inService = lapicWindow(e.isr),
-      msi = cycle.msiEvent || e;
-    if (isMsi) $('irq-address').textContent = 'MSI → VEC ' + vecHex(msi.msi_vector != null ? msi.msi_vector : metaMsiVec()) + ' · IOAPIC bypassed';
-    else $('irq-address').textContent = 'GSI ' + D.meta.device_gsi + ' → VEC ' + vecHex(metaVec());
+    var cycle = interruptCycle(cursor);
+    var sampled = !!e.controller_sampled,
+      stateAvailable = e.controller_sample_index >= 0,
+      carryover = stateAvailable && !sampled,
+      pending = stateAvailable ? lapicWindow(e.irr) : [],
+      inService = stateAvailable ? lapicWindow(e.isr) : [];
+    $('irq-address').textContent = irqRouteLabel(e, cycle);
 
     var previousCycle = cursor > 0 ? interruptCycle(cursor - 1) : null;
     var now = irqStateMap(e, cycle),
       prev = (cursor > 0) ? irqStateMap(D.events[cursor - 1], previousCycle) : null;
     IRQ_STATE_ITEMS.forEach(function(f) {
       var el = $('st-' + f),
-        changed = prev !== null && prev[f] !== now[f];
-      var nowF = irqStateDisplay(e, f, cycle),
+        changed = sampled && prev !== null && e.controller_sample_index >= 0 &&
+          D.events[cursor - 1].controller_sample_index >= 0 &&
+          e.controller_sample_index !== D.events[cursor - 1].controller_sample_index &&
+          prev[f] !== now[f];
+      var nowF = stateAvailable ? irqStateDisplay(e, f, cycle) : '—',
         prevF = prev != null ? irqStateDisplay(D.events[cursor - 1], f, previousCycle) : null;
       el.classList.toggle('changed', changed);
       var val = el.querySelector('.val'),
         sub = el.querySelector('.sub');
       val.textContent = nowF;
       val.classList.toggle('big', changed);
-      sub.textContent = changed ? ('▲ ' + prevF + ' → ' + nowF) : stateDecode(f, now[f]);
+      sub.textContent = !stateAvailable ? 'not sampled' : changed ? ('▲ ' + prevF + ' → ' + nowF) : stateDecode(f, now[f]);
       sub.title = sub.textContent;
     });
     renderInterruptLifecycle(e, cycle);
-    if (pending.length && inService.length) {
+    var caption;
+    if (!stateAvailable) {
+      $('irq-state').textContent = 'not sampled';
+      caption = 'controller state not sampled at this event';
+    } else if (pending.length && inService.length) {
       $('irq-state').textContent = 'pending + in service';
-      $('irq-caption').textContent = vecList(pending) + ' pending; ' + vecList(inService) + ' in service'
+      caption = vecList(pending) + ' pending; ' + vecList(inService) + ' in service'
     } else if (pending.length) {
       $('irq-state').textContent = 'pending';
-      $('irq-caption').textContent = 'IRR holds ' + vecList(pending) + ' at this observation'
+      caption = 'IRR holds ' + vecList(pending) + ' at this observation'
     } else if (inService.length) {
       $('irq-state').textContent = 'in service';
-      $('irq-caption').textContent = vecList(inService) + ' in service at this observation'
+      caption = vecList(inService) + ' in service at this observation'
     } else {
-      $('irq-state').textContent = (e.kind === 'irq' || e.kind === 'msi') ? 'route activity' : 'idle';
-      $('irq-caption').textContent = (e.kind === 'irq' || e.kind === 'msi') ? 'trace route active; IRR/ISR window empty' : 'no pending/in-service vector in the LAPIC window'
+      $('irq-state').textContent = (e.kind === 'irq' || e.kind === 'msi') ? 'route' : 'idle';
+      caption = (e.kind === 'irq' || e.kind === 'msi') ? 'IRR/ISR empty' : 'no pending/in-service vector'
     }
+    $('irq-caption').classList.toggle('carryover', carryover);
+    $('irq-caption').textContent = caption + (carryover ? ' · [carryover]' : '');
   }
 
   function renderDMA(e) {
@@ -1337,14 +1278,14 @@ import {
       $('device-state').textContent = 'round trip ret';
       $('device-detail').textContent = 'guest compares ret bytes to the source';
       $('dma-state').textContent = 'round-trip · verifying';
-      $('dma-caption').textContent = 'one-shot round-trip verification runs after DMA_FROM';
+      $('dma-caption').textContent = '';
     } else if (D.dmaTo != null && cursor >= D.dmaTo) {
       to.className = 'rt-edge dim';
       $('rt-src').classList.add('hot');
       $('device-state').textContent = 'outbound copy complete';
       $('device-detail').textContent = 'awaiting the ret copy · no DMA running';
-      $('dma-state').textContent = 'staged · awaiting ret';
-      $('dma-caption').textContent = 'no DMA in progress between the two transfer hooks';
+      $('dma-state').textContent = 'staged';
+      $('dma-caption').textContent = 'awaiting ret · no DMA';
     } else {
       $('device-state').textContent = D.meta.device_buffer_size + ' B buffer';
       $('device-detail').textContent = 'no transfer in this phase';
@@ -1354,13 +1295,10 @@ import {
   }
 
   function renderNotebook(e) {
-    $('source-badge').textContent = e.source;
-    $('detail-type').textContent = detailType(e);
-    $('detail-title').textContent = e.name;
     renderOrigin(e);
     var rows = rawFieldRows(e);
     $('fields').innerHTML = rows.map(function(r) {
-      return '<dt>' + esc(r[0]) + '</dt><dd title="' + esc(r[1]) + '">' + esc(r[1]) + '</dd>'
+      return '<div><small>' + esc(r[0]) + '</small><b title="' + esc(r[1]) + '">' + esc(r[1]) + '</b></div>'
     }).join('');
   }
 
@@ -1410,14 +1348,15 @@ import {
   function select(index) {
     if (!D || !D.events.length) return;
     cursor = Math.max(0, Math.min(D.events.length - 1, index || 0));
-    var e = ev(),
-      epi = episodeFor(cursor),
-      ep = D.episodes[epi];
-    $('episode-name').textContent = ep.name;
-    $('episode-name').title = ep.name + ' — ' + ep.desc;
-    $('event-clock').textContent = 't = ' + e.time_us.toFixed(3) + ' µs';
+    var e = ev();
+    var ep = D.episodes[episodeFor(cursor)];
+    var phaseStart = ep && ep.indices.length ? ep.indices[0] : 0;
+    var phaseEnd = ep && ep.indices.length ? ep.indices[ep.indices.length - 1] : D.events.length - 1;
+    var phaseIndex = ep ? ep.indices.indexOf(cursor) + 1 : cursor + 1;
+    $('scrub').min = phaseStart;
+    $('scrub').max = phaseEnd;
     $('scrub').value = cursor;
-    $('counter').textContent = (cursor + 1) + ' / ' + D.events.length;
+    $('counter').textContent = phaseIndex + ' / ' + (ep ? ep.indices.length : D.events.length);
     renderRoadmap();
     renderIRQ(e);
     renderDMA(e);
@@ -1428,10 +1367,6 @@ import {
     if (!D.events || cursor >= D.events.length - 1) return false;
     select(cursor + 1);
   });
-
-  function stopPlay() {
-    transport.stop();
-  }
 
   function togglePlay() {
     transport.toggle();
@@ -1461,9 +1396,10 @@ import {
   /* ---- load ------------------------------------------------------------- */
 
   mountView('virt-io', async capture => {
-    var snaps = parseBpf(capture);
+    var snaps = parseBpf(capture),
+      trace = parseTrace(capture);
     if (!snaps.length) throw Error('no eBPF snapshots parsed');
-    D.events = finalize(buildEvents(snaps, parseTrace(capture)));
+    D.events = finalize(buildEvents(snaps, trace));
     D.episodes = deriveEpisodes(D.events);
     D.dmaTo = null;
     D.dmaFrom = null;
@@ -1472,17 +1408,11 @@ import {
       if (x.dma_dir === 'to_device' && D.dmaTo == null) D.dmaTo = i;
       if (x.dma_dir === 'from_device' && D.dmaFrom == null) D.dmaFrom = i;
     });
-    $('strip-host').textContent = D.events[0] ? D.events[0].cpu : '—';
-    $('strip-gsi').textContent = D.meta.device_gsi;
-    $('strip-vector').textContent = vecHex(D.meta.device_vector) + ' / ' + vecHex(D.meta.msi_vector);
-    $('strip-dma').textContent = D.meta.dma_xfer_size + ' B';
-    $('strip-buf').textContent = D.meta.device_buffer_size + ' B';
     $('dma-src-sub').textContent = (D.dmaTo != null ? 'guest source · seq ' + (D.dmaTo + 1) : 'guest source');
     $('dma-dst-sub').textContent = (D.dmaFrom != null ? 'guest receive · seq ' + (D.dmaFrom + 1) + ' · echo' : 'guest receive');
     $('dma-xfer').textContent = D.meta.dma_xfer_size + ' B / transfer';
     $('scrub').max = D.events.length - 1;
-    $('task').textContent = (D.events[0] ? D.events[0].comm : 'vmm') + '-' + (D.events[0] ? D.events[0].pid : '?');
-    $('status').lastElementChild.textContent = D.events.length + ' observations aligned';
+    $('status').lastElementChild.textContent = snaps.length + ' eBPF · ' + trace.length + ' trace · ' + D.episodes.length + ' phases';
     if (!document.body.dataset.bound) {
       wireToolbar();
       document.body.dataset.bound = 'true';
