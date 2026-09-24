@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>VT·D</title>
     <link rel="stylesheet" href="../../theme.css?v=ui-16">
-    <link rel="stylesheet" href="virt-vtd.css?v=ui-16">
+    <link rel="stylesheet" href="virt-vtd.css?v=ui-47">
 </head>
 <body>
 <main class="vtd">
@@ -43,24 +43,31 @@
 
                         <section class="chunk-view state-view region">
                             <header class="region-title">
-                                <div><b id="state-title">ADDRESS SPACE</b><span id="state-caption">State at the selected boundary.</span></div>
-                                <code id="state-status">—</code>
+                                <div><b>DMA and interrupt mappings</b></div>
+                                <div id="event-scope" class="event-scope" role="group" aria-label="Lifeline event scope">
+                                    <button id="event-scope-toggle" type="button" aria-pressed="true" aria-label="Workload-only events"><span>WORKLOAD</span></button>
+                                </div>
                             </header>
-                            <div id="event-scope" class="event-scope" role="group" aria-label="Lifeline event scope">
-                                <button type="button" data-event-scope="workload" aria-pressed="true"><span>WORKLOAD</span><small id="scope-workload-count">—</small></button>
-                                <button type="button" data-event-scope="all" aria-pressed="false"><span>ALL CAPTURED</span><small id="scope-all-count">—</small></button>
-                            </div>
-                            <div id="state-rows" class="state-rows"></div>
+                            <section class="state-block interrupt-state-block">
+                                <header><span>INTERRUPT REMAPPING</span></header>
+                                <div id="interrupt-map" class="interrupt-map" role="img" aria-label="Interrupt mapping from VFIO IRQ through host IRQ and IRTE to MSI message and guest vector"></div>
+                                <div id="interrupt-rows" class="state-rows"></div>
+                            </section>
                             <div id="map-picker" class="side-map-picker">
-                                <label for="map-select">Inspect VFIO range</label>
-                                <div class="select-shell"><select id="map-select"></select></div>
+                                <label id="map-select-label">VFIO MAP</label>
+                                <div class="map-select-shell">
+                                    <button id="map-select" class="map-select-trigger" type="button" aria-labelledby="map-select-label map-select-value" aria-haspopup="listbox" aria-expanded="false" aria-controls="map-options">
+                                        <span id="map-select-value">—</span><i aria-hidden="true"></i>
+                                    </button>
+                                    <div id="map-options" class="map-select-menu" role="listbox" aria-labelledby="map-select-label" hidden></div>
+                                </div>
                                 <span id="map-summary">—</span>
                             </div>
                             <section id="state-map-browser" class="state-map-browser">
-                                <header><span>IOMMU LEAVES</span><code id="chunk-count">—</code></header>
-                                <div id="chunk-caption" class="map-caption">Select a captured mapping.</div>
-                                <div class="range-axis"><code id="range-start">—</code><span>IOVA range</span><code id="range-end">—</code></div>
-                                <div id="chunk-list" class="chunk-list"></div>
+                                <header><span>IOVA → HPA</span><code id="chunk-count">—</code></header>
+                                <div id="chunk-caption" class="map-caption">Mapped ranges; gaps are unmapped.</div>
+                                <div id="dma-summary" class="dma-summary" aria-label="DMA mapping state"></div>
+                                <div id="chunk-list" class="chunk-list" aria-label="IOVA to HPA mapping ranges"></div>
                             </section>
                         </section>
                     </div>
@@ -89,6 +96,6 @@
         </aside>
     </section>
 </main>
-    <script type="module" src="virt-vtd.js?v=ui-16" onerror="document.querySelector('#status span').textContent='View failed to load'"></script>
+    <script type="module" src="virt-vtd.js?v=ui-47" onerror="document.querySelector('#status span').textContent='View failed to load'"></script>
 </body>
 </html>

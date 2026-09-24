@@ -15,15 +15,11 @@
 #include "vtd.skel.h"
 #include "vtd_event.h"
 
-#define MAX_LINKS 48
+#define MAX_LINKS 16
 
 enum capture_mode { CAPTURE_HOST, CAPTURE_GUEST };
 
 struct capture_features {
-    bool irte_activate;
-    bool ir_msi_entry, ir_msi_exit, kvm_pi_irte_update;
-    bool domain_attach_enter, domain_attach_exit;
-    bool qi_submit, qi_complete;
     bool guest_run_entry, guest_run_exit;
     bool guest_dma_map_entry, guest_dma_map_exit;
     bool guest_irq_entry, guest_irq_exit;
@@ -204,7 +200,7 @@ static void emit_empty_context(struct json_writer *writer)
     json_object_end(writer);
 }
 
-static int emit_meta(const struct capture_features *f)
+static int emit_meta(void)
 {
     uint64_t now = monotonic_time_ns();
     struct json_writer writer;
@@ -219,35 +215,7 @@ static int emit_meta(const struct capture_features *f)
     json_object_begin_field(&writer, "clock_anchor");
     json_u64(&writer, "monotonic_ns", now); json_u64(&writer, "realtime_ns", realtime_time_ns());
     json_object_end(&writer);
-    json_object_begin_field(&writer, "hooks");
-    json_bool(&writer, "syscall_ioctl", current_mode == CAPTURE_HOST);
-    json_bool(&writer, "iommu_map", current_mode == CAPTURE_HOST); json_bool(&writer, "iommu_unmap", current_mode == CAPTURE_HOST);
-    json_bool(&writer, "iommu_device_attach", current_mode == CAPTURE_HOST);
-    json_bool(&writer, "vfio_type1_map_enter", false); json_bool(&writer, "vfio_type1_map_exit", false);
-    json_bool(&writer, "page_pin_enter", false); json_bool(&writer, "page_pin_exit", false);
-    json_bool(&writer, "page_unpin_enter", false); json_bool(&writer, "page_unpin_exit", false);
-    json_bool(&writer, "vfio_msi", false); json_bool(&writer, "vfio_intx", false); json_bool(&writer, "irqfd_wakeup", false);
-    json_bool(&writer, "kvm_msi_route", false); json_bool(&writer, "kvm_apic_accept", false); json_bool(&writer, "kvm_mmio", false);
-    json_bool(&writer, "irte_activate", f->irte_activate);
-    json_bool(&writer, "ir_msi_entry", f->ir_msi_entry); json_bool(&writer, "ir_msi_exit", f->ir_msi_exit);
-    json_bool(&writer, "kvm_pi_irte_update", f->kvm_pi_irte_update); json_bool(&writer, "iommu_fault", false);
-    json_bool(&writer, "domain_attach_enter", f->domain_attach_enter); json_bool(&writer, "domain_attach_exit", f->domain_attach_exit);
-    json_bool(&writer, "qi_submit", f->qi_submit); json_bool(&writer, "qi_complete", f->qi_complete);
-    json_bool(&writer, "pi_sync_enter", false); json_bool(&writer, "pi_sync_exit", false); json_bool(&writer, "pi_wakeup", false);
-    json_bool(&writer, "pi_wakeup_exit", false); json_bool(&writer, "pi_vcpu_wake_up", false); json_bool(&writer, "pi_wakeup_vector", false);
-    json_bool(&writer, "guest_run_entry", f->guest_run_entry); json_bool(&writer, "guest_run_exit", f->guest_run_exit);
-    json_bool(&writer, "guest_xmit_entry", false); json_bool(&writer, "guest_xmit_exit", false);
-    json_bool(&writer, "guest_dma_map_entry", f->guest_dma_map_entry); json_bool(&writer, "guest_dma_map_exit", f->guest_dma_map_exit);
-    json_bool(&writer, "guest_clean_entry", false); json_bool(&writer, "guest_clean_exit", false);
-    json_bool(&writer, "guest_dma_unmap", false); json_bool(&writer, "guest_dma_sync_cpu", false); json_bool(&writer, "guest_dma_sync_device", false);
-    json_bool(&writer, "guest_irq_entry", f->guest_irq_entry); json_bool(&writer, "guest_irq_exit", f->guest_irq_exit);
-    json_bool(&writer, "guest_netdev_open", false); json_bool(&writer, "guest_netdev_close", false);
-    json_bool(&writer, "guest_diag_entry", false); json_bool(&writer, "guest_diag_exit", false);
-    json_bool(&writer, "guest_intr_test_entry", false); json_bool(&writer, "guest_intr_test_exit", false);
-    json_bool(&writer, "guest_loopback_entry", false); json_bool(&writer, "guest_loopback_exit", false);
-    json_bool(&writer, "guest_softirq_raise", false); json_bool(&writer, "guest_softirq_entry", false);
-    json_bool(&writer, "guest_napi_poll", false); json_bool(&writer, "guest_softirq_exit", false);
-    json_object_end(&writer); json_object_end(&writer); json_object_end(&writer);
+    json_object_end(&writer); json_object_end(&writer);
     json_newline(&writer); fflush(stdout);
     return json_writer_ok(&writer) ? 0 : -EIO;
 }
@@ -258,7 +226,7 @@ static int emit_gate_marker(unsigned int enabled)
     struct json_writer writer;
     uint64_t now = monotonic_time_ns();
     json_writer_init(&writer, stdout);
-    begin_record(&writer, enabled ? "workload_begin" : "workload_end", "observer", now);
+    begin_record(&writer, enabled ? "WORKLOAD_BEGIN" : "WORKLOAD_END", "observer", now);
     json_object_begin_field(&writer, "event_info"); json_string(&writer, "boundary", enabled ? "begin" : "end"); json_object_end(&writer);
     emit_empty_context(&writer);
     json_object_begin_field(&writer, "state");
@@ -281,7 +249,7 @@ static int emit_record(void *ctx, void *data, size_t size)
     begin_record(&writer, event_name(event), current_mode == CAPTURE_HOST ? "host-ebpf" : "guest-ebpf", event->time_ns);
     json_object_begin_field(&writer, "event_info");
     json_string(&writer, "hook", event_hook(event)); json_string(&writer, "operation", operation_name(event->event_info.operation));
-    json_u64(&writer, "request_id", event->event_info.request_id); json_bool(&writer, "correlated", event->event_info.correlated);
+    json_u64(&writer, "request_id", event->event_info.request_id);
     json_string(&writer, "sample_status", sample_status_name(event->event_info.sample_status)); json_u32(&writer, "fd", event->event_info.fd);
     json_hex(&writer, "command", event->event_info.command); json_u32(&writer, "argsz", event->event_info.argsz);
     json_u32(&writer, "flags", event->event_info.flags); json_u32(&writer, "slot", event->event_info.slot);
@@ -294,15 +262,15 @@ static int emit_record(void *ctx, void *data, size_t size)
         json_object_begin_field(&writer, "address_space");
         json_hex(&writer, "hva", event->state.hva); json_hex(&writer, "gpa", event->state.gpa); json_hex(&writer, "iova", event->state.iova);
         json_hex(&writer, "hpa", event->state.hpa); json_hex(&writer, "size", event->state.size); json_hex(&writer, "returned_size", event->state.returned_size);
-        json_hex(&writer, "parent_iova", event->state.parent_iova); json_hex(&writer, "parent_size", event->state.parent_size); json_u64(&writer, "page_count", event->state.page_count);
+        json_hex(&writer, "parent_iova", event->state.parent_iova); json_hex(&writer, "parent_size", event->state.parent_size);
         json_object_end(&writer); json_string_n(&writer, "device", event->state.device, sizeof(event->state.device));
     }
     if (event->event_info.kind == VTD_EVENT_GUEST_DMA_MAP_ENTRY || event->event_info.kind == VTD_EVENT_GUEST_DMA_MAP_EXIT) {
         json_object_begin_field(&writer, "dma"); json_hex(&writer, "address", event->state.dma_address); json_u64(&writer, "length", event->state.data_length);
-        json_u32(&writer, "direction", event->state.dma_direction); json_u32(&writer, "completed_descriptors", event->state.count); json_object_end(&writer);
+        json_u32(&writer, "direction", event->state.dma_direction); json_object_end(&writer);
     }
     if (is_interrupt_event(event->event_info.kind) || event->event_info.operation == VTD_OP_VFIO_IRQ_SET) {
-        json_object_begin_field(&writer, "interrupt"); json_u32(&writer, "irq", event->state.irq); json_u32(&writer, "vector", event->state.vector); json_u32(&writer, "apic_id", event->state.apic_id);
+        json_object_begin_field(&writer, "interrupt"); json_u32(&writer, "irq", event->state.irq); json_u32(&writer, "vector", event->state.vector);
         json_hex(&writer, "address", event->state.interrupt_address); json_hex(&writer, "data", event->state.interrupt_data);
         json_string_n(&writer, "action", event->state.action, sizeof(event->state.action)); json_u32(&writer, "index", event->state.irq_index);
         json_u32(&writer, "start", event->state.irq_start); json_u32(&writer, "count", event->state.irq_count); json_u32(&writer, "irte_index", event->state.irte_index);
@@ -351,33 +319,35 @@ static struct bpf_link *attach_required(struct bpf_program *program)
 static struct bpf_link *attach_optional(struct bpf_program *program, bool ret, const char *symbol, bool *available)
 {
     struct bpf_link *link = bpf_program__attach_kprobe(program, ret, symbol);
-    if (libbpf_get_error(link)) { *available = false; return NULL; }
-    *available = true;
+    long error = libbpf_get_error(link);
+    if (available) *available = !error;
+    if (error) return NULL;
     return link;
 }
 
 static struct bpf_link *attach_optional_program(struct bpf_program *program, bool *available)
 {
     struct bpf_link *link = bpf_program__attach(program);
-    if (libbpf_get_error(link)) { *available = false; return NULL; }
-    *available = true;
+    long error = libbpf_get_error(link);
+    if (available) *available = !error;
+    if (error) return NULL;
     return link;
 }
 
-static int attach_host_programs(struct vtd_bpf *s, struct bpf_link **links, unsigned int *count, struct capture_features *f)
+static int attach_host_programs(struct vtd_bpf *s, struct bpf_link **links, unsigned int *count)
 {
     unsigned int first = *count;
     links[(*count)++] = attach_required(s->progs.enter_ioctl); links[(*count)++] = attach_required(s->progs.exit_ioctl);
     links[(*count)++] = attach_required(s->progs.iommu_map); links[(*count)++] = attach_required(s->progs.iommu_unmap); links[(*count)++] = attach_required(s->progs.attach_device);
     for (unsigned int i = first; i < *count; i++) if (!links[i]) return -ENOENT;
-    links[(*count)++] = attach_optional(s->progs.host_irte_activate, false, "intel_irq_remapping_activate", &f->irte_activate);
-    links[(*count)++] = attach_optional(s->progs.host_ir_msi_entry, false, "intel_ir_compose_msi_msg", &f->ir_msi_entry);
-    links[(*count)++] = attach_optional(s->progs.host_ir_msi_exit, true, "intel_ir_compose_msi_msg", &f->ir_msi_exit);
-    links[(*count)++] = attach_optional_program(s->progs.host_kvm_pi_irte_update, &f->kvm_pi_irte_update);
-    links[(*count)++] = attach_optional(s->progs.host_domain_attach_enter, false, "domain_attach_iommu", &f->domain_attach_enter);
-    links[(*count)++] = attach_optional(s->progs.host_domain_attach_exit, true, "domain_attach_iommu", &f->domain_attach_exit);
-    links[(*count)++] = attach_optional(s->progs.host_qi_submit, false, "qi_submit_sync", &f->qi_submit);
-    links[(*count)++] = attach_optional(s->progs.host_qi_complete, true, "qi_submit_sync", &f->qi_complete);
+    links[(*count)++] = attach_optional(s->progs.host_irte_activate, false, "intel_irq_remapping_activate", NULL);
+    links[(*count)++] = attach_optional(s->progs.host_ir_msi_entry, false, "intel_ir_compose_msi_msg", NULL);
+    links[(*count)++] = attach_optional(s->progs.host_ir_msi_exit, true, "intel_ir_compose_msi_msg", NULL);
+    links[(*count)++] = attach_optional_program(s->progs.host_kvm_pi_irte_update, NULL);
+    links[(*count)++] = attach_optional(s->progs.host_domain_attach_enter, false, "domain_attach_iommu", NULL);
+    links[(*count)++] = attach_optional(s->progs.host_domain_attach_exit, true, "domain_attach_iommu", NULL);
+    links[(*count)++] = attach_optional(s->progs.host_qi_submit, false, "qi_submit_sync", NULL);
+    links[(*count)++] = attach_optional(s->progs.host_qi_complete, true, "qi_submit_sync", NULL);
     return 0;
 }
 
@@ -418,10 +388,10 @@ int main(int argc, char **argv)
     if (skeleton && current_mode == CAPTURE_GUEST)
         snprintf(skeleton->rodata->target_interface, sizeof(skeleton->rodata->target_interface), "%s", guest_interface);
     if (!skeleton || vtd_bpf__load(skeleton)) goto cleanup;
-    if ((current_mode == CAPTURE_HOST && attach_host_programs(skeleton, links, &link_count, &features)) ||
+    if ((current_mode == CAPTURE_HOST && attach_host_programs(skeleton, links, &link_count)) ||
         (current_mode == CAPTURE_GUEST && attach_guest_programs(skeleton, links, &link_count, &features))) goto cleanup;
     ring_buffer = ring_buffer__new(bpf_map__fd(skeleton->maps.events), emit_record, NULL, NULL);
-    if (!ring_buffer || emit_meta(&features)) goto cleanup;
+    if (!ring_buffer || emit_meta()) goto cleanup;
     lab_control("LX_READY experiment=virt-vtd observer=%s clock=monotonic\n", current_mode == CAPTURE_HOST ? "host" : "guest");
     while (!stop_requested) {
         poll_result = ring_buffer__poll(ring_buffer, 250);

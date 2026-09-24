@@ -45,10 +45,6 @@ int main(int argc, char **argv)
 			seconds = DEFAULT_SECONDS;
 	}
 
-	printf("starting workload with %d children for %d seconds\n", CHILDREN, seconds);
-	printf("children are scheduler-balanced and named schedNNN for scheduler hooks\n");
-	fflush(stdout);
-
 	/* A private pipe holds every child behind the same start barrier. */
 	for (i = 0; i < CHILDREN; i++)
 	{
@@ -131,8 +127,6 @@ int main(int argc, char **argv)
 		close(pipes[i][0]);
 	}
 
-	printf("children forked; releasing them together\n");
-	fflush(stdout);
 	/* Let the framework install workload-only trace filters before the burst. */
 	if (argc == 2 && strcmp(argv[1], "--trace-wait") == 0)
 		raise(SIGSTOP);
@@ -150,6 +144,5 @@ int main(int argc, char **argv)
 
 	/* Capture one final natural enqueue after all children have exited. */
 	sched_yield();
-	printf("workload complete\n");
 	return 0;
 }

@@ -1,6 +1,6 @@
 """Virtio run sequence, queue completion, and eventfd handoff checks."""
 
-from framework.core.runtime import Session
+from framework.runtime import Session
 
 
 def main(domain):

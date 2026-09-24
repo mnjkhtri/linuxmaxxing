@@ -1,6 +1,6 @@
 """Memory run sequence and snapshot/phase consistency checks."""
 
-from framework.core.runtime import Session, command
+from framework.runtime import Session, command
 
 
 def main(domain):

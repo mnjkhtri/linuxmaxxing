@@ -3,7 +3,7 @@
 import signal
 from pathlib import Path
 
-from framework.core.runtime import LabError, Session, stopped
+from framework.runtime import LabError, Session, stopped
 
 
 def main(domain):
@@ -56,7 +56,6 @@ def prepare(session):
 
 def run(session):
     prepare(session)
-    session.observer()
     proc = session.start_workload()
     stopped(proc, session.cfg["timeouts"]["ready_s"])
     pid = proc.child.pid

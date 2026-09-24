@@ -214,12 +214,6 @@ import {
     return -1
   }
 
-  function phaseAt(time) {
-    var result = -1;
-    for (var i = 0; i < phases.length && phases[i].time_ns <= time; i++) result = i;
-    return result
-  }
-
   function parseTrace(capture) {
     traceAvailable = new Set;
     capture.events.forEach(function(event) {

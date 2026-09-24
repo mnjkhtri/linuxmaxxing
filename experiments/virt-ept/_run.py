@@ -1,6 +1,6 @@
 """EPT run sequence, operation pairing, and result checks."""
 
-from framework.core.runtime import Session
+from framework.runtime import Session
 
 
 def main(domain):

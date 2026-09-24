@@ -13,7 +13,7 @@ Create `lab.json` in the repository root. It is intentionally ignored so the SSH
 }
 ```
 
-The checked-in template is [infra/lab.example.json](infra/lab.example.json). The target may point to any suitable Linux server; the setup command is safe to repeat after replacing or rebuilding the server.
+The checked-in template is [framework/lab.example.json](framework/lab.example.json). The target may point to any suitable Linux server; the setup command is safe to repeat after replacing or rebuilding the server.
 
 ```bash
 ./lab.sh setup

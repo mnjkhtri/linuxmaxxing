@@ -6,7 +6,7 @@ import shlex
 from decimal import Decimal
 from pathlib import Path
 
-from framework.core.runtime import LabError, Session, command, record
+from framework.runtime import LabError, Session, command, record
 
 
 def main(domain):

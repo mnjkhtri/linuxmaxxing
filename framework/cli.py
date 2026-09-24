@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from framework.core.runtime import (
+from framework.runtime import (
     NAMES,
     ROOT,
     LabError,
@@ -96,15 +96,15 @@ def main(argv=None):
         local_worker(args, names[0])
         return
     if args.action == "validate":
-        from framework.core.runtime import validate
+        from framework.runtime import validate
 
         for name in names:
             events = validate(ROOT / "captures" / name / "events.ndjson", name)
             print("%s: validated %d records" % (name, len(events)))
         return
     if args.host:
-        from framework.lab.environment import build, doctor, prepare, setup
-        from framework.core import runtime as guest
+        from framework.environment import build, doctor, prepare, setup
+        import framework.runtime as guest
 
         if args.action == "setup":
             setup()
@@ -138,8 +138,8 @@ def main(argv=None):
                             capture=False,
                         )
         return
-    from framework.lab.environment import Remote
-    from framework.core.runtime import publish
+    from framework.environment import Remote
+    from framework.runtime import publish
 
     remote = Remote(args.config)
     lock_name = (

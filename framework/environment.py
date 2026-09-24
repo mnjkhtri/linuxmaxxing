@@ -9,7 +9,7 @@ import shutil
 import tarfile
 from pathlib import Path
 
-from framework.core.runtime import (
+from framework.runtime import (
     ROOT,
     LabError,
     atomic_json,
@@ -20,9 +20,12 @@ from framework.core.runtime import (
     read_json,
 )
 
+_guest_kernel_ready = False
+_bpftool_ready = False
+
 
 def spec():
-    return read_json(ROOT / "infra/environment.json")
+    return read_json(ROOT / "framework" / "environment.json")
 
 
 def doctor(check_tools=True):
@@ -211,6 +214,8 @@ def secure(cfg):
 
 
 def build(name):
+    global _guest_kernel_ready, _bpftool_ready
+
     doctor()
     if not (ROOT / "build/environment.json").exists():
         raise LabError("node has not been provisioned; run ./lab.sh setup")
@@ -224,18 +229,19 @@ def build(name):
             or not Path("/sys/kernel/btf/vmlinux").exists()
         ):
             raise LabError("KVM or host kernel BTF is unavailable")
-    if cfg["environment"] == "guest":
+    if cfg["environment"] == "guest" and not _guest_kernel_ready:
         env = dict(
             os.environ,
             LAB_KERNEL_SOURCE=str(ROOT / "build/linux"),
             LAB_KERNEL_BUILD=str(ROOT / "build/kernel"),
         )
         command(
-            ["bash", ROOT / "infra/build-kernel.sh"],
+            ["bash", ROOT / "framework" / "build.sh"],
             timeout=10800,
             capture=False,
             env=env,
         )
+        _guest_kernel_ready = True
     source = ROOT / cfg["source"]
     target = ROOT / "build/tree" / cfg["source"]
     target.mkdir(parents=True, exist_ok=True)
@@ -285,12 +291,13 @@ def build(name):
     # host kernels and guest CO-RE artifacts use one deterministic generator.
     bpftool_dir = ROOT / "build/linux/tools/bpf/bpftool"
     bpftool = bpftool_dir / "bpftool"
-    if cfg["environment"] == "guest" or not bpftool.exists():
+    if not _bpftool_ready and (cfg["environment"] == "guest" or not bpftool.exists()):
         command(
             ["make", "-C", bpftool_dir, "-j2"],
             timeout=600,
             capture=False,
         )
+        _bpftool_ready = True
     make_args.append("BPFTOOL=" + str(bpftool))
     command(make_args, timeout=1800, capture=False)
     return target
@@ -323,9 +330,14 @@ with (root / '.lock').open('a') as mutex:
     entries = []
     for member in archive:
         rel = pathlib.PurePosixPath(member.name)
-        if rel.is_absolute() or '..' in rel.parts or not member.isfile():
+        if (
+            not rel.parts
+            or rel.is_absolute()
+            or ".." in rel.parts
+            or not member.isfile()
+        ):
             sys.exit('invalid source archive member')
-        if rel.parts[0] not in ('framework', 'infra', 'experiments', 'common') and str(rel) != 'lab.sh':
+        if rel.parts[0] not in ('framework', 'experiments', 'common') and str(rel) != 'lab.sh':
             sys.exit('unexpected source archive member')
         entries.append((rel, member.mode & 0o777, archive.extractfile(member).read()))
     current = {str(rel) for rel, _, _ in entries}
@@ -376,7 +388,7 @@ class Remote:
         path = Path(config) if config else ROOT / "lab.json"
         if not path.exists():
             raise LabError(
-                "missing lab.json; copy infra/lab.example.json and set the target"
+                "missing lab.json; copy framework/lab.example.json and set the target"
             )
         cfg = read_json(path)
         if set(cfg) != {"target", "workspace"}:
@@ -413,7 +425,7 @@ class Remote:
         buf = io.BytesIO()
         with tarfile.open(fileobj=buf, mode="w") as tar:
             paths = [ROOT / "lab.sh"]
-            for directory in ("framework", "infra", "experiments", "common"):
+            for directory in ("framework", "experiments", "common"):
                 for path in (ROOT / directory).rglob("*"):
                     rel = path.relative_to(ROOT)
                     if any(

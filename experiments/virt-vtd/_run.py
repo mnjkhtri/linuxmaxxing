@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from framework.core.runtime import (
+from framework.runtime import (
     ROOT,
     LabError,
     Session,
@@ -32,16 +32,22 @@ SUPPORTED_DRIVERS = {"igb", "ixgbe"}
 class DeviceOwnership:
     """Temporarily hand an audited NIC to VFIO and restore its host driver."""
 
-    def __init__(self, session, pci, management, management_pci):
+    def __init__(
+        self, session, pci, net, management, management_pci, connection_uuid
+    ):
         self.session = session
         self.pci = pci
+        self.net = net
         self.management = management
         self.management_pci = management_pci
+        self.connection_uuid = connection_uuid
         self.original_driver = driver(pci)
         self.management_driver = driver(management_pci)
         override = (pci / "driver_override").read_text()
         self.original_override = "\n" if override.strip() == "(null)" else override
-        self.active = False
+        self.driver_touched = False
+        self.vfio_acquired = False
+        self.profile_down = False
 
     def check_management(self):
         routes = json.loads(command(["ip", "-j", "route", "show", "default"]))
@@ -72,32 +78,71 @@ class DeviceOwnership:
         )
 
     def bind_vfio(self):
-        self.active = True
+        # A secondary NetworkManager profile may have a backup route. Drop only
+        # this NIC's profile before binding it; the primary management NIC stays up.
+        if self.connection_uuid:
+            command(["nmcli", "connection", "down", self.connection_uuid])
+            self.profile_down = True
+            addresses = json.loads(
+                command(["ip", "-j", "addr", "show", "dev", self.net.name])
+            )
+            if any(item.get("addr_info") for item in addresses):
+                raise LabError("secondary NIC still has addresses after disconnect")
+            if command(["ip", "route", "show", "dev", self.net.name]).strip():
+                raise LabError("secondary NIC still has routes after disconnect")
         # This reserves the device for passthrough; QEMU attaches it to the VM later.
+        self.driver_touched = True
         (self.pci / "driver_override").write_text("vfio-pci\n")
         (self.pci / "driver/unbind").write_text(self.pci.name)
         Path("/sys/bus/pci/drivers/vfio-pci/bind").write_text(self.pci.name)
         if driver(self.pci) != "vfio-pci":
             raise LabError("VFIO bind failed")
+        self.vfio_acquired = True
         self.check_management()
 
     def restore(self):
-        if not self.active:
+        if not self.driver_touched and not self.profile_down:
             return
-        current = driver(self.pci)
-        if current and current != self.original_driver:
-            # Detach VFIO first, then return the device to its original host driver.
-            (self.pci / "driver/unbind").write_text(self.pci.name)
-        (self.pci / "driver_override").write_text(self.original_override)
-        if driver(self.pci) != self.original_driver:
-            (Path("/sys/bus/pci/drivers") / self.original_driver / "bind").write_text(
-                self.pci.name
-            )
-        if driver(self.pci) != self.original_driver:
-            raise LabError("failed to restore " + self.pci.name)
+        if self.driver_touched:
+            current = driver(self.pci)
+            if current and current != self.original_driver:
+                # Detach VFIO first, then return the device to its original host driver.
+                (self.pci / "driver/unbind").write_text(self.pci.name)
+            (self.pci / "driver_override").write_text(self.original_override)
+            if driver(self.pci) != self.original_driver:
+                (Path("/sys/bus/pci/drivers") / self.original_driver / "bind").write_text(
+                    self.pci.name
+                )
+            if driver(self.pci) != self.original_driver:
+                raise LabError("failed to restore " + self.pci.name)
+            self.driver_touched = False
+            if self.vfio_acquired:
+                self.record("HOST_RECLAIMS_DEVICE")
+                self.vfio_acquired = False
+        if self.profile_down:
+            active_uuid = command(
+                ["nmcli", "-g", "GENERAL.CON-UUID", "device", "show", self.net.name]
+            ).decode().strip()
+            if active_uuid != self.connection_uuid:
+                command(
+                    [
+                        "nmcli",
+                        "connection",
+                        "up",
+                        self.connection_uuid,
+                        "ifname",
+                        self.net.name,
+                    ]
+                )
+            active_uuid = command(
+                ["nmcli", "-g", "GENERAL.CON-UUID", "device", "show", self.net.name]
+            ).decode().strip()
+            if active_uuid != self.connection_uuid:
+                raise LabError(
+                    "failed to restore NetworkManager profile for " + self.net.name
+                )
+            self.profile_down = False
         self.check_management()
-        self.record("host_reclaims_device")
-        self.active = False
 
 
 def main(domain):
@@ -114,7 +159,7 @@ def prepare():
         raise LabError("VT-d preparation supports Intel hosts only")
     groups = Path("/sys/kernel/iommu_groups")
     if groups.exists() and any(groups.iterdir()):
-        management, _, pci = audit()
+        management, _, pci, _, _ = audit()
         print(
             "VT-d candidate %s; management interface %s remains protected"
             % (pci.name, management.name)
@@ -132,7 +177,7 @@ def prepare():
 
 
 def audit():
-    """Pick an idle, isolated NIC without risking the host management path."""
+    """Pick an isolated NIC while preserving the primary management interface."""
     routes = json.loads(command(["ip", "-j", "route", "show", "default"]))
     if not routes or "dev" not in routes[0]:
         raise LabError("cannot identify management interface")
@@ -151,16 +196,22 @@ def audit():
         pci = (net / "device").resolve()
         if driver(pci) not in SUPPORTED_DRIVERS or not (pci / "iommu_group").exists():
             continue
-        # Any configured address or route means the interface may carry host traffic.
-        if any(
+        has_addresses = any(
             item.get("addr_info")
             for item in json.loads(
                 command(["ip", "-j", "addr", "show", "dev", net.name])
             )
-        ):
-            continue
-        if command(["ip", "route", "show", "dev", net.name]).strip():
-            continue
+        )
+        has_routes = bool(command(["ip", "route", "show", "dev", net.name]).strip())
+        connection_uuid = None
+        if has_addresses or has_routes:
+            # Never take down an unmanaged or ambiguous interface: it cannot be
+            # reliably restored after the guest releases the device.
+            connection_uuid = command(
+                ["nmcli", "-g", "GENERAL.CON-UUID", "device", "show", net.name]
+            ).decode().strip()
+            if not connection_uuid or connection_uuid == "--":
+                continue
         group = (pci / "iommu_group").resolve()
         # VFIO needs an isolated IOMMU group, and FLR gives us a device-level reset.
         if (
@@ -175,12 +226,22 @@ def audit():
             continue
         if not (pci / "reset").exists():
             continue
-        candidates.append(pci)
+        candidates.append((pci, net, connection_uuid))
     if not candidates:
         raise LabError(
-            "no unused, isolated, FLR-capable Intel NIC (igb/ixgbe); use an eligible Intel lab server with IOMMU enabled"
+            "no isolated, FLR-capable Intel NIC (igb/ixgbe); use an eligible "
+            "Intel lab server with IOMMU enabled"
         )
-    return management, mgmt_pci, sorted(candidates)[0]
+    idle = [candidate for candidate in candidates if not candidate[2]]
+    if idle:
+        pci, net, connection_uuid = sorted(idle, key=lambda candidate: candidate[0])[0]
+    elif len(candidates) == 1:
+        pci, net, connection_uuid = candidates[0]
+    else:
+        raise LabError(
+            "multiple configured Intel NICs are eligible; select one spare NIC explicitly"
+        )
+    return management, mgmt_pci, pci, net, connection_uuid
 
 
 def gate(process, enabled):
@@ -192,8 +253,10 @@ def run(session):
     if "vmx" not in Path("/proc/cpuinfo").read_text():
         raise LabError("VT-d experiment requires Intel VMX")
     # Keep the default-route NIC on its host driver; assign only a spare isolated NIC.
-    management, mgmt_pci, pci = audit()
-    ownership = DeviceOwnership(session, pci, management, mgmt_pci)
+    management, mgmt_pci, pci, net, connection_uuid = audit()
+    ownership = DeviceOwnership(
+        session, pci, net, management, mgmt_pci, connection_uuid
+    )
     # Load VFIO's PCI driver; the NIC is still owned by its normal host driver here.
     command(["modprobe", "vfio-pci"])
     command(["modprobe", "vfio_iommu_type1"])
@@ -252,10 +315,10 @@ def run(session):
     # Register before the first write. QEMU callbacks are registered later and run first.
     session.stack.callback(ownership.restore)
     ownership.check_management()
-    ownership.record("host_owns_device")
+    ownership.record("HOST_OWNS_DEVICE")
     # Hand ownership from the host NIC driver to vfio-pci through sysfs.
     ownership.bind_vfio()
-    ownership.record("vfio_bound")
+    ownership.record("VFIO_BOUND")
     argv = [
         "qemu-system-x86_64",
         "-machine",
@@ -291,7 +354,7 @@ def run(session):
         "-no-reboot",
     ]
     vm = session.process(argv, "qemu", cwd=ROOT)
-    session.capture.lifecycle("qemu_started", {"command": argv})
+    session.capture.lifecycle("QEMU_STARTED", {"command": argv})
     ssh = [
         "ssh",
         "-i",
@@ -327,8 +390,8 @@ def run(session):
     else:
         raise LabError("VT-d guest SSH did not become ready")
     # QEMU has started with the passthrough device; the guest OS can now enumerate it.
-    ownership.record("qemu_attached")
-    ownership.record("guest_visible")
+    ownership.record("QEMU_ATTACHED")
+    ownership.record("GUEST_VISIBLE")
     # Host probes remain attached; this adds a clock marker around the guest run.
     gate(observer, 1)
     guest_scratch = "/mnt/lab/" + str(runtime.relative_to(ROOT))
@@ -341,12 +404,12 @@ def run(session):
         timeout=300,
         capture=False,
     )
-    session.capture.lifecycle("cleanup_begin", {"reason": "guest workload complete"})
+    session.capture.lifecycle("CLEANUP_BEGIN", {"reason": "guest workload complete"})
     gate(observer, 0)
     guest_events = list(ndjson(runtime / "guest-events.ndjson"))
     session.capture.events.extend(guest_events)
     vm.stop()
-    session.capture.lifecycle("qemu_stopped", {"reason": "guest workload complete"})
+    session.capture.lifecycle("QEMU_STOPPED", {"reason": "guest workload complete"})
     ownership.restore()
     session.collect()
 
@@ -366,9 +429,6 @@ def guest_main():
     if not Path("/sys/kernel/tracing/events").exists():
         command(["mount", "-t", "tracefs", "nodev", "/sys/kernel/tracing"])
     with session.stack:
-        session.capture.lifecycle(
-            "workload_started", {"command": ["ethtool", "-t", nets[0].name, "offline"]}
-        )
         observer = session.observer(
             [session.cwd / "build/vtd", "--guest", nets[0].name, nic_driver],
             label="guest-observer",
@@ -379,7 +439,7 @@ def guest_main():
         # ethtool may report an unrelated offline test failure; the experiment requires loopback success.
         workload_command = ["ethtool", "-t", nets[0].name, "offline"]
         session.capture.lifecycle(
-            "guest_workload_begin",
+            "GUEST_WORKLOAD_BEGIN",
             {"command": workload_command, "interface": nets[0].name},
         )
         proc = session.process(workload_command, "guest-workload")
@@ -394,11 +454,10 @@ def guest_main():
         if not re.search(r"^Loopback test.*\s0$", output, re.MULTILINE):
             raise LabError("guest loopback test did not succeed")
         session.capture.lifecycle(
-            "guest_workload_end",
+            "GUEST_WORKLOAD_END",
             {"interface": nets[0].name, "result": "loopback passed"},
         )
         gate(observer, 0)
-        session.capture.lifecycle("workload_finished", {"exit_code": 0})
         session.collect()
     session.capture.path = session.runtime / "guest-events.ndjson"
     session.capture.save()

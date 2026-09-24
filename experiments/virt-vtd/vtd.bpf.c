@@ -316,7 +316,6 @@ static __always_inline void copy_operation(struct vtd_event *event, const struct
     event->event_info.command = operation->command;
     event->event_info.request_id = operation->request_id;
     event->event_info.sample_status = operation->sample_status;
-    event->state.user_argument = operation->user_argument;
     event->state.hva = operation->hva;
     event->state.gpa = operation->gpa;
     event->state.iova = operation->iova;
@@ -455,7 +454,6 @@ int iommu_map(struct trace_event_raw_iommu_map *context)
     event->state.size = context->size;
     event->state.parent_iova = operation->iova;
     event->state.parent_size = operation->size;
-    event->event_info.correlated = 1;
     bpf_ringbuf_submit(event, 0);
     return 0;
 }
@@ -481,7 +479,6 @@ int iommu_unmap(struct trace_event_raw_iommu_unmap *context)
     event->state.returned_size = context->unmapped_size;
     event->state.parent_iova = operation->iova;
     event->state.parent_size = operation->size;
-    event->event_info.correlated = 1;
     bpf_ringbuf_submit(event, 0);
     return 0;
 }
@@ -568,7 +565,6 @@ int BPF_KPROBE(host_qi_submit, struct intel_iommu *iommu, struct qi_desc *descri
     if (!event)
         return 0;
     copy_operation(event, operation);
-    event->event_info.correlated = 1;
     event->state.iommu_address = (__u64)iommu;
     event->state.iommu_id = BPF_CORE_READ(iommu, seq_id);
     event->state.qi_count = active.qi_count;
@@ -592,7 +588,6 @@ int BPF_KRETPROBE(host_qi_complete, long result)
     event = reserve_event(VTD_EVENT_QI_COMPLETE);
     if (event) {
         copy_operation(event, operation);
-        event->event_info.correlated = 1;
         event->event_info.result = result;
         event->state.iommu_address = active->iommu_address;
         event->state.iommu_id = active->iommu_id;

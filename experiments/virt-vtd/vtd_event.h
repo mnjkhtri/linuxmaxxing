@@ -57,9 +57,8 @@ struct vtd_event_info {
 	unsigned long long command;
 	unsigned long long request_id;
 	long long result;
-	unsigned char correlated;
 	unsigned char sample_status;
-	unsigned char reserved[6];
+	unsigned char reserved[7];
 };
 
 struct vtd_context {
@@ -81,11 +80,8 @@ struct vtd_state {
 	unsigned long long returned_size;
 	unsigned long long parent_iova;
 	unsigned long long parent_size;
-	unsigned long long page_count;
-	unsigned long long user_argument;
 	unsigned int irq_index;
 	unsigned int irq_start;
-	unsigned int count;
 
 	/* Interrupt remapping and posted-interrupt routing. */
 	unsigned long long interrupt_address;
@@ -93,7 +89,6 @@ struct vtd_state {
 	unsigned long long pi_desc_address;
 	unsigned int irq;
 	unsigned int vector;
-	unsigned int apic_id;
 	unsigned int vcpu_id;
 	unsigned int irq_count;
 	unsigned int irte_index;

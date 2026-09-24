@@ -3,7 +3,7 @@
 import signal
 import time
 
-from framework.core.runtime import Session, stopped
+from framework.runtime import Session, stopped
 
 
 def main(domain):

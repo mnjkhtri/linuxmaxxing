@@ -34,254 +34,10 @@
               "monotonic_ns",
               "realtime_ns"
             ]
-          },
-          "hooks": {
-            "type": "object",
-            "fields": {
-              "syscall_ioctl": {
-                "type": "boolean"
-              },
-              "iommu_map": {
-                "type": "boolean"
-              },
-              "iommu_unmap": {
-                "type": "boolean"
-              },
-              "iommu_device_attach": {
-                "type": "boolean"
-              },
-              "vfio_type1_map_enter": {
-                "type": "boolean"
-              },
-              "vfio_type1_map_exit": {
-                "type": "boolean"
-              },
-              "page_pin_enter": {
-                "type": "boolean"
-              },
-              "page_pin_exit": {
-                "type": "boolean"
-              },
-              "page_unpin_enter": {
-                "type": "boolean"
-              },
-              "page_unpin_exit": {
-                "type": "boolean"
-              },
-              "vfio_msi": {
-                "type": "boolean"
-              },
-              "vfio_intx": {
-                "type": "boolean"
-              },
-              "irqfd_wakeup": {
-                "type": "boolean"
-              },
-              "kvm_msi_route": {
-                "type": "boolean"
-              },
-              "kvm_apic_accept": {
-                "type": "boolean"
-              },
-              "kvm_mmio": {
-                "type": "boolean"
-              },
-              "irte_alloc_enter": {
-                "type": "boolean"
-              },
-              "irte_index": {
-                "type": "boolean"
-              },
-              "irte_alloc_exit": {
-                "type": "boolean"
-              },
-              "irte_activate": {
-                "type": "boolean"
-              },
-              "ir_msi_entry": {
-                "type": "boolean"
-              },
-              "ir_msi_exit": {
-                "type": "boolean"
-              },
-              "kvm_pi_irte_update": {
-                "type": "boolean"
-              },
-              "iommu_fault": {
-                "type": "boolean"
-              },
-              "domain_attach_enter": {
-                "type": "boolean"
-              },
-              "domain_attach_exit": {
-                "type": "boolean"
-              },
-              "iotlb_invalidate": {
-                "type": "boolean"
-              },
-              "qi_submit": {
-                "type": "boolean"
-              },
-              "qi_complete": {
-                "type": "boolean"
-              },
-              "pi_sync_enter": {
-                "type": "boolean"
-              },
-              "pi_sync_exit": {
-                "type": "boolean"
-              },
-              "pi_wakeup": {
-                "type": "boolean"
-              },
-              "pi_wakeup_exit": {
-                "type": "boolean"
-              },
-              "pi_vcpu_wake_up": {
-                "type": "boolean"
-              },
-              "pi_wakeup_vector": {
-                "type": "boolean"
-              },
-              "guest_run_entry": {
-                "type": "boolean"
-              },
-              "guest_run_exit": {
-                "type": "boolean"
-              },
-              "guest_xmit_entry": {
-                "type": "boolean"
-              },
-              "guest_xmit_exit": {
-                "type": "boolean"
-              },
-              "guest_dma_map_entry": {
-                "type": "boolean"
-              },
-              "guest_dma_map_exit": {
-                "type": "boolean"
-              },
-              "guest_clean_entry": {
-                "type": "boolean"
-              },
-              "guest_clean_exit": {
-                "type": "boolean"
-              },
-              "guest_dma_unmap": {
-                "type": "boolean"
-              },
-              "guest_dma_sync_cpu": {
-                "type": "boolean"
-              },
-              "guest_dma_sync_device": {
-                "type": "boolean"
-              },
-              "guest_irq_entry": {
-                "type": "boolean"
-              },
-              "guest_irq_exit": {
-                "type": "boolean"
-              },
-              "guest_netdev_open": {
-                "type": "boolean"
-              },
-              "guest_netdev_close": {
-                "type": "boolean"
-              },
-              "guest_diag_entry": {
-                "type": "boolean"
-              },
-              "guest_diag_exit": {
-                "type": "boolean"
-              },
-              "guest_intr_test_entry": {
-                "type": "boolean"
-              },
-              "guest_intr_test_exit": {
-                "type": "boolean"
-              },
-              "guest_loopback_entry": {
-                "type": "boolean"
-              },
-              "guest_loopback_exit": {
-                "type": "boolean"
-              },
-              "guest_softirq_raise": {
-                "type": "boolean"
-              },
-              "guest_softirq_entry": {
-                "type": "boolean"
-              },
-              "guest_napi_poll": {
-                "type": "boolean"
-              },
-              "guest_softirq_exit": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "domain_attach_enter",
-              "domain_attach_exit",
-              "guest_clean_entry",
-              "guest_clean_exit",
-              "guest_diag_entry",
-              "guest_diag_exit",
-              "guest_dma_map_entry",
-              "guest_dma_map_exit",
-              "guest_dma_sync_cpu",
-              "guest_dma_sync_device",
-              "guest_dma_unmap",
-              "guest_intr_test_entry",
-              "guest_intr_test_exit",
-              "guest_irq_entry",
-              "guest_irq_exit",
-              "guest_loopback_entry",
-              "guest_loopback_exit",
-              "guest_napi_poll",
-              "guest_netdev_close",
-              "guest_netdev_open",
-              "guest_run_entry",
-              "guest_run_exit",
-              "guest_softirq_entry",
-              "guest_softirq_exit",
-              "guest_softirq_raise",
-              "guest_xmit_entry",
-              "guest_xmit_exit",
-              "iommu_device_attach",
-              "iommu_fault",
-              "iommu_map",
-              "iommu_unmap",
-              "ir_msi_entry",
-              "ir_msi_exit",
-              "irqfd_wakeup",
-              "irte_activate",
-              "kvm_apic_accept",
-              "kvm_mmio",
-              "kvm_msi_route",
-              "kvm_pi_irte_update",
-              "page_pin_enter",
-              "page_pin_exit",
-              "page_unpin_enter",
-              "page_unpin_exit",
-              "pi_sync_enter",
-              "pi_sync_exit",
-              "pi_vcpu_wake_up",
-              "pi_wakeup",
-              "pi_wakeup_exit",
-              "pi_wakeup_vector",
-              "qi_complete",
-              "qi_submit",
-              "syscall_ioctl",
-              "vfio_intx",
-              "vfio_msi",
-              "vfio_type1_map_enter",
-              "vfio_type1_map_exit"
-            ]
           }
         },
         "required": [
-          "clock_anchor",
-          "hooks"
+          "clock_anchor"
         ]
       },
       "producer_sequence": {
@@ -352,9 +108,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -380,7 +133,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -405,14 +157,10 @@
               },
               "direction": {
                 "type": "integer64"
-              },
-              "completed_descriptors": {
-                "type": "integer64"
               }
             },
             "required": [
               "address",
-              "completed_descriptors",
               "direction",
               "length"
             ]
@@ -463,9 +211,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -491,7 +236,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -516,14 +260,10 @@
               },
               "direction": {
                 "type": "integer64"
-              },
-              "completed_descriptors": {
-                "type": "integer64"
               }
             },
             "required": [
               "address",
-              "completed_descriptors",
               "direction",
               "length"
             ]
@@ -574,9 +314,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -602,7 +339,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -627,14 +363,10 @@
               },
               "direction": {
                 "type": "integer64"
-              },
-              "completed_descriptors": {
-                "type": "integer64"
               }
             },
             "required": [
               "address",
-              "completed_descriptors",
               "direction",
               "length"
             ]
@@ -685,9 +417,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -713,7 +442,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -738,14 +466,10 @@
               },
               "direction": {
                 "type": "integer64"
-              },
-              "completed_descriptors": {
-                "type": "integer64"
               }
             },
             "required": [
               "address",
-              "completed_descriptors",
               "direction",
               "length"
             ]
@@ -796,9 +520,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -824,7 +545,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -849,14 +569,10 @@
               },
               "direction": {
                 "type": "integer64"
-              },
-              "completed_descriptors": {
-                "type": "integer64"
               }
             },
             "required": [
               "address",
-              "completed_descriptors",
               "direction",
               "length"
             ]
@@ -907,9 +623,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -935,7 +648,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -956,9 +668,6 @@
                 "type": "integer64"
               },
               "vector": {
-                "type": "integer64"
-              },
-              "apic_id": {
                 "type": "integer64"
               },
               "address": {
@@ -998,7 +707,6 @@
             "required": [
               "action",
               "address",
-              "apic_id",
               "count",
               "data",
               "gsi",
@@ -1066,9 +774,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -1094,7 +799,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -1115,9 +819,6 @@
                 "type": "integer64"
               },
               "vector": {
-                "type": "integer64"
-              },
-              "apic_id": {
                 "type": "integer64"
               },
               "address": {
@@ -1157,7 +858,6 @@
             "required": [
               "action",
               "address",
-              "apic_id",
               "count",
               "data",
               "gsi",
@@ -1225,9 +925,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -1253,7 +950,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -1278,14 +974,10 @@
               },
               "direction": {
                 "type": "integer64"
-              },
-              "completed_descriptors": {
-                "type": "integer64"
               }
             },
             "required": [
               "address",
-              "completed_descriptors",
               "direction",
               "length"
             ]
@@ -1336,9 +1028,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -1364,7 +1053,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -1389,14 +1077,10 @@
               },
               "direction": {
                 "type": "integer64"
-              },
-              "completed_descriptors": {
-                "type": "integer64"
               }
             },
             "required": [
               "address",
-              "completed_descriptors",
               "direction",
               "length"
             ]
@@ -1447,9 +1131,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -1475,7 +1156,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -1534,9 +1214,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -1562,7 +1239,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -1621,9 +1297,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -1649,7 +1322,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -1708,9 +1380,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -1736,7 +1405,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -1795,9 +1463,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -1823,7 +1488,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -1882,9 +1546,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -1910,7 +1571,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -1969,9 +1629,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -1997,7 +1654,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -2056,9 +1712,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -2084,7 +1737,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -2143,9 +1795,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -2171,7 +1820,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -2230,9 +1878,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -2258,7 +1903,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -2317,9 +1961,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -2345,7 +1986,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -2370,14 +2010,10 @@
               },
               "direction": {
                 "type": "integer64"
-              },
-              "completed_descriptors": {
-                "type": "integer64"
               }
             },
             "required": [
               "address",
-              "completed_descriptors",
               "direction",
               "length"
             ]
@@ -2428,9 +2064,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -2456,7 +2089,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -2481,14 +2113,10 @@
               },
               "direction": {
                 "type": "integer64"
-              },
-              "completed_descriptors": {
-                "type": "integer64"
               }
             },
             "required": [
               "address",
-              "completed_descriptors",
               "direction",
               "length"
             ]
@@ -2539,9 +2167,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -2567,7 +2192,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -2654,9 +2278,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -2682,7 +2303,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -2757,9 +2377,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -2785,7 +2402,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -2860,9 +2476,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -2888,7 +2501,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -2963,9 +2575,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -2991,7 +2600,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -3012,9 +2620,6 @@
                 "type": "integer64"
               },
               "vector": {
-                "type": "integer64"
-              },
-              "apic_id": {
                 "type": "integer64"
               },
               "address": {
@@ -3054,7 +2659,6 @@
             "required": [
               "action",
               "address",
-              "apic_id",
               "count",
               "data",
               "gsi",
@@ -3098,9 +2702,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -3126,7 +2727,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -3166,9 +2766,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -3176,7 +2773,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -3217,9 +2813,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -3245,7 +2838,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -3340,9 +2932,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -3368,7 +2957,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -3463,9 +3051,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -3491,7 +3076,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -3586,9 +3170,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -3614,7 +3195,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -3654,9 +3234,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -3664,7 +3241,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -3705,9 +3281,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -3733,7 +3306,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -3828,9 +3400,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -3856,7 +3425,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -3951,9 +3519,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -3979,7 +3544,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -4019,9 +3583,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -4029,7 +3590,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -4070,9 +3630,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -4098,7 +3655,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -4119,9 +3675,6 @@
                 "type": "integer64"
               },
               "vector": {
-                "type": "integer64"
-              },
-              "apic_id": {
                 "type": "integer64"
               },
               "address": {
@@ -4161,7 +3714,6 @@
             "required": [
               "action",
               "address",
-              "apic_id",
               "count",
               "data",
               "gsi",
@@ -4205,9 +3757,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -4233,7 +3782,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -4254,9 +3802,6 @@
                 "type": "integer64"
               },
               "vector": {
-                "type": "integer64"
-              },
-              "apic_id": {
                 "type": "integer64"
               },
               "address": {
@@ -4296,7 +3841,6 @@
             "required": [
               "action",
               "address",
-              "apic_id",
               "count",
               "data",
               "gsi",
@@ -4340,9 +3884,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -4368,7 +3909,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -4408,9 +3948,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -4418,7 +3955,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -4459,9 +3995,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -4487,7 +4020,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -4527,9 +4059,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -4537,7 +4066,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -4578,9 +4106,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -4606,7 +4131,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -4673,9 +4197,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -4701,7 +4222,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -4722,9 +4242,6 @@
                 "type": "integer64"
               },
               "vector": {
-                "type": "integer64"
-              },
-              "apic_id": {
                 "type": "integer64"
               },
               "address": {
@@ -4764,7 +4281,6 @@
             "required": [
               "action",
               "address",
-              "apic_id",
               "count",
               "data",
               "gsi",
@@ -4808,9 +4324,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -4836,7 +4349,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -4857,9 +4369,6 @@
                 "type": "integer64"
               },
               "vector": {
-                "type": "integer64"
-              },
-              "apic_id": {
                 "type": "integer64"
               },
               "address": {
@@ -4899,7 +4408,6 @@
             "required": [
               "action",
               "address",
-              "apic_id",
               "count",
               "data",
               "gsi",
@@ -4943,9 +4451,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -4971,7 +4476,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -4992,9 +4496,6 @@
                 "type": "integer64"
               },
               "vector": {
-                "type": "integer64"
-              },
-              "apic_id": {
                 "type": "integer64"
               },
               "address": {
@@ -5037,7 +4538,6 @@
             "required": [
               "action",
               "address",
-              "apic_id",
               "count",
               "data",
               "gsi",
@@ -5082,9 +4582,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -5110,7 +4607,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -5150,9 +4646,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -5160,7 +4653,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -5201,9 +4693,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -5229,7 +4718,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -5269,9 +4757,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -5279,7 +4764,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -5320,9 +4804,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -5348,7 +4829,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -5388,9 +4868,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -5398,7 +4875,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -5439,9 +4915,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -5467,7 +4940,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -5507,9 +4979,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -5517,7 +4986,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -5558,9 +5026,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -5586,7 +5051,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -5607,9 +5071,6 @@
                 "type": "integer64"
               },
               "vector": {
-                "type": "integer64"
-              },
-              "apic_id": {
                 "type": "integer64"
               },
               "address": {
@@ -5649,7 +5110,6 @@
             "required": [
               "action",
               "address",
-              "apic_id",
               "count",
               "data",
               "gsi",
@@ -5693,9 +5153,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -5721,7 +5178,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -5742,9 +5198,6 @@
                 "type": "integer64"
               },
               "vector": {
-                "type": "integer64"
-              },
-              "apic_id": {
                 "type": "integer64"
               },
               "address": {
@@ -5784,7 +5237,6 @@
             "required": [
               "action",
               "address",
-              "apic_id",
               "count",
               "data",
               "gsi",
@@ -5828,9 +5280,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -5856,7 +5305,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -5896,9 +5344,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -5906,7 +5351,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -5947,9 +5391,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -5975,7 +5416,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -6015,9 +5455,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -6025,7 +5462,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -6066,9 +5502,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -6094,7 +5527,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -6134,9 +5566,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -6144,7 +5573,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -6185,9 +5613,6 @@
           "request_id": {
             "type": "integer64"
           },
-          "correlated": {
-            "type": "boolean"
-          },
           "sample_status": {
             "type": "string"
           },
@@ -6213,7 +5638,6 @@
         "required": [
           "argsz",
           "command",
-          "correlated",
           "fd",
           "flags",
           "hook",
@@ -6253,9 +5677,6 @@
               },
               "parent_size": {
                 "type": "hex"
-              },
-              "page_count": {
-                "type": "integer64"
               }
             },
             "required": [
@@ -6263,7 +5684,6 @@
               "hpa",
               "hva",
               "iova",
-              "page_count",
               "parent_iova",
               "parent_size",
               "returned_size",
@@ -6289,7 +5709,7 @@
       "state"
     ]
   },
-  "ebpf:workload_begin": {
+  "ebpf:WORKLOAD_BEGIN": {
     "type": "object",
     "fields": {
       "event_info": {
@@ -6336,7 +5756,7 @@
       "state"
     ]
   },
-  "ebpf:workload_end": {
+  "ebpf:WORKLOAD_END": {
     "type": "object",
     "fields": {
       "event_info": {
@@ -6383,7 +5803,7 @@
       "state"
     ]
   },
-  "framework:qemu_started": {
+  "framework:QEMU_STARTED": {
     "type": "object",
     "fields": {
       "command": {
@@ -6397,7 +5817,7 @@
       "command"
     ]
   },
-  "framework:guest_workload_begin": {
+  "framework:GUEST_WORKLOAD_BEGIN": {
     "type": "object",
     "fields": {
       "command": {
@@ -6415,7 +5835,7 @@
       "interface"
     ]
   },
-  "framework:guest_workload_end": {
+  "framework:GUEST_WORKLOAD_END": {
     "type": "object",
     "fields": {
       "interface": {
@@ -6430,7 +5850,7 @@
       "result"
     ]
   },
-  "framework:cleanup_begin": {
+  "framework:CLEANUP_BEGIN": {
     "type": "object",
     "fields": {
       "reason": {
@@ -6441,7 +5861,7 @@
       "reason"
     ]
   },
-  "framework:qemu_stopped": {
+  "framework:QEMU_STOPPED": {
     "type": "object",
     "fields": {
       "reason": {
@@ -6452,7 +5872,7 @@
       "reason"
     ]
   },
-  "sysfs:host_owns_device": {
+  "sysfs:HOST_OWNS_DEVICE": {
     "type": "object",
     "fields": {
       "host_bdf": {
@@ -6472,7 +5892,7 @@
       "management_bdf"
     ]
   },
-  "sysfs:vfio_bound": {
+  "sysfs:VFIO_BOUND": {
     "type": "object",
     "fields": {
       "host_bdf": {
@@ -6492,7 +5912,7 @@
       "management_bdf"
     ]
   },
-  "sysfs:qemu_attached": {
+  "sysfs:QEMU_ATTACHED": {
     "type": "object",
     "fields": {
       "host_bdf": {
@@ -6512,7 +5932,7 @@
       "management_bdf"
     ]
   },
-  "sysfs:guest_visible": {
+  "sysfs:GUEST_VISIBLE": {
     "type": "object",
     "fields": {
       "host_bdf": {
@@ -6532,7 +5952,7 @@
       "management_bdf"
     ]
   },
-  "sysfs:host_reclaims_device": {
+  "sysfs:HOST_RECLAIMS_DEVICE": {
     "type": "object",
     "fields": {
       "host_bdf": {

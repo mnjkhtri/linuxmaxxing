@@ -15,9 +15,11 @@
     "kvm_pi_irte_update",
     "iommu_domain_attach_exit",
     "iommu_qi_complete",
+    "GUEST_WORKLOAD_BEGIN",
     "guest_nic_run_loopback_exit",
     "guest_dma_map_exit",
-    "guest_irq_handler_entry"
+    "guest_irq_handler_entry",
+    "GUEST_WORKLOAD_END"
   ],
   "trace": {
     "required": [],

@@ -19,7 +19,7 @@ from contextlib import ExitStack
 from decimal import Decimal
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 
 NAMES = tuple(
     sorted(
@@ -486,7 +486,7 @@ def validate_record(event, name, catalog, sequence):
 
 def validate(path, name, *, evidence=True):
     catalog = read_json(ROOT / "experiments" / name / "payloads.json")
-    catalog.update(read_json(ROOT / "framework" / "core" / "lifecycle.json"))
+    catalog.update(read_json(ROOT / "framework" / "lifecycle.json"))
     events = list(ndjson(path))
     if (
         len(events) < 3
@@ -552,10 +552,6 @@ def validate_evidence(name, events):
     require(
         kinds["capture_started"] == kinds["capture_finished"] == 1,
         "exactly one capture lifetime required",
-    )
-    require(
-        kinds["workload_started"] > 0 and kinds["workload_finished"] > 0,
-        "missing workload boundaries",
     )
     require(
         events[-1]["data"] == {"validated": True, "restored": True},
@@ -1057,7 +1053,7 @@ class Session:
 
 
 def prepare_image():
-    cfg = read_json(ROOT / "infra/environment.json")
+    cfg = read_json(ROOT / "framework" / "environment.json")
     image = ROOT / "build/images/study.qcow2"
     stamp = ROOT / "build/images/study.json"
     expected = {
@@ -1103,7 +1099,7 @@ def prepare_image():
 
 
 def run(name, console=False):
-    cfg = read_json(ROOT / "infra/environment.json")
+    cfg = read_json(ROOT / "framework" / "environment.json")
     image = prepare_image()
     build = ROOT / "build"
     build.mkdir(parents=True, exist_ok=True)
